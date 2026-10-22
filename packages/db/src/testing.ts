@@ -21,14 +21,13 @@ export async function createTestDatabase(prefix: string) {
   const name = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const admin = new Client({ connectionString: SUPER_URL });
   await admin.connect();
-  await admin.query(`do $$ begin
-    if not exists (select 1 from pg_roles where rolname = 'crop_owner_test') then
-      create role crop_owner_test login password 'owner-test-pw' createrole nosuperuser;
-    end if;
-    if not exists (select 1 from pg_roles where rolname = 'crop_app') then
-      create role crop_app nologin;
-    end if;
-  end $$`);
+  // Test files run in parallel, so tolerate another one creating these roles at the same moment.
+  for (const sql of [
+    `create role crop_owner_test login password 'owner-test-pw' createrole nosuperuser`,
+    `create role crop_app nologin`,
+  ]) {
+    await admin.query(`do $$ begin ${sql}; exception when duplicate_object or unique_violation then null; end $$`);
+  }
   await admin.query(`alter role crop_app login password '${APP_PASSWORD}'`);
   await admin.query(`create database ${name} owner crop_owner_test`);
   const ownerUrl = urlFor(name, 'crop_owner_test', 'owner-test-pw');
