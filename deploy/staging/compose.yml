@@ -26,6 +26,8 @@ services:
     restart: "no"
 
   api:
+    # Same build as migrate (cached), so compose never tries to pull crop-api from a registry.
+    build: { context: ../.., dockerfile: apps/api/Dockerfile }
     image: crop-api:latest
     restart: unless-stopped
     environment:
