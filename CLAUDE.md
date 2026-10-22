@@ -33,6 +33,7 @@ Open → Offered/Broadcast → Booked; Open → Assigned → Booked; Cancelled; 
 - Sign-in: a global `AuthGuard` verifies the Zitadel access token (AUTH_ISSUER, AUTH_AUDIENCE) on every route. Mark exceptions with `@Public()` (no sign-in) or `@NoTenant()` (signed in, no agency). Restrict with `@Roles(...)`; get the agency with `@Tenant()` and the person with `@Auth()`.
 - People are platform-level `users` (crop_app can't read the table; it uses `app_user_by_subject`, `app_sign_in`, `app_user_memberships`). Access to an agency is a `membership` with one role: owner, admin, allocator (office), worker, client. Invitations by email are accepted at sign-in only when the identity provider says the email is verified.
 - If someone belongs to several agencies, the client sends `x-tenant: <slug>`; the guard checks it is one of theirs.
+- Web sign-in (`apps/web`): server-side OIDC code flow with PKCE (`openid-client`), routes `/auth/login`, `/auth/callback`, `/auth/logout` (POST). The access token lives in an encrypted httpOnly cookie (`lib/session.ts`); server components call the API with it via `lib/current-user.ts`. The browser never sees tokens. Env: AUTH_ISSUER, AUTH_CLIENT_ID, AUTH_PROJECT_ID, APP_URL, SESSION_SECRET (32+ chars).
 - Tests: Vitest. `createTestDatabase()` (`@crop/db/dist/testing.js`) makes a throwaway database owned by a non-superuser, like production. API tests sign tokens with the fake identity provider in `apps/api/test/fake-idp.ts`.
 - Versions: Node 22, pnpm 10, TypeScript 6.0, NestJS 12, Next.js 16, Expo SDK 58.
 

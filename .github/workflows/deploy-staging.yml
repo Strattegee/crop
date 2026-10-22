@@ -29,6 +29,7 @@ jobs:
           ssh crop@"$HOST" "set -e
             rm -rf /srv/crop/app.old; [ -d /srv/crop/app ] && mv /srv/crop/app /srv/crop/app.old
             mv /srv/crop/app.new /srv/crop/app
+            grep -q '^SESSION_SECRET=' /srv/crop/.env || (umask 077; echo \"SESSION_SECRET=\$(openssl rand -hex 32)\" >> /srv/crop/.env)
             cd /srv/crop/app/deploy/staging
             APP_VERSION=${GITHUB_SHA::7} docker compose --env-file /srv/crop/.env up -d --build --remove-orphans
             docker image prune -f"

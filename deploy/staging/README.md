@@ -27,16 +27,13 @@ docker compose --env-file /srv/crop/.env logs -f api
 
 ## Sign-in and giving people access
 
-Add to `/srv/crop/.env`, then redeploy (or `docker compose ... up -d api`):
-```
-AUTH_ISSUER=https://<instance>.zitadel.cloud
-AUTH_AUDIENCE=<Zitadel project ID>
-```
+Sign-in settings (Zitadel issuer, project and client IDs) are in `compose.yml`; they aren't secret. The deploy workflow adds a random `SESSION_SECRET` to `/srv/crop/.env` the first time.
 
-Invite someone to an agency (creates the agency if it doesn't exist). They get access the first time they sign in with that email, once Zitadel has verified it:
+To give someone access, use the **Invite someone to staging** workflow (GitHub → Actions → Run workflow): agency slug, agency name, email, role. They get access the first time they sign in with that email once Zitadel has verified it. Roles: owner, admin, allocator, worker, client.
+
+The same on the server:
 ```sh
 cd /srv/crop/app/deploy/staging
 docker compose --env-file /srv/crop/.env run --rm migrate node node_modules/@crop/db/dist/invite-cli.js \
   --tenant cfy --name "Caring For You" --email someone@example.com --role owner
 ```
-Roles: owner, admin, allocator, worker, client.

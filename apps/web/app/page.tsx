@@ -1,25 +1,69 @@
+import { apiBaseUrl } from '../lib/config';
+import { currentUser } from '../lib/current-user';
+
 export const dynamic = 'force-dynamic';
 
 type Health = { status: string; db: string; version: string };
 
 async function getHealth(): Promise<Health | null> {
-  const base = process.env.API_INTERNAL_URL ?? 'http://localhost:4000';
   try {
-    const res = await fetch(`${base}/health`, { cache: 'no-store' });
+    const res = await fetch(`${apiBaseUrl()}/health`, { cache: 'no-store' });
     return res.ok ? ((await res.json()) as Health) : null;
   } catch {
     return null;
   }
 }
 
-export default async function Home() {
-  const health = await getHealth();
+const card = { background: '#fff', border: '1px solid #d6dae1', borderRadius: 8, padding: 16, marginTop: 16 } as const;
+const button = {
+  display: 'inline-block', background: '#1f3a5f', color: '#fff', border: 0, borderRadius: 6,
+  padding: '10px 16px', fontSize: 15, cursor: 'pointer', textDecoration: 'none',
+} as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Owner', admin: 'Administrator', allocator: 'Allocator', worker: 'Worker', client: 'Client',
+};
+
+export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string }> }) {
+  const [health, user, params] = await Promise.all([getHealth(), currentUser(), searchParams]);
   const ok = health?.status === 'ok';
+
   return (
     <main style={{ maxWidth: 640, margin: '64px auto', padding: '0 16px' }}>
       <h1 style={{ fontSize: 28, marginBottom: 4 }}>CROP Workforce Management</h1>
       <p style={{ marginTop: 0, color: '#5d6775' }}>Credentials · Rostering · Operations · People</p>
-      <section style={{ background: '#fff', border: '1px solid #d6dae1', borderRadius: 8, padding: 16, marginTop: 24 }}>
+
+      <section style={card}>
+        {user.status === 'signed-in' ? (
+          <>
+            <h2 style={{ fontSize: 18, margin: '0 0 4px' }}>Welcome, {user.me.name ?? user.me.email}</h2>
+            <p style={{ margin: '0 0 12px', color: '#5d6775' }}>{user.me.email}</p>
+            {user.me.memberships.length === 0 ? (
+              <p>You&apos;re signed in, but you haven&apos;t been given access to an agency yet. Ask your agency to invite this email address.</p>
+            ) : (
+              <ul style={{ paddingLeft: 20 }}>
+                {user.me.memberships.map(m => (
+                  <li key={m.tenantSlug}>{m.tenantName}: {ROLE_LABELS[m.role] ?? m.role}</li>
+                ))}
+              </ul>
+            )}
+            <form action="/auth/logout" method="post">
+              <button type="submit" style={{ ...button, background: '#fff', color: '#1f3a5f', border: '1px solid #1f3a5f' }}>Sign out</button>
+            </form>
+          </>
+        ) : user.status === 'disabled' ? (
+          <p style={{ margin: 0 }}>Sign-in isn&apos;t configured on this server yet.</p>
+        ) : (
+          <>
+            {params.signin === 'failed' && <p style={{ color: '#b42318' }}>Sign-in didn&apos;t complete. Please try again.</p>}
+            {params.signin === 'expired' && <p style={{ color: '#b42318' }}>That sign-in took too long. Please try again.</p>}
+            {user.status === 'error' && <p style={{ color: '#b42318' }}>We couldn&apos;t load your account ({user.message}).</p>}
+            <a href="/auth/login" style={button}>Sign in</a>
+          </>
+        )}
+      </section>
+
+      <section style={card}>
         <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>System status</h2>
         <p style={{ margin: 0 }}>
           API: <strong style={{ color: ok ? '#1a7f37' : '#b42318' }}>{health ? health.status : 'unreachable'}</strong>
