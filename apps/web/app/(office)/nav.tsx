@@ -5,7 +5,10 @@ import { usePathname } from 'next/navigation';
 
 const LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/workers', label: 'Workers' },
+  { href: '/compliance', label: 'Compliance' },
   { href: '/facilities', label: 'Facilities' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export function Nav() {
