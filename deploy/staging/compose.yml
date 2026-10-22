@@ -35,6 +35,8 @@ services:
       API_PORT: "4000"
       WEB_ORIGINS: https://staging.cropwms.com
       APP_VERSION: ${APP_VERSION:-unknown}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
     depends_on:
       migrate: { condition: service_completed_successfully }
 

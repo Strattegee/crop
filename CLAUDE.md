@@ -8,7 +8,7 @@ Build schedule: https://claude.ai/artifact/RtUPeMVpHrJbUZZAms7Dug
 - TypeScript modular monolith; pnpm workspaces.
 - `apps/web`: Next.js (office and client portal). `apps/api`: NestJS REST API with OpenAPI. `apps/mobile`: React Native (Expo) worker app, iOS + Android, OTA updates, APNs/FCM push.
 - PostgreSQL with row-level security on `tenant_id`; Postgres-backed job queue; SSE/WebSockets for live updates.
-- Managed identity provider with 2FA.
+- Identity provider: Zitadel Cloud, Australian region (decided 22 Oct 2026). OIDC with PKCE; JWT access tokens; 2FA enforced in Zitadel.
 - Hosting: DigitalOcean Sydney. Staging = Docker on droplet behind Caddy. Production = managed Postgres + Spaces.
 
 ## Data model rules
@@ -28,10 +28,12 @@ Open → Offered/Broadcast → Booked; Open → Assigned → Booked; Cancelled; 
 ## Repository layout and conventions
 - `packages/db`: SQL migrations (`migrations/NNNN_name.sql`, applied in order, never edited after merge), `migrate()`, `createPool()`, `withTenant()`.
 - `apps/api`: ES modules (`"type": "module"`); relative imports end in `.js`. Inject providers with explicit `@Inject(TOKEN)` (tests run under Vitest, which doesn't emit decorator metadata). Give `@ApiProperty` an explicit `type`.
-- Every tenant-owned table: `tenant_id uuid not null references tenants(id)`, `enable` + `force row level security`, policy `tenant_id = app_tenant_id()` for using and with check. Add an isolation test.
+- Every tenant-owned table: `tenant_id uuid not null references tenants(id)`, `enable row level security` (not `force`), policy `tenant_id = app_tenant_id()` for using and with check. Add an isolation test. Tables are owned by the migration role, which bypasses RLS (needed for admin tools and security definer functions on managed Postgres, where the owner isn't a superuser); crop_app never owns tables.
 - The API connects as `crop_app` (no BYPASSRLS). All tenant data access goes through `withTenant(pool, tenantId, fn)`. Migrations run as the owner role.
-- `TenantGuard` currently trusts the `x-tenant` header. It is a placeholder until the identity provider is integrated and must not reach production.
-- Tests: Vitest; DB tests create and drop their own database using `DATABASE_URL` (owner role).
+- Sign-in: a global `AuthGuard` verifies the Zitadel access token (AUTH_ISSUER, AUTH_AUDIENCE) on every route. Mark exceptions with `@Public()` (no sign-in) or `@NoTenant()` (signed in, no agency). Restrict with `@Roles(...)`; get the agency with `@Tenant()` and the person with `@Auth()`.
+- People are platform-level `users` (crop_app can't read the table; it uses `app_user_by_subject`, `app_sign_in`, `app_user_memberships`). Access to an agency is a `membership` with one role: owner, admin, allocator (office), worker, client. Invitations by email are accepted at sign-in only when the identity provider says the email is verified.
+- If someone belongs to several agencies, the client sends `x-tenant: <slug>`; the guard checks it is one of theirs.
+- Tests: Vitest. `createTestDatabase()` (`@crop/db/dist/testing.js`) makes a throwaway database owned by a non-superuser, like production. API tests sign tokens with the fake identity provider in `apps/api/test/fake-idp.ts`.
 - Versions: Node 22, pnpm 10, TypeScript 6.0, NestJS 12, Next.js 16, Expo SDK 58.
 
 ## Local development
