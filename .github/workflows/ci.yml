@@ -19,6 +19,7 @@ jobs:
           --health-cmd "pg_isready -U crop" --health-interval 5s --health-retries 20
     env:
       DATABASE_URL: postgres://crop:crop@localhost:5432/crop
+      NO_COLOR: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

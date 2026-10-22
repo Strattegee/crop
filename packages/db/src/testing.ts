@@ -21,7 +21,9 @@ export async function createTestDatabase(prefix: string) {
   const name = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const admin = new Client({ connectionString: SUPER_URL });
   await admin.connect();
-  // Test files run in parallel, so tolerate another one creating these roles at the same moment.
+  // Test files run in parallel; take turns changing cluster-wide roles (Postgres errors with
+  // 'tuple concurrently updated' when two sessions alter the same role at once).
+  await admin.query('select pg_advisory_lock(7240001)');
   for (const sql of [
     `create role crop_owner_test login password 'owner-test-pw' createrole nosuperuser`,
     `create role crop_app nologin`,
@@ -29,6 +31,7 @@ export async function createTestDatabase(prefix: string) {
     await admin.query(`do $$ begin ${sql}; exception when duplicate_object or unique_violation then null; end $$`);
   }
   await admin.query(`alter role crop_app login password '${APP_PASSWORD}'`);
+  await admin.query('select pg_advisory_unlock(7240001)');
   await admin.query(`create database ${name} owner crop_owner_test`);
   const ownerUrl = urlFor(name, 'crop_owner_test', 'owner-test-pw');
   await migrate(ownerUrl, () => undefined);
