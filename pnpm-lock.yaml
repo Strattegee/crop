@@ -87,9 +87,15 @@ importers:
 
   apps/web:
     dependencies:
+      jose:
+        specifier: ^6.2.13
+        version: 6.2.13
       next:
         specifier: ^16.4.2
         version: 16.4.2(@types/node@22.20.5)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      openid-client:
+        specifier: ^6.8.8
+        version: 6.8.8
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -109,6 +115,9 @@ importers:
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15))
 
   packages/db:
     dependencies:
@@ -2596,6 +2605,9 @@ packages:
   nullthrows@1.1.1:
     resolution: {integrity: sha512-2vPPEi+Z7WqML2jZYddDIfy5Dqb0r2fze2zTxNNknZaFpVHU3mFB3R+DWeJWGVx0ecvttSGlJTI+WG+8Z4cDWw==}
 
+  oauth4webapi@3.8.8:
+    resolution: {integrity: sha512-8N28E+a/oxfXWBgOMt+ZP/JUf/XR+IFbvkAEPP3gznXOMv9BpAAwiIj0TFNz3tGTPc0ZQ8zmWBNgN1nAys0gng==}
+
   ob1@0.87.1:
     resolution: {integrity: sha512-i8iA8uij0g1YQzS8uOJPSRCgwDjO9warIHUAu1Fqj877Wc3wlfxDYBioYWgKTBF2+URVJttyDWSEpmd99nlvtQ==}
     engines: {node: ^22.13.0 || ^24.3.0 || >= 26.0.0}
@@ -2634,6 +2646,9 @@ packages:
   open@8.4.2:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
+
+  openid-client@6.8.8:
+    resolution: {integrity: sha512-ZsucJA5Ad04Uv7YN4ql+s4GXNmb9uAYQwyJTsJx7CH/MX3JZioLE2pVKi1SC+YrbSLA4Px3Gi30dMjgOZtb6pA==}
 
   ora@3.4.0:
     resolution: {integrity: sha512-eNwHudNbO1folBP3JsZ19v9azXWtQZjICdr3Q0TDPIaeBQ3mXLrh54wM+er0+hSp+dWKf+Z8KM58CYzEyIYxYg==}
@@ -6047,6 +6062,8 @@ snapshots:
 
   nullthrows@1.1.1: {}
 
+  oauth4webapi@3.8.8: {}
+
   ob1@0.87.1:
     dependencies:
       flow-enums-runtime: 0.0.6
@@ -6080,6 +6097,11 @@ snapshots:
       define-lazy-prop: 2.0.0
       is-docker: 2.2.1
       is-wsl: 2.2.0
+
+  openid-client@6.8.8:
+    dependencies:
+      jose: 6.2.13
+      oauth4webapi: 3.8.8
 
   ora@3.4.0:
     dependencies:

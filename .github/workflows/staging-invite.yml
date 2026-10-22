@@ -1,0 +1,52 @@
+name: Invite someone to staging
+# Run from the Actions tab ("Run workflow"). Creates the agency if needed and invites the email address;
+# they get access the first time they sign in with it (once Zitadel has verified it).
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: Agency short name (slug), e.g. cfy
+        required: true
+        default: cfy
+      name:
+        description: Agency name (used if the agency is new)
+        required: false
+        default: Caring For You
+      email:
+        description: Email address to invite
+        required: true
+      role:
+        description: Role
+        required: true
+        type: choice
+        options: [owner, admin, allocator, worker, client]
+
+concurrency: deploy-staging
+
+jobs:
+  invite:
+    if: vars.STAGING_HOST != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          HOST: ${{ vars.STAGING_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 "$HOST" >> ~/.ssh/known_hosts
+      - name: Invite
+        env:
+          HOST: ${{ vars.STAGING_HOST }}
+          TENANT: ${{ inputs.tenant }}
+          AGENCY: ${{ inputs.name }}
+          EMAIL: ${{ inputs.email }}
+          ROLE: ${{ inputs.role }}
+        run: |
+          # Validate before anything reaches a remote shell.
+          [[ "$TENANT" =~ ^[a-z0-9-]{2,40}$ ]] || { echo "bad agency slug"; exit 1; }
+          [[ "$EMAIL" =~ ^[^[:space:]\'\"\;\$\`]+@[^[:space:]\'\"\;\$\`]+$ ]] || { echo "bad email"; exit 1; }
+          [[ "$AGENCY" =~ ^[A-Za-z0-9\ \&\.\-]{0,80}$ ]] || { echo "agency name: letters, numbers, spaces, & . - only"; exit 1; }
+          ssh crop@"$HOST" "cd /srv/crop/app/deploy/staging && docker compose --env-file /srv/crop/.env run --rm -T migrate \
+            node node_modules/@crop/db/dist/invite-cli.js --tenant '$TENANT' --name '$AGENCY' --email '$EMAIL' --role '$ROLE'"
