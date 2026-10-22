@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { apiBaseUrl, authConfig } from './config';
 import { SESSION_COOKIE, unseal, type Session } from './session';
 
@@ -15,8 +16,8 @@ export type CurrentUser =
   | { status: 'error'; message: string }
   | { status: 'signed-in'; me: Me; accessToken: string };
 
-/** Reads the session cookie and asks the API who the person is. */
-export async function currentUser(): Promise<CurrentUser> {
+/** Reads the session cookie and asks the API who the person is (once per request). */
+export const currentUser = cache(async (): Promise<CurrentUser> => {
   const cfg = authConfig();
   if (!cfg.enabled) return { status: 'disabled' };
   const session = await unseal<Session>((await cookies()).get(SESSION_COOKIE)?.value, cfg.sessionSecret);
@@ -32,4 +33,19 @@ export async function currentUser(): Promise<CurrentUser> {
   } catch {
     return { status: 'error', message: 'API unreachable' };
   }
-}
+});
+
+export const OFFICE_ROLES = ['owner', 'admin', 'allocator'];
+export const AGENCY_COOKIE = 'crop_agency';
+
+/**
+ * The agency the office app works in: the one picked in the switcher if the person has an
+ * office role there, otherwise their first agency with an office role. Null if they have none.
+ */
+export const currentAgency = cache(async () => {
+  const user = await currentUser();
+  if (user.status !== 'signed-in') return null;
+  const office = user.me.memberships.filter(m => OFFICE_ROLES.includes(m.role));
+  const chosen = (await cookies()).get(AGENCY_COOKIE)?.value;
+  return office.find(m => m.tenantSlug === chosen) ?? office[0] ?? null;
+});
