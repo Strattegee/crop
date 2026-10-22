@@ -24,7 +24,7 @@ h1 { font-size: 24px; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 0 0 12px; }
 .muted { color: var(--muted); }
 
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
 .sidebar { background: var(--brand); color: var(--brand-contrast); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
 .sidebar .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; padding: 0 10px 16px; }
 .sidebar a { color: #dfe7f1; text-decoration: none; padding: 8px 10px; border-radius: 6px; font-size: 15px; }
@@ -62,7 +62,7 @@ input, select, textarea { font: inherit; font-size: 14px; padding: 8px 10px; bor
 .notice.success { background: var(--ok-bg); color: var(--ok); }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px; }
   .sidebar .logo { padding: 8px 10px; }
   .sidebar .spacer { display: none; }
