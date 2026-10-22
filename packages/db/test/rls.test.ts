@@ -1,48 +1,39 @@
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createPool, migrate, setAppRolePassword, withTenant } from '../src';
-
-// Needs a Postgres with an owner role: set DATABASE_URL (defaults to local dev).
-const OWNER_URL = process.env.DATABASE_URL ?? 'postgres://crop:crop@localhost:5432/crop';
-const dbName = `crop_test_${Date.now()}`;
-const ownerUrl = (db: string) => { const u = new URL(OWNER_URL); u.pathname = `/${db}`; return u.toString(); };
-const appUrl = (db: string) => { const u = new URL(OWNER_URL); u.username = 'crop_app'; u.password = 'test-app-pw'; u.pathname = `/${db}`; return u.toString(); };
+import { createPool, withTenant } from '../src';
+import { createTestDatabase } from '../src/testing';
 
 describe('tenant isolation', () => {
-  const admin = new Client({ connectionString: OWNER_URL });
+  let db: Awaited<ReturnType<typeof createTestDatabase>>;
   let pool: ReturnType<typeof createPool>;
   const tenantA = randomUUID();
   const tenantB = randomUUID();
 
   beforeAll(async () => {
-    await admin.connect();
-    await admin.query(`create database ${dbName}`);
-    await migrate(ownerUrl(dbName), () => undefined);
-    await setAppRolePassword(ownerUrl(dbName), 'test-app-pw');
-    const owner = new Client({ connectionString: ownerUrl(dbName) });
+    db = await createTestDatabase('crop_rls');
+    const owner = new Client({ connectionString: db.ownerUrl });
     await owner.connect();
     await owner.query(`insert into tenants(id, slug, name) values ($1,'agency-a','Agency A'),($2,'agency-b','Agency B')`, [tenantA, tenantB]);
     await owner.end();
-    pool = createPool(appUrl(dbName));
+    pool = createPool(db.appUrl);
   });
 
   afterAll(async () => {
     await pool?.end();
-    await admin.query(`drop database if exists ${dbName} with (force)`);
-    await admin.end();
+    await db?.drop();
   });
 
   it('only shows rows for the current tenant', async () => {
-    await withTenant(pool, tenantA, db => db.query(`insert into facilities(tenant_id, name) values ($1, 'Ward 3 North')`, [tenantA]));
-    await withTenant(pool, tenantB, db => db.query(`insert into facilities(tenant_id, name) values ($1, 'Aged Care East')`, [tenantB]));
-    const a = await withTenant(pool, tenantA, db => db.query('select name from facilities'));
+    await withTenant(pool, tenantA, c => c.query(`insert into facilities(tenant_id, name) values ($1, 'Ward 3 North')`, [tenantA]));
+    await withTenant(pool, tenantB, c => c.query(`insert into facilities(tenant_id, name) values ($1, 'Aged Care East')`, [tenantB]));
+    const a = await withTenant(pool, tenantA, c => c.query('select name from facilities'));
     expect(a.rows.map(r => r.name)).toEqual(['Ward 3 North']);
   });
 
   it('refuses writes into another tenant', async () => {
     await expect(
-      withTenant(pool, tenantA, db => db.query(`insert into facilities(tenant_id, name) values ($1, 'Sneaky')`, [tenantB])),
+      withTenant(pool, tenantA, c => c.query(`insert into facilities(tenant_id, name) values ($1, 'Sneaky')`, [tenantB])),
     ).rejects.toThrow(/row-level security/);
   });
 

@@ -1,11 +1,13 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import type { Pool } from 'pg';
+import { Public } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 
 @Controller('health')
 export class HealthController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
+  @Public()
   @Get()
   async check() {
     let db: 'up' | 'down' = 'up';

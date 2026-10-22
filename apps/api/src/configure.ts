@@ -9,7 +9,8 @@ export function configureApp(app: INestApplication): void {
   const doc = new DocumentBuilder()
     .setTitle('CROP API')
     .setVersion('0.1')
-    .addApiKey({ type: 'apiKey', in: 'header', name: 'x-tenant' }, 'tenant')
+    .addBearerAuth()
+    .addApiKey({ type: 'apiKey', in: 'header', name: 'x-tenant', description: 'Agency slug, only needed if you belong to more than one' }, 'tenant')
     .build();
   SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, doc));
 }

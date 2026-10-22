@@ -1,10 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
-import { ApiProperty, ApiSecurity } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, Inject, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiProperty, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
+import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
-import { TenantId } from '../tenancy/tenant-id.decorator.js';
-import { TenantGuard } from '../tenancy/tenant.guard.js';
 
 class CreateFacilityDto {
   @ApiProperty({ type: String, example: 'Ward 3 North' }) name!: string;
@@ -21,29 +21,31 @@ function isTimeZone(tz: string): boolean {
 }
 
 /** Example tenant-scoped resource; shows the pattern every module follows. */
+@ApiBearerAuth()
 @ApiSecurity('tenant')
-@UseGuards(TenantGuard)
 @Controller('facilities')
 export class FacilitiesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
+  @Roles(...OFFICE_ROLES)
   @Get()
-  async list(@TenantId() tenantId: string) {
-    return withTenant(this.pool, tenantId, async db =>
+  async list(@Tenant() tenant: Membership) {
+    return withTenant(this.pool, tenant.tenantId, async db =>
       (await db.query('select id, name, timezone from facilities order by name')).rows,
     );
   }
 
+  @Roles('owner', 'admin')
   @Post()
-  async create(@TenantId() tenantId: string, @Body() body: CreateFacilityDto) {
+  async create(@Tenant() tenant: Membership, @Body() body: CreateFacilityDto) {
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
     const timezone = body?.timezone ?? 'Australia/Melbourne';
     if (!name || name.length > 200) throw new BadRequestException('name is required (max 200 characters)');
     if (!isTimeZone(timezone)) throw new BadRequestException('timezone must be an IANA time zone');
-    return withTenant(this.pool, tenantId, async db =>
+    return withTenant(this.pool, tenant.tenantId, async db =>
       (await db.query(
         'insert into facilities(tenant_id, name, timezone) values ($1, $2, $3) returning id, name, timezone',
-        [tenantId, name, timezone],
+        [tenant.tenantId, name, timezone],
       )).rows[0],
     );
   }

@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate": "tsx src/migrate-cli.ts",
+    "invite": "tsx src/invite-cli.ts",
     "test": "vitest run"
   },
   "dependencies": {

@@ -24,3 +24,19 @@ cd /srv/crop/app/deploy/staging
 docker compose --env-file /srv/crop/.env ps
 docker compose --env-file /srv/crop/.env logs -f api
 ```
+
+## Sign-in and giving people access
+
+Add to `/srv/crop/.env`, then redeploy (or `docker compose ... up -d api`):
+```
+AUTH_ISSUER=https://<instance>.zitadel.cloud
+AUTH_AUDIENCE=<Zitadel project ID>
+```
+
+Invite someone to an agency (creates the agency if it doesn't exist). They get access the first time they sign in with that email, once Zitadel has verified it:
+```sh
+cd /srv/crop/app/deploy/staging
+docker compose --env-file /srv/crop/.env run --rm migrate node node_modules/@crop/db/dist/invite-cli.js \
+  --tenant cfy --name "Caring For You" --email someone@example.com --role owner
+```
+Roles: owner, admin, allocator, worker, client.
