@@ -27,5 +27,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @crop/db build
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Test
+        run: pnpm test 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Report test failures
+        # Puts the end of the test output into an annotation, readable through the API as well as on the PR.
+        if: failure()
+        run: |
+          body=$(grep -vE '^\s*$' test.log | grep -E -B2 -A12 'FAIL|Error|×' | tail -80 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Test failures::${body}"
       - run: pnpm build
