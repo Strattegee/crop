@@ -1,0 +1,41 @@
+name: Deploy staging
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy-staging
+
+jobs:
+  deploy:
+    # Skipped until the STAGING_HOST repository variable is set (Settings → Secrets and variables → Actions → Variables).
+    if: vars.STAGING_HOST != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          HOST: ${{ vars.STAGING_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 "$HOST" >> ~/.ssh/known_hosts
+      - name: Copy release and start
+        env:
+          HOST: ${{ vars.STAGING_HOST }}
+        run: |
+          git archive --format=tar HEAD | ssh crop@"$HOST" 'rm -rf /srv/crop/app.new && mkdir -p /srv/crop/app.new && tar -x -C /srv/crop/app.new'
+          ssh crop@"$HOST" "set -e
+            rm -rf /srv/crop/app.old; [ -d /srv/crop/app ] && mv /srv/crop/app /srv/crop/app.old
+            mv /srv/crop/app.new /srv/crop/app
+            cd /srv/crop/app/deploy/staging
+            APP_VERSION=${GITHUB_SHA::7} docker compose --env-file /srv/crop/.env up -d --build --remove-orphans
+            docker image prune -f"
+      - name: Check health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS https://staging.cropwms.com/api/health && exit 0
+            sleep 5
+          done
+          exit 1

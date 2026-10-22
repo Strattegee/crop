@@ -1,0 +1,60 @@
+# Staging stack on the crop-staging droplet. Secrets come from /srv/crop/.env (see README.md here).
+name: crop
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in /srv/crop/.env}
+      POSTGRES_DB: crop
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crop -d crop"]
+      interval: 5s
+      retries: 20
+
+  migrate:
+    build: { context: ../.., dockerfile: apps/api/Dockerfile }
+    image: crop-api:latest
+    command: ["node", "node_modules/@crop/db/dist/migrate-cli.js"]
+    environment:
+      DATABASE_URL: postgres://crop:${POSTGRES_PASSWORD}@postgres:5432/crop
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set in /srv/crop/.env}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: crop-api:latest
+    restart: unless-stopped
+    environment:
+      APP_DATABASE_URL: postgres://crop_app:${APP_DB_PASSWORD}@postgres:5432/crop
+      API_PORT: "4000"
+      WEB_ORIGINS: https://staging.cropwms.com
+      APP_VERSION: ${APP_VERSION:-unknown}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: ../.., dockerfile: apps/web/Dockerfile }
+    image: crop-web:latest
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    depends_on: [api]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
