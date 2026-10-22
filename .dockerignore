@@ -5,4 +5,7 @@
 .git
 .env
 .env.*
-apps/mobile
+# The worker app isn't part of the server images, but its package.json is needed
+# so pnpm can check the workspace lockfile.
+apps/mobile/*
+!apps/mobile/package.json
