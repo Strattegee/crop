@@ -1,5 +1,6 @@
+import { redirect } from 'next/navigation';
 import { apiBaseUrl } from '../lib/config';
-import { currentUser } from '../lib/current-user';
+import { currentUser, OFFICE_ROLES } from '../lib/current-user';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,10 @@ const ROLE_LABELS: Record<string, string> = {
 export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string }> }) {
   const [health, user, params] = await Promise.all([getHealth(), currentUser(), searchParams]);
   const ok = health?.status === 'ok';
+  // Office staff go straight to the office app; others (workers, clients, not yet invited) stay here for now.
+  if (user.status === 'signed-in' && user.me.memberships.some(m => OFFICE_ROLES.includes(m.role))) {
+    redirect('/dashboard');
+  }
 
   return (
     <main style={{ maxWidth: 640, margin: '64px auto', padding: '0 16px' }}>
@@ -41,11 +46,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
             {user.me.memberships.length === 0 ? (
               <p>You&apos;re signed in, but you haven&apos;t been given access to an agency yet. Ask your agency to invite this email address.</p>
             ) : (
-              <ul style={{ paddingLeft: 20 }}>
-                {user.me.memberships.map(m => (
-                  <li key={m.tenantSlug}>{m.tenantName}: {ROLE_LABELS[m.role] ?? m.role}</li>
-                ))}
-              </ul>
+              <>
+                <ul style={{ paddingLeft: 20 }}>
+                  {user.me.memberships.map(m => (
+                    <li key={m.tenantSlug}>{m.tenantName}: {ROLE_LABELS[m.role] ?? m.role}</li>
+                  ))}
+                </ul>
+                <p className="muted">Workers will use the CROP app on their phone. Client access is coming soon.</p>
+              </>
             )}
             <form action="/auth/logout" method="post">
               <button type="submit" style={{ ...button, background: '#fff', color: '#1f3a5f', border: '1px solid #1f3a5f' }}>Sign out</button>

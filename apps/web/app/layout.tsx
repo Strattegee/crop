@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'CROP Workforce Management',
@@ -9,9 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en-AU">
-      <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0, background: '#f6f7f9', color: '#1b2430' }}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
