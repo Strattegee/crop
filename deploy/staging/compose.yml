@@ -48,7 +48,7 @@ services:
       API_INTERNAL_URL: http://api:4000
       APP_URL: https://staging.cropwms.com
       AUTH_ISSUER: https://crop-wms-g1hp69.au1.zitadel.cloud
-      AUTH_CLIENT_ID: "396208644040992124"  # Zitadel app "CROP web"
+      AUTH_CLIENT_ID: "396208644041057660"  # Zitadel app "CROP web" (Client ID, not the app resource ID)
       AUTH_PROJECT_ID: "396208029055362428"
       SESSION_SECRET: ${SESSION_SECRET:?generated into /srv/crop/.env by the deploy workflow}
     depends_on: [api]
