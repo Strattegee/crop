@@ -9,7 +9,9 @@ const LABELS: Record<string, string> = {
   roles: 'Roles', notes: 'Notes', status: 'Status', name: 'Name', category: 'Category', timezone: 'Time zone',
   credentialTypeId: 'Credential', number: 'Number', issueDate: 'Issue date', expiryDate: 'Expiry date',
   reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Type',
-  verificationMethod: 'How it is verified', verificationUrl: 'Verification link', expiringWindowDays: 'Expiring window',
+  verificationMethod: 'How it is verified', abn: 'ABN', billingContactName: 'Billing contact', billingEmail: 'Billing email',
+  addressLine: 'Address', suburb: 'Suburb', state: 'State', postcode: 'Postcode', clientId: 'Client', specialty: 'Specialty',
+  parkingNotes: 'Parking notes', entryNotes: 'Entry notes', verificationUrl: 'Verification link', expiringWindowDays: 'Expiring window',
 };
 const label = (key: string) => LABELS[key] ?? key;
 
