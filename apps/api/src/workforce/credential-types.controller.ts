@@ -7,7 +7,8 @@ import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 
-export const CATEGORIES = ['registration', 'check', 'training', 'vaccination', 'licence', 'right_to_work'] as const;
+// Right to work has its own section (right-to-work.controller.ts), so it isn't offered as a credential category.
+export const CATEGORIES = ['registration', 'check', 'training', 'vaccination', 'licence'] as const;
 const TYPE_COLUMNS = `id, name, category, has_number as "hasNumber", has_expiry as "hasExpiry", needs_evidence as "needsEvidence",
   verification_method as "verificationMethod", verification_url as "verificationUrl", active`;
 
@@ -23,13 +24,11 @@ const STARTER: Array<{ name: string; category: (typeof CATEGORIES)[number]; numb
   { name: 'Infection control training', category: 'training', number: false, method: 'Sight the certificate' },
   { name: 'Influenza vaccination', category: 'vaccination', number: false, method: 'Sight vaccination evidence' },
   { name: 'COVID-19 vaccination', category: 'vaccination', number: false, expiry: false, method: 'Sight vaccination evidence' },
-  { name: 'Right to work', category: 'right_to_work', method: 'Check VEVO (visa holders) or sight citizenship evidence' },
   { name: 'Driver licence', category: 'licence', method: 'Sight the licence' },
 ];
 /** Suggested rules to go with the starter list; CFY to confirm. */
 const STARTER_RULES: Array<{ type: string; scope: 'all_workers' | 'role'; role?: string }> = [
   { type: 'National Police Check', scope: 'all_workers' },
-  { type: 'Right to work', scope: 'all_workers' },
   { type: 'AHPRA registration', scope: 'role', role: 'RN' },
   { type: 'AHPRA registration', scope: 'role', role: 'EN' },
 ];

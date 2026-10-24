@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { todayIn, workerCompliance, type CredentialFacts, type RequirementRule } from './compliance.js';
+import { todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts } from './compliance.js';
 import { loadSettings } from './settings.js';
 
 /** Loads what's needed to work out compliance for many workers at once (within withTenant). */
@@ -15,8 +15,8 @@ export async function complianceContext(db: PoolClient, tenantId: string) {
     settings,
     rules,
     today,
-    evaluate(roles: string[], credentials: CredentialFacts[], onDate = today) {
-      return workerCompliance(roles, rules, credentials, onDate, settings.expiringWindowDays);
+    evaluate(roles: string[], credentials: CredentialFacts[], rightToWork: RightToWorkFacts | null, onDate = today) {
+      return workerCompliance(roles, rules, credentials, onDate, settings.expiringWindowDays, rightToWork);
     },
   };
 }
@@ -34,4 +34,16 @@ export async function credentialFactsByWorker(db: PoolClient, workerIds?: string
     map.set(r.worker_id, list);
   }
   return map;
+}
+
+/** Current right-to-work record per worker (within withTenant). */
+export async function rightToWorkByWorker(db: PoolClient, workerIds?: string[]): Promise<Map<string, RightToWorkFacts>> {
+  const { rows } = await db.query<{ id: string; worker_id: string; status: RightToWorkFacts['status']; verification: RightToWorkFacts['verification']; visa_expiry: string | null; vevo_result: string | null }>(
+    `select id, worker_id, status, verification, to_char(visa_expiry, 'YYYY-MM-DD') as visa_expiry, vevo_result
+       from right_to_work_records where superseded_at is null ${workerIds ? 'and worker_id = any($1)' : ''}`,
+    workerIds ? [workerIds] : [],
+  );
+  return new Map(rows.map(r => [r.worker_id, {
+    id: r.id, status: r.status, verification: r.verification, visaExpiry: r.visa_expiry, vevoConfirmed: r.vevo_result === 'confirmed',
+  }]));
 }

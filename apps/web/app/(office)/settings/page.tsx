@@ -61,7 +61,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <label>Name<input name="name" required maxLength={120} /></label>
               <label>Category
                 <select name="category" required>
-                  {Object.entries(CATEGORY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  {Object.entries(CATEGORY_LABEL).filter(([v]) => v !== 'right_to_work').map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
               <label>How it's verified<input name="verificationMethod" maxLength={300} placeholder="e.g. Sight the certificate" /></label>

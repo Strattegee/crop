@@ -9,7 +9,7 @@
 
 export type CredentialStatus = 'valid' | 'expiring' | 'expired';
 export type ComplianceStatus = 'compliant' | 'expiring' | 'non_compliant';
-export type Problem = 'missing' | 'rejected' | 'unverified' | 'expired' | 'expiring';
+export type Problem = 'missing' | 'rejected' | 'unverified' | 'expired' | 'expiring' | 'no_work_rights';
 export type Severity = 'hard' | 'warning';
 
 export interface RequirementRule {
@@ -25,6 +25,33 @@ export interface CredentialFacts {
   credentialTypeId: string;
   expiryDate: string | null; // YYYY-MM-DD
   verification: 'unverified' | 'verified' | 'rejected';
+}
+
+/** The worker's current right-to-work record (spec CRD-6). */
+export interface RightToWorkFacts {
+  id: string;
+  status: 'citizen' | 'nz_citizen' | 'permanent_resident' | 'visa_holder';
+  verification: 'unverified' | 'verified' | 'rejected';
+  visaExpiry: string | null; // YYYY-MM-DD, visa holders only
+  vevoConfirmed: boolean;
+}
+
+export const RIGHT_TO_WORK = { credentialTypeId: 'right-to-work', typeName: 'Right to work' } as const;
+
+/**
+ * Right to work is required for every worker and is always a hard rule.
+ * Non-citizens need a VEVO check confirming work rights; a visa must be current on the date checked.
+ */
+export function rightToWorkIssue(rtw: RightToWorkFacts | null, onDate: string, windowDays: number): ComplianceIssue | null {
+  const issue = (problem: Problem): ComplianceIssue => ({ ...RIGHT_TO_WORK, severity: 'hard', problem, credentialId: rtw?.id ?? null });
+  if (!rtw) return issue('missing');
+  if (rtw.verification === 'rejected') return issue('rejected');
+  if (rtw.status !== 'citizen' && !rtw.vevoConfirmed) return issue('no_work_rights');
+  const visa = rtw.status === 'visa_holder' ? credentialStatus(rtw.visaExpiry, onDate, windowDays) : 'valid';
+  if (visa === 'expired') return issue('expired');
+  if (rtw.verification !== 'verified') return issue('unverified');
+  if (visa === 'expiring') return issue('expiring');
+  return null;
 }
 
 export interface ComplianceIssue {
@@ -76,8 +103,14 @@ export function workerCompliance(
   credentials: CredentialFacts[],
   onDate: string,
   windowDays: number,
+  /** Pass null when the worker has no record; leave out only when right to work isn't being checked. */
+  rightToWork?: RightToWorkFacts | null,
 ): { status: ComplianceStatus; issues: ComplianceIssue[] } {
   const issues: ComplianceIssue[] = [];
+  if (rightToWork !== undefined) {
+    const rtwIssue = rightToWorkIssue(rightToWork, onDate, windowDays);
+    if (rtwIssue) issues.push(rtwIssue);
+  }
   // If the same type is required more than once (e.g. by role and for everyone), the hard rule wins.
   const byType = new Map<string, RequirementRule>();
   for (const r of rules.filter(r => appliesTo(r, roles))) {
@@ -104,7 +137,7 @@ export function workerCompliance(
 
   const blocking = issues.some(i => i.severity === 'hard' && i.problem !== 'expiring');
   const status: ComplianceStatus = blocking ? 'non_compliant' : issues.some(i => i.problem === 'expiring') ? 'expiring' : 'compliant';
-  const order: Problem[] = ['missing', 'rejected', 'expired', 'unverified', 'expiring'];
+  const order: Problem[] = ['missing', 'no_work_rights', 'rejected', 'expired', 'unverified', 'expiring'];
   issues.sort((x, y) => (x.severity === y.severity ? order.indexOf(x.problem) - order.indexOf(y.problem) : x.severity === 'hard' ? -1 : 1));
   return { status, issues };
 }

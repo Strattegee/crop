@@ -108,3 +108,41 @@ describe('credential documents table', () => {
     await withTenant(pool, a, c => c.query(`insert into credential_events(tenant_id, worker_credential_id, action) values ($1,$2,'evidence_added')`, [a, credA]));
   });
 });
+
+describe('right to work records', () => {
+  let db: Awaited<ReturnType<typeof createTestDatabase>>;
+  let pool: ReturnType<typeof createPool>;
+  const a = randomUUID();
+  const b = randomUUID();
+  let worker = '';
+
+  beforeAll(async () => {
+    db = await createTestDatabase('crop_rtw');
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    await owner.query(`insert into tenants(id, slug, name) values ($1,'agency-a','A'),($2,'agency-b','B')`, [a, b]);
+    await owner.end();
+    pool = createPool(db.appUrl);
+    worker = await withTenant(pool, a, async c => (await c.query(`insert into workers(tenant_id, first_name, last_name) values ($1,'Jo','C') returning id`, [a])).rows[0].id);
+  });
+
+  afterAll(async () => {
+    await pool?.end();
+    await db?.drop();
+  });
+
+  const add = (sql: string, params: unknown[] = []) => withTenant(pool, a, c => c.query(sql, [a, worker, ...params]));
+
+  it('requires the right details for each status', async () => {
+    await expect(add(`insert into right_to_work_records(tenant_id, worker_id, status) values ($1,$2,'citizen')`)).rejects.toThrow(/check/);
+    await expect(add(`insert into right_to_work_records(tenant_id, worker_id, status) values ($1,$2,'permanent_resident')`)).rejects.toThrow(/check/);
+    await expect(add(`insert into right_to_work_records(tenant_id, worker_id, status, vevo_checked_on, vevo_result, visa_subclass, visa_expiry, work_limit)
+      values ($1,$2,'visa_holder','2026-10-01','confirmed','500','2027-06-30','limited')`)).rejects.toThrow(/check/);
+    await add(`insert into right_to_work_records(tenant_id, worker_id, status, citizen_proof_type) values ($1,$2,'citizen','au_passport')`);
+  });
+
+  it('allows only one current record per worker, and keeps it within the agency', async () => {
+    await expect(add(`insert into right_to_work_records(tenant_id, worker_id, status, citizen_proof_type) values ($1,$2,'citizen','birth_certificate')`)).rejects.toThrow(/duplicate key/);
+    expect((await withTenant(pool, b, c => c.query('select id from right_to_work_records'))).rows).toHaveLength(0);
+  });
+});

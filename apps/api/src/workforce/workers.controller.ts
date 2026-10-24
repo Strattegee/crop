@@ -7,7 +7,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date, email, oneOf, text, textList } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { credentialStatus } from './compliance.js';
-import { complianceContext, credentialFactsByWorker } from './compliance-data.js';
+import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 
 const STATUSES = ['active', 'inactive', 'offboarded'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
@@ -42,8 +42,9 @@ export class WorkersController {
       )).rows;
       const ctx = await complianceContext(db, t.tenantId);
       const facts = await credentialFactsByWorker(db, workers.map(w => w.id));
+      const rtw = await rightToWorkByWorker(db, workers.map(w => w.id));
       const withCompliance = workers.map(w => {
-        const c = ctx.evaluate(w.roles, facts.get(w.id) ?? []);
+        const c = ctx.evaluate(w.roles, facts.get(w.id) ?? [], rtw.get(w.id) ?? null);
         return { ...w, compliance: c.status, issueCount: c.issues.filter(i => i.severity === 'hard' && i.problem !== 'expiring').length };
       });
       return q.compliance ? withCompliance.filter(w => w.compliance === q.compliance) : withCompliance;
@@ -96,7 +97,7 @@ export class WorkersController {
       )).rows;
       for (const c of credentials as unknown as Array<{ id: string; documents?: unknown[] }>) c.documents = docs.filter(d => d.credentialId === c.id);
       const facts = (await credentialFactsByWorker(db, [id])).get(id) ?? [];
-      const compliance = ctx.evaluate(worker.roles, facts);
+      const compliance = ctx.evaluate(worker.roles, facts, (await rightToWorkByWorker(db, [id])).get(id) ?? null);
       return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, today: ctx.today };
     });
   }
