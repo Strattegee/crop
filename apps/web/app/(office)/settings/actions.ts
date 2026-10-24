@@ -44,6 +44,6 @@ export async function removeRule(id: string) {
 export async function saveSettings(f: FormData) {
   await attempt('/settings', () => api('/settings', {
     method: 'PATCH',
-    body: { expiringWindowDays: Number(str(f, 'expiringWindowDays')), timezone: str(f, 'timezone') },
+    body: { expiringWindowDays: Number(str(f, 'expiringWindowDays')), timezone: str(f, 'timezone'), smsMonthlyCap: Number(str(f, 'smsMonthlyCap')) },
   }), 'Settings saved.');
 }

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
-type Settings = { expiringWindowDays: number; timezone: string };
+type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const [types, rules, settings, agency, sp] = await Promise.all([
@@ -109,7 +109,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card">
-        <h2>Compliance settings</h2>
+        <h2>Agency settings</h2>
         <form action={saveSettings} className="form-row">
           <label>Show as expiring this many days ahead<input name="expiringWindowDays" type="number" min={1} max={365} defaultValue={settings.expiringWindowDays} disabled={!canEdit} /></label>
           <label>Agency time zone
@@ -118,8 +118,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 .map(tz => <option key={tz} value={tz}>{tz.replace('Australia/', '')}</option>)}
             </select>
           </label>
+          <label>Monthly text limit<input name="smsMonthlyCap" type="number" min={0} max={1000000} defaultValue={settings.smsMonthlyCap} disabled={!canEdit} /></label>
           {canEdit && <button type="submit" className="btn">Save</button>}
         </form>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages.</p>
       </div>
     </>
   );

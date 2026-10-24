@@ -41,3 +41,6 @@ docker compose --env-file /srv/crop/.env run --rm migrate node node_modules/@cro
 
 ## Document storage
 Bucket `crop-staging-docs` (Spaces, SYD1). The access key (limited to that bucket) is in `/srv/crop/.env` as `SPACES_KEY` / `SPACES_SECRET`. Without them, uploads are refused with "Document storage is not set up yet".
+
+## Email and SMS
+Keys in `/srv/crop/.env`: `RESEND_API_KEY` (domain cropwms.com verified in Resend), `CLICKSEND_USERNAME`, `CLICKSEND_API_KEY`, `CLICKSEND_FROM` (the dedicated number, e.g. +614xxxxxxxx). Test from the office app: Messages → Email me a test / Text a test.
