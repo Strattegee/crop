@@ -1,8 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { api, ApiError } from '../../../lib/api';
-import { attempt, str } from '../../../lib/actions';
+import { api } from '../../../lib/api';
+import { attempt, failTo, str } from '../../../lib/actions';
 
 const roles = (f: FormData) => (str(f, 'roles') ?? '').split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
 
@@ -14,8 +14,7 @@ export async function addWorker(f: FormData) {
       body: { firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), email: str(f, 'email'), phone: str(f, 'phone'), roles: roles(f) },
     })).id;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
-    redirect(`/workers?error=${encodeURIComponent(message)}`);
+    failTo('/workers', err);
   }
   redirect(`/workers/${id}?done=${encodeURIComponent('Worker added. Now add their credentials.')}`);
 }

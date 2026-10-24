@@ -1,15 +1,15 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { api, ApiError } from '../../../lib/api';
-import { attempt, str } from '../../../lib/actions';
+import { api } from '../../../lib/api';
+import { attempt, failTo, str } from '../../../lib/actions';
 
 export async function addStarterSet() {
   let result = { typesAdded: 0, rulesAdded: 0 };
   try {
     result = await api('/credential-types/starter-set', { method: 'POST' });
   } catch (err) {
-    redirect(`/settings?error=${encodeURIComponent(err instanceof ApiError ? err.message : 'Something went wrong')}`);
+    failTo('/settings', err);
   }
   redirect(`/settings?done=${encodeURIComponent(`Added ${result.typesAdded} credential types and ${result.rulesAdded} suggested rules.`)}`);
 }

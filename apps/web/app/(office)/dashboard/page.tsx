@@ -21,7 +21,7 @@ export default async function Dashboard() {
         <div className="card"><div className="muted">Not compliant</div><div className="stat" style={{ color: 'var(--bad)' }}>{s.counts.non_compliant}</div><Link href="/workers?compliance=non_compliant">See who</Link></div>
         <div className="card"><div className="muted">Expiring soon</div><div className="stat" style={{ color: 'var(--warn)' }}>{s.counts.expiring}</div><Link href="/compliance">Compliance</Link></div>
         <div className="card"><div className="muted">Waiting for verification</div><div className="stat">{s.verificationQueue.length}</div><Link href="/compliance">Review</Link></div>
-        <div className="card"><div className="muted">Facilities</div><div className="stat">{facilities.length}</div><Link href="/facilities">Manage</Link></div>
+        <div className="card"><div className="muted">Facilities</div><div className="stat">{facilities.length}</div><Link href="/clients">Clients and facilities</Link></div>
       </div>
     </>
   );

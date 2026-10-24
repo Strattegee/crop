@@ -1,51 +1,29 @@
+import Link from 'next/link';
 import { api } from '../../../lib/api';
-import { addFacility } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-type Facility = { id: string; name: string; timezone: string };
+type Facility = { id: string; name: string; clientId: string | null; clientName: string | null; suburb: string | null; state: string | null; active: boolean };
 
-const TIMEZONES = [
-  ['Australia/Melbourne', 'Victoria (Melbourne)'],
-  ['Australia/Sydney', 'New South Wales (Sydney)'],
-  ['Australia/Brisbane', 'Queensland (Brisbane)'],
-  ['Australia/Adelaide', 'South Australia (Adelaide)'],
-  ['Australia/Perth', 'Western Australia (Perth)'],
-  ['Australia/Hobart', 'Tasmania (Hobart)'],
-  ['Australia/Darwin', 'Northern Territory (Darwin)'],
-] as const;
-
-export default async function FacilitiesPage({ searchParams }: { searchParams: Promise<{ error?: string; added?: string }> }) {
-  const [facilities, params] = await Promise.all([api<Facility[]>('/facilities'), searchParams]);
-  const tzLabel = (tz: string) => TIMEZONES.find(t => t[0] === tz)?.[1] ?? tz;
+/** All facilities across clients. New facilities are added from a client's page. */
+export default async function FacilitiesPage() {
+  const facilities = await api<Facility[]>('/facilities');
   return (
     <>
       <h1>Facilities</h1>
-      <p className="muted">Hospitals, aged care homes and other sites where your workers do shifts.</p>
-      {params.error && <div className="notice error">{params.error}</div>}
-      {params.added && <div className="notice success">Added {params.added}.</div>}
-
-      <div className="card">
-        <h2>Add a facility</h2>
-        <form action={addFacility} className="form-row">
-          <label>Name<input name="name" required maxLength={200} placeholder="e.g. Northside Aged Care" /></label>
-          <label>Time zone
-            <select name="timezone" defaultValue="Australia/Melbourne">
-              {TIMEZONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </label>
-          <button type="submit" className="btn">Add facility</button>
-        </form>
-      </div>
-
-      <div className="card">
-        {facilities.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>No facilities yet.</p>
-        ) : (
+      <p className="muted">Every site across your clients. To add one, open the <Link href="/clients">client</Link> it belongs to.</p>
+      <div className="card" style={{ overflowX: 'auto' }}>
+        {facilities.length === 0 ? <p className="muted" style={{ margin: 0 }}>No facilities yet.</p> : (
           <table>
-            <thead><tr><th>Name</th><th>Time zone</th></tr></thead>
+            <thead><tr><th>Name</th><th>Client</th><th>Location</th></tr></thead>
             <tbody>
-              {facilities.map(f => <tr key={f.id}><td>{f.name}</td><td>{tzLabel(f.timezone)}</td></tr>)}
+              {facilities.map(f => (
+                <tr key={f.id} style={{ opacity: f.active ? 1 : 0.5 }}>
+                  <td><Link href={`/facilities/${f.id}`}>{f.name}</Link></td>
+                  <td>{f.clientId ? <Link href={`/clients/${f.clientId}`}>{f.clientName}</Link> : <span className="muted">Not linked to a client</span>}</td>
+                  <td>{[f.suburb, f.state].filter(Boolean).join(', ') || '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

@@ -17,3 +17,10 @@ export const str = (f: FormData, k: string) => {
   const v = f.get(k);
   return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
 };
+
+/** Shows an API error back on the page; lets Next.js redirects (e.g. to sign in) through. */
+export function failTo(back: string, err: unknown): never {
+  if (err && typeof err === 'object' && 'digest' in err) throw err;
+  const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
+  redirect(`${back}${back.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`);
+}
