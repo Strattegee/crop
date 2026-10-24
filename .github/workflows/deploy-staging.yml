@@ -32,6 +32,8 @@ jobs:
             grep -q '^SESSION_SECRET=' /srv/crop/.env || (umask 077; echo \"SESSION_SECRET=\$(openssl rand -hex 32)\" >> /srv/crop/.env)
             cd /srv/crop/app/deploy/staging
             APP_VERSION=${GITHUB_SHA::7} docker compose --env-file /srv/crop/.env up -d --build --remove-orphans
+            # Each deploy unpacks into a fresh folder; recreate Caddy so it mounts the new Caddyfile and site files.
+            docker compose --env-file /srv/crop/.env up -d --force-recreate --no-deps caddy
             docker image prune -f"
       - name: Check health
         run: |

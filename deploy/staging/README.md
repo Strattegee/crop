@@ -2,7 +2,8 @@
 
 Staging runs on the `crop-staging` droplet (DigitalOcean SYD1, 170.64.173.4) at https://staging.cropwms.com.
 
-- `/` → web app, `/api/*` → API (prefix stripped), `/api/docs` → OpenAPI docs.
+- `cropwms.com` → public website (holding page, `/privacy`, `/support`) from `deploy/staging/site`; `www` redirects to it.
+- staging `/` → web app, `/api/*` → API (prefix stripped), `/api/docs` → OpenAPI docs.
 - Every push to `main` deploys automatically (`.github/workflows/deploy-staging.yml`): the workflow copies the commit to `/srv/crop/app` and runs `docker compose up -d --build`. Migrations run in the `migrate` service before the API starts.
 
 ## One-time server setup (as `crop`)

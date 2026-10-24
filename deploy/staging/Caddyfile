@@ -7,3 +7,20 @@ staging.cropwms.com {
 		reverse_proxy web:3000
 	}
 }
+
+# Public website: holding page, privacy policy and support (linked from the app stores).
+cropwms.com {
+	encode gzip
+	root * /srv/site
+	try_files {path} {path}.html
+	file_server
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+www.cropwms.com {
+	redir https://cropwms.com{uri} permanent
+}
