@@ -54,14 +54,16 @@ export class ComplianceController {
   @Patch('settings')
   updateSettings(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const windowDays = int(body, 'expiringWindowDays', 1, 365);
+    const smsCap = int(body, 'smsMonthlyCap', 0, 1000000);
     const tz = text(body, 'timezone', { max: 60 });
     if (tz && !isTimeZone(tz)) throw new BadRequestException('timezone must be an IANA time zone');
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
       await db.query(
-        `insert into tenant_settings(tenant_id, expiring_window_days, timezone) values ($1,$2,$3)
-         on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone`,
-        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone],
+        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap) values ($1,$2,$3,$4)
+         on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone,
+           sms_monthly_cap = excluded.sms_monthly_cap`,
+        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap],
       );
       return loadSettings(db, t.tenantId);
     });

@@ -9,6 +9,7 @@ const LINKS = [
   { href: '/compliance', label: 'Compliance' },
   { href: '/clients', label: 'Clients' },
   { href: '/facilities', label: 'Facilities' },
+  { href: '/messages', label: 'Messages' },
   { href: '/settings', label: 'Settings' },
 ];
 

@@ -42,6 +42,12 @@ services:
       SPACES_ENDPOINT: https://syd1.digitaloceanspaces.com
       SPACES_KEY: ${SPACES_KEY:-}
       SPACES_SECRET: ${SPACES_SECRET:-}
+      # Email (Resend) and SMS (ClickSend). Keys live in /srv/crop/.env; sending is off for a channel until its keys are set.
+      NOTIFY_FROM_EMAIL: CROP <noreply@cropwms.com>
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      CLICKSEND_USERNAME: ${CLICKSEND_USERNAME:-}
+      CLICKSEND_API_KEY: ${CLICKSEND_API_KEY:-}
+      CLICKSEND_FROM: ${CLICKSEND_FROM:-}
     depends_on:
       migrate: { condition: service_completed_successfully }
 
