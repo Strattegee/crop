@@ -39,17 +39,20 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       {canTest && (
         <div className="card">
           <h2>Send a test</h2>
-          <div className="form-row">
-            <form action={sendTest}>
-              <input type="hidden" name="channel" value="email" />
-              <button type="submit" className="btn secondary">Email me a test</button>
-            </form>
-            <form action={sendTest} className="form-row" style={{ flex: 1 }}>
+          <form action={sendTest} className="form-row" style={{ alignItems: 'center' }}>
+            <input type="hidden" name="channel" value="email" />
+            <button type="submit" className="btn secondary">Email me a test</button>
+            <span className="muted">Sends to the email address you signed in with.</span>
+          </form>
+          {log.smsReady ? (
+            <form action={sendTest} className="form-row" style={{ marginTop: 12 }}>
               <input type="hidden" name="channel" value="sms" />
-              <label>Mobile<input name="to" required placeholder="0412 345 678" maxLength={20} inputMode="tel" /></label>
+              <label>Mobile for a test text<input name="to" required placeholder="0412 345 678" maxLength={20} inputMode="tel" /></label>
               <button type="submit" className="btn secondary">Text a test</button>
             </form>
-          </div>
+          ) : (
+            <p className="muted" style={{ marginBottom: 0 }}>Text tests appear here once SMS is set up.</p>
+          )}
         </div>
       )}
 
