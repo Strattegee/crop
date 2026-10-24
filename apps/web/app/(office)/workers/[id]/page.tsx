@@ -3,7 +3,7 @@ import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
 import { Badge, COMPLIANCE_LABEL, CREDENTIAL_STATUS_LABEL, formatDate, PROBLEM_LABEL, VERIFICATION_LABEL } from '../../../../lib/format';
 import { Notices } from '../../notices';
-import { addCredential, rejectCredential, updateWorker, verifyCredential } from '../actions';
+import { addCredential, rejectCredential, removeDocument, updateWorker, uploadDocument, verifyCredential } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +11,7 @@ type Credential = {
   id: string; typeName: string; number: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
+  documents: { id: string; filename: string; sizeBytes: number }[];
 };
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
@@ -56,7 +57,7 @@ export default async function WorkerPage({ params, searchParams }: {
         <h2>Credentials</h2>
         {w.credentials.length === 0 ? <p className="muted">No credentials recorded yet.</p> : (
           <table>
-            <thead><tr><th>Credential</th><th>Number</th><th>Expires</th><th>Status</th><th>Verification</th>{canVerify && <th />}</tr></thead>
+            <thead><tr><th>Credential</th><th>Number</th><th>Expires</th><th>Status</th><th>Evidence</th><th>Verification</th>{canVerify && <th />}</tr></thead>
             <tbody>
               {w.credentials.map(c => (
                 <tr key={c.id}>
@@ -64,6 +65,22 @@ export default async function WorkerPage({ params, searchParams }: {
                   <td>{c.number ?? '—'}</td>
                   <td>{formatDate(c.expiryDate)}</td>
                   <td><Badge label={CREDENTIAL_STATUS_LABEL[c.status]} /></td>
+                  <td style={{ minWidth: 200 }}>
+                    {c.documents.map(d => (
+                      <div key={d.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                        <a href={`/workers/${w.id}/documents/${c.id}/${d.id}`} target="_blank" rel="noreferrer">{d.filename}</a>
+                        <span className="muted">{Math.max(1, Math.round(d.sizeBytes / 1024))} KB</span>
+                        <form action={removeDocument.bind(null, w.id, c.id, d.id)}>
+                          <button type="submit" className="btn small secondary" style={{ padding: '0 6px' }} aria-label={`Remove ${d.filename}`}>×</button>
+                        </form>
+                      </div>
+                    ))}
+                    {c.documents.length === 0 && <Badge label={['Missing', 'neutral']} />}
+                    <form action={uploadDocument.bind(null, w.id, c.id)} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <input type="file" name="file" required accept="application/pdf,image/jpeg,image/png,image/heic" style={{ fontSize: 12, maxWidth: 170, padding: 4 }} />
+                      <button type="submit" className="btn small secondary">Upload</button>
+                    </form>
+                  </td>
                   <td>
                     <Badge label={VERIFICATION_LABEL[c.verification]} />
                     {c.verification === 'verified' && c.verifiedAt && <div className="muted" style={{ fontSize: 12 }}>{formatDate(c.verifiedAt)}{c.verificationNote ? ` · ${c.verificationNote}` : ''}</div>}
@@ -92,7 +109,7 @@ export default async function WorkerPage({ params, searchParams }: {
             </tbody>
           </table>
         )}
-        <p className="muted" style={{ fontSize: 13 }}>Document uploads are coming next. For now, record the details and verify against the original.</p>
+        <p className="muted" style={{ fontSize: 13 }}>Upload a PDF or photo of each credential (up to 10 MB). Files are stored privately in Australia and open through a link that lasts 5 minutes.</p>
       </div>
 
       <div className="card">

@@ -88,6 +88,13 @@ export class WorkersController {
         `select ${CRED_COLUMNS} from worker_credentials c join credential_types t on t.id = c.credential_type_id
           where c.worker_id = $1 order by t.name, c.expiry_date desc nulls first`, [id],
       )).rows.map(c => ({ ...c, status: credentialStatus(c.expiryDate, ctx.today, ctx.settings.expiringWindowDays) }));
+      const docs = (await db.query<{ credentialId: string }>(
+        `select d.id, d.worker_credential_id as "credentialId", d.filename, d.content_type as "contentType",
+                d.size_bytes as "sizeBytes", d.uploaded_at as "uploadedAt"
+           from credential_documents d join worker_credentials c on c.id = d.worker_credential_id
+          where c.worker_id = $1 and d.removed_at is null order by d.uploaded_at`, [id],
+      )).rows;
+      for (const c of credentials as unknown as Array<{ id: string; documents?: unknown[] }>) c.documents = docs.filter(d => d.credentialId === c.id);
       const facts = (await credentialFactsByWorker(db, [id])).get(id) ?? [];
       const compliance = ctx.evaluate(worker.roles, facts);
       return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, today: ctx.today };

@@ -38,3 +38,6 @@ cd /srv/crop/app/deploy/staging
 docker compose --env-file /srv/crop/.env run --rm migrate node node_modules/@crop/db/dist/invite-cli.js \
   --tenant cfy --name "Caring For You" --email someone@example.com --role owner
 ```
+
+## Document storage
+Bucket `crop-staging-docs` (Spaces, SYD1). The access key (limited to that bucket) is in `/srv/crop/.env` as `SPACES_KEY` / `SPACES_SECRET`. Without them, uploads are refused with "Document storage is not set up yet".

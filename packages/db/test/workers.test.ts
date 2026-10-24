@@ -62,3 +62,49 @@ describe('workers and credentials tables', () => {
     ).rejects.toThrow(/duplicate key/);
   });
 });
+
+describe('credential documents table', () => {
+  let db: Awaited<ReturnType<typeof createTestDatabase>>;
+  let pool: ReturnType<typeof createPool>;
+  const a = randomUUID();
+  const b = randomUUID();
+  let credA = '';
+
+  beforeAll(async () => {
+    db = await createTestDatabase('crop_docs');
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    await owner.query(`insert into tenants(id, slug, name) values ($1,'agency-a','A'),($2,'agency-b','B')`, [a, b]);
+    await owner.end();
+    pool = createPool(db.appUrl);
+    credA = await withTenant(pool, a, async c => {
+      const w = await c.query(`insert into workers(tenant_id, first_name, last_name) values ($1,'Jo','C') returning id`, [a]);
+      const t = await c.query(`insert into credential_types(tenant_id, name, category) values ($1,'CPR','training') returning id`, [a]);
+      return (await c.query(`insert into worker_credentials(tenant_id, worker_id, credential_type_id) values ($1,$2,$3) returning id`, [a, w.rows[0].id, t.rows[0].id])).rows[0].id;
+    });
+  });
+
+  afterAll(async () => {
+    await pool?.end();
+    await db?.drop();
+  });
+
+  const insert = (tenant: string, key: string, type = 'application/pdf') => withTenant(pool, tenant, c => c.query(
+    `insert into credential_documents(tenant_id, worker_credential_id, storage_key, filename, content_type, size_bytes, sha256)
+     values ($1,$2,$3,'cert.pdf',$4,1000,$5)`, [tenant, credA, key, type, 'a'.repeat(64)]));
+
+  it('stores documents for the agency and hides them from others', async () => {
+    await insert(a, 'k1');
+    expect((await withTenant(pool, a, c => c.query('select id from credential_documents'))).rows).toHaveLength(1);
+    expect((await withTenant(pool, b, c => c.query('select id from credential_documents'))).rows).toHaveLength(0);
+  });
+
+  it('only accepts PDF and image types, and never lets the API delete rows', async () => {
+    await expect(insert(a, 'k2', 'text/html')).rejects.toThrow(/check/);
+    await expect(withTenant(pool, a, c => c.query('delete from credential_documents'))).rejects.toThrow(/permission denied/);
+  });
+
+  it('accepts the new evidence history actions', async () => {
+    await withTenant(pool, a, c => c.query(`insert into credential_events(tenant_id, worker_credential_id, action) values ($1,$2,'evidence_added')`, [a, credA]));
+  });
+});

@@ -50,3 +50,20 @@ export async function rejectCredential(workerId: string, credentialId: string, f
     method: 'POST', body: { reason: str(f, 'reason') },
   }), 'Credential rejected.');
 }
+
+export async function uploadDocument(workerId: string, credentialId: string, f: FormData) {
+  const file = f.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/workers/${workerId}?error=${encodeURIComponent('Choose a file to upload')}`);
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    redirect(`/workers/${workerId}?error=${encodeURIComponent('That file is too large. The limit is 10 MB.')}`);
+  }
+  const form = new FormData();
+  form.set('file', file, file.name);
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/credentials/${credentialId}/documents`, { method: 'POST', form }), `Uploaded ${file.name}.`);
+}
+
+export async function removeDocument(workerId: string, credentialId: string, documentId: string) {
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/credentials/${credentialId}/documents/${documentId}`, { method: 'DELETE' }), 'Document removed.');
+}
