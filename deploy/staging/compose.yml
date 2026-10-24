@@ -44,6 +44,7 @@ services:
       SPACES_SECRET: ${SPACES_SECRET:-}
       # Email (Resend) and SMS (ClickSend). Keys live in /srv/crop/.env; sending is off for a channel until its keys are set.
       NOTIFY_FROM_EMAIL: CROP <noreply@cropwms.com>
+      APP_URL: https://staging.cropwms.com   # links in messages
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       CLICKSEND_USERNAME: ${CLICKSEND_USERNAME:-}
       CLICKSEND_API_KEY: ${CLICKSEND_API_KEY:-}
