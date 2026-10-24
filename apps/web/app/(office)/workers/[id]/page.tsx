@@ -9,6 +9,7 @@ import {
   addCredential, rejectCredential, rejectRightToWork, removeDocument, removeRightToWorkDocument, saveRightToWork, updateWorker,
   uploadDocument, uploadRightToWorkDocument, verifyCredential, verifyRightToWork,
 } from '../actions';
+import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
 
 export const dynamic = 'force-dynamic';
@@ -192,18 +193,7 @@ export default async function WorkerPage({ params, searchParams }: {
         {activeTypes.length === 0 ? (
           <p className="muted">No credential types are set up yet. <Link href="/settings">Add them in Settings</Link>.</p>
         ) : (
-          <form action={addCredential.bind(null, w.id)} className="form-row">
-            <label>Credential
-              <select name="credentialTypeId" required defaultValue="">
-                <option value="" disabled>Choose…</option>
-                {activeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-            <label>Number<input name="number" maxLength={100} /></label>
-            <label>Issued<input name="issueDate" type="date" /></label>
-            <label>Expires<input name="expiryDate" type="date" /></label>
-            <button type="submit" className="btn">Add</button>
-          </form>
+          <AddCredentialForm types={activeTypes} action={addCredential.bind(null, w.id)} />
         )}
       </div>
 
