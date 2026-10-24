@@ -57,14 +57,14 @@ describe('workers, credentials and compliance', () => {
 
   it('adds the starter credential types and suggested rules once', async () => {
     const first = await http().post('/credential-types/starter-set').set(as('admin')).expect(201);
-    expect(first.body).toEqual({ typesAdded: 12, rulesAdded: 4 });
+    expect(first.body).toEqual({ typesAdded: 11, rulesAdded: 3 });
     const again = await http().post('/credential-types/starter-set').set(as('admin')).expect(201);
     expect(again.body).toEqual({ typesAdded: 0, rulesAdded: 0 });
     const list = await http().get('/credential-types').set(as('alloc')).expect(200);
     types = Object.fromEntries(list.body.map((t: { name: string; id: string }) => [t.name, t.id]));
     expect(Object.keys(types)).toContain('AHPRA registration');
     const rules = await http().get('/credential-requirements').set(as('alloc')).expect(200);
-    expect(rules.body).toHaveLength(4);
+    expect(rules.body).toHaveLength(3);
   });
 
   it('only lets owners and admins change credential types and rules', async () => {
@@ -103,16 +103,18 @@ describe('workers, credentials and compliance', () => {
     await add('AHPRA registration', { number: 'NMW0001234567', issueDate: '2026-06-01', expiryDate: '2026-05-01' }).expect(400);
     await add('AHPRA registration', { number: 'NMW0001234567', expiryDate: '2026-02-30' }).expect(400);
     const ids: Record<string, string> = {};
-    for (const [type, number] of [['AHPRA registration', 'NMW0001234567'], ['National Police Check', 'NPC-998'], ['Right to work', 'Citizen']]) {
+    for (const [type, number] of [['AHPRA registration', 'NMW0001234567'], ['National Police Check', 'NPC-998']]) {
       const r = await add(type, { number, expiryDate: addDays(today, 400) }).expect(201);
       expect(r.body).toMatchObject({ verification: 'unverified', evidence: 'missing' });
       ids[type] = r.body.id;
     }
+    await http().put(`/workers/${workerId}/right-to-work`).set(as('alloc')).send({ status: 'citizen', citizenProofType: 'au_passport', documentNumber: 'PA1234567' }).expect(200);
     let w = await http().get(`/workers/${workerId}`).set(as('alloc')).expect(200);
     expect(w.body.compliance).toBe('non_compliant');
     expect(w.body.issues.every((i: { problem: string }) => i.problem === 'unverified')).toBe(true);
 
-    await http().post(`/workers/${workerId}/credentials/${ids['Right to work']}/verify`).set(as('alloc')).send({}).expect(403);
+    await http().post(`/workers/${workerId}/right-to-work/verify`).set(as('alloc')).send({}).expect(403);
+    await http().post(`/workers/${workerId}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
     for (const id of Object.values(ids)) {
       await http().post(`/workers/${workerId}/credentials/${id}/verify`).set(as('admin')).send({ note: 'Checked' }).expect(201);
     }
@@ -131,8 +133,8 @@ describe('workers, credentials and compliance', () => {
     expect(history.body.map((e: { action: string }) => e.action)).toEqual(['created', 'verified', 'updated', 'verification_reset', 'verified']);
 
     // Rejecting needs a reason.
-    await http().post(`/workers/${workerId}/credentials/${ids['Right to work']}/reject`).set(as('admin')).send({}).expect(400);
-    await http().post(`/workers/${workerId}/credentials/${ids['Right to work']}/reject`).set(as('admin')).send({ reason: 'Wrong document' }).expect(201);
+    await http().post(`/workers/${workerId}/right-to-work/reject`).set(as('admin')).send({}).expect(400);
+    await http().post(`/workers/${workerId}/right-to-work/reject`).set(as('admin')).send({ reason: 'Wrong document' }).expect(201);
     w = await http().get(`/workers/${workerId}`).set(as('alloc')).expect(200);
     expect(w.body.issues[0]).toMatchObject({ typeName: 'Right to work', problem: 'rejected' });
   });

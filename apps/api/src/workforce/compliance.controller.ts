@@ -8,7 +8,7 @@ import { Roles, Tenant } from '../auth/decorators.js';
 import { int, isTimeZone, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays } from './compliance.js';
-import { complianceContext, credentialFactsByWorker } from './compliance-data.js';
+import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { loadSettings } from './settings.js';
 
 @ApiBearerAuth()
@@ -25,8 +25,9 @@ export class ComplianceController {
       const ctx = await complianceContext(db, t.tenantId);
       const workers = (await db.query<{ id: string; roles: string[] }>(`select id, roles from workers where status = 'active'`)).rows;
       const facts = await credentialFactsByWorker(db);
+      const rtw = await rightToWorkByWorker(db);
       const counts = { compliant: 0, expiring: 0, non_compliant: 0 };
-      for (const w of workers) counts[ctx.evaluate(w.roles, facts.get(w.id) ?? []).status]++;
+      for (const w of workers) counts[ctx.evaluate(w.roles, facts.get(w.id) ?? [], rtw.get(w.id) ?? null).status]++;
 
       const cols = `c.id, c.worker_id as "workerId", w.first_name || ' ' || w.last_name as "workerName", t.name as "typeName",
         c.number, to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate", c.evidence, c.created_at as "createdAt"`;

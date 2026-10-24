@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { credentialStatus, todayIn, workerCompliance, type CredentialFacts, type RequirementRule } from '../src/workforce/compliance.js';
+import { credentialStatus, rightToWorkIssue, todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts } from '../src/workforce/compliance.js';
 
 const police: RequirementRule = { credentialTypeId: 'police', typeName: 'Police check', scope: 'all_workers', role: null, severity: 'hard' };
 const ahpra: RequirementRule = { credentialTypeId: 'ahpra', typeName: 'AHPRA', scope: 'role', role: 'RN', severity: 'hard' };
@@ -71,5 +71,32 @@ describe('worker compliance', () => {
   it('lets a hard rule win when the same type is also a warning', () => {
     const r = workerCompliance(['RN'], [{ ...ahpra, severity: 'warning', scope: 'all_workers', role: null }, ahpra], [], TODAY, 30);
     expect(r).toMatchObject({ status: 'non_compliant', issues: [{ severity: 'hard', problem: 'missing' }] });
+  });
+});
+
+describe('right to work', () => {
+  const rtw = (over: Partial<RightToWorkFacts>): RightToWorkFacts =>
+    ({ id: 'r1', status: 'citizen', verification: 'verified', visaExpiry: null, vevoConfirmed: false, ...over });
+  const problem = (r: RightToWorkFacts | null, on = TODAY) => rightToWorkIssue(r, on, 30)?.problem ?? null;
+
+  it('is missing when nothing is recorded', () => expect(problem(null)).toBe('missing'));
+  it('accepts a verified citizen without VEVO', () => expect(problem(rtw({}))).toBeNull());
+  it('needs a confirmed VEVO check for everyone else', () => {
+    expect(problem(rtw({ status: 'permanent_resident' }))).toBe('no_work_rights');
+    expect(problem(rtw({ status: 'nz_citizen', vevoConfirmed: true }))).toBeNull();
+  });
+  it('checks the visa expiry, including against a future shift date', () => {
+    const visa = rtw({ status: 'visa_holder', vevoConfirmed: true, visaExpiry: '2026-11-20' });
+    expect(problem(visa)).toBe('expiring');
+    expect(problem(visa, '2026-11-21')).toBe('expired');
+    expect(problem({ ...visa, visaExpiry: '2027-06-30' })).toBeNull();
+  });
+  it('must be verified, and a rejection blocks', () => {
+    expect(problem(rtw({ verification: 'unverified' }))).toBe('unverified');
+    expect(problem(rtw({ verification: 'rejected' }))).toBe('rejected');
+  });
+  it('makes the worker non-compliant when included', () => {
+    expect(workerCompliance([], [], [], TODAY, 30, null)).toMatchObject({ status: 'non_compliant', issues: [{ typeName: 'Right to work', problem: 'missing' }] });
+    expect(workerCompliance([], [], [], TODAY, 30, rtw({})).status).toBe('compliant');
   });
 });

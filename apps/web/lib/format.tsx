@@ -29,6 +29,7 @@ export const PROBLEM_LABEL: Record<string, string> = {
   unverified: 'not verified yet',
   expired: 'expired',
   expiring: 'expiring soon',
+  no_work_rights: 'VEVO does not confirm work rights',
 };
 
 export const CATEGORY_LABEL: Record<string, string> = {

@@ -11,7 +11,10 @@ const LABELS: Record<string, string> = {
   reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Type',
   verificationMethod: 'How it is verified', abn: 'ABN', billingContactName: 'Billing contact', billingEmail: 'Billing email',
   addressLine: 'Address', suburb: 'Suburb', state: 'State', postcode: 'Postcode', clientId: 'Client', specialty: 'Specialty',
-  parkingNotes: 'Parking notes', entryNotes: 'Entry notes', verificationUrl: 'Verification link', expiringWindowDays: 'Expiring window',
+  parkingNotes: 'Parking notes', entryNotes: 'Entry notes',
+  citizenProofType: 'Proof of citizenship', documentNumber: 'Document number', visaType: 'Visa type', visaSubclass: 'Visa subclass',
+  visaGrantNumber: 'Visa grant number', visaExpiry: 'Visa expiry', workLimit: 'Work conditions', workHoursPerFortnight: 'Hours per fortnight',
+  vevoCheckedOn: 'VEVO check date', vevoResult: 'VEVO result', verificationUrl: 'Verification link', expiringWindowDays: 'Expiring window',
 };
 const label = (key: string) => LABELS[key] ?? key;
 

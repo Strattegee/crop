@@ -67,3 +67,37 @@ export async function uploadDocument(workerId: string, credentialId: string, f: 
 export async function removeDocument(workerId: string, credentialId: string, documentId: string) {
   await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/credentials/${credentialId}/documents/${documentId}`, { method: 'DELETE' }), 'Document removed.');
 }
+
+export async function saveRightToWork(workerId: string, f: FormData) {
+  const hours = str(f, 'workHoursPerFortnight');
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work`, {
+    method: 'PUT',
+    body: {
+      status: str(f, 'status'), citizenProofType: str(f, 'citizenProofType'), documentNumber: str(f, 'documentNumber'),
+      visaType: str(f, 'visaType'), visaSubclass: str(f, 'visaSubclass'), visaGrantNumber: str(f, 'visaGrantNumber'),
+      visaExpiry: str(f, 'visaExpiry'), workLimit: str(f, 'workLimit'), workHoursPerFortnight: hours ? Number(hours) : undefined,
+      vevoCheckedOn: str(f, 'vevoCheckedOn'), vevoResult: str(f, 'vevoResult'),
+    },
+  }), 'Right to work saved. Upload the documents, then it needs verifying.');
+}
+
+export async function verifyRightToWork(workerId: string, f: FormData) {
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work/verify`, { method: 'POST', body: { note: str(f, 'note') } }), 'Right to work verified.');
+}
+
+export async function rejectRightToWork(workerId: string, f: FormData) {
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work/reject`, { method: 'POST', body: { reason: str(f, 'reason') } }), 'Right to work rejected.');
+}
+
+export async function uploadRightToWorkDocument(workerId: string, f: FormData) {
+  const file = f.get('file');
+  if (!(file instanceof File) || file.size === 0) redirect(`/workers/${workerId}?error=${encodeURIComponent('Choose a file to upload')}`);
+  if (file.size > 10 * 1024 * 1024) redirect(`/workers/${workerId}?error=${encodeURIComponent('That file is too large. The limit is 10 MB.')}`);
+  const form = new FormData();
+  form.set('file', file, file.name);
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work/documents`, { method: 'POST', form }), `Uploaded ${file.name}.`);
+}
+
+export async function removeRightToWorkDocument(workerId: string, documentId: string) {
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work/documents/${documentId}`, { method: 'DELETE' }), 'Document removed.');
+}
