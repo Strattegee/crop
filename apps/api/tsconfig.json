@@ -6,7 +6,8 @@
     "emitDecoratorMetadata": true,
     "declaration": false,
     "types": [
-      "node"
+      "node",
+      "multer"
     ],
     "module": "nodenext",
     "moduleResolution": "nodenext"

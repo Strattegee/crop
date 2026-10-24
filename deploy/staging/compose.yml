@@ -37,6 +37,11 @@ services:
       APP_VERSION: ${APP_VERSION:-unknown}
       AUTH_ISSUER: https://crop-wms-g1hp69.au1.zitadel.cloud
       AUTH_AUDIENCE: "396208029055362428"   # Zitadel CROP project ID
+      # Credential documents: DigitalOcean Spaces, Sydney. Keys live in /srv/crop/.env.
+      SPACES_BUCKET: crop-staging-docs
+      SPACES_ENDPOINT: https://syd1.digitaloceanspaces.com
+      SPACES_KEY: ${SPACES_KEY:-}
+      SPACES_SECRET: ${SPACES_SECRET:-}
     depends_on:
       migrate: { condition: service_completed_successfully }
 
