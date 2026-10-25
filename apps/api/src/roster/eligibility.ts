@@ -9,7 +9,7 @@
  * Warnings (shown, not blocking): warning-level credential rules, credentials expiring soon,
  * and less rest between shifts than the business's minimum.
  */
-import { addDays, type ComplianceIssue } from '../workforce/compliance.js';
+import { addDays, credentialStatus, type ComplianceIssue, type CredentialFacts } from '../workforce/compliance.js';
 
 export interface ShiftFacts {
   id?: string;
@@ -37,9 +37,18 @@ export interface EligibilityInput {
   /** From a limited visa; null when not limited. */
   hoursPerFortnight: number | null;
   minRestHours: number;
+  /** Equipment already on the shift that needs an operator holding a credential (backlog item 4). */
+  operatorNeeds?: OperatorNeed[];
+  /** The person's credentials, for operator needs. */
+  credentials?: CredentialFacts[];
+  /** The business's expiring window in days, for operator credentials. */
+  windowDays?: number;
 }
 
-export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest';
+export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
+
+export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
+  | 'operator' | 'equipment_status' | 'equipment_check';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 
@@ -61,7 +70,7 @@ export function mondayOf(date: string): string {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** e.g. "Mon 26 Oct". */
-const fmtDate = (d: string) => {
+export const fmtDate = (d: string) => {
   const x = new Date(`${d}T00:00:00Z`);
   return `${DAYS[x.getUTCDay()]} ${x.getUTCDate()} ${MONTHS[x.getUTCMonth()]}`;
 };
@@ -95,6 +104,11 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
   const clash = others.find(o => o.startsAt < shift.endsAt && o.endsAt > shift.startsAt);
   if (clash) blocks.push({ code: 'double_booked', message: `${p.name} is already rostered ${clash.label} at ${clash.facilityName}` });
 
+  for (const need of p.operatorNeeds ?? []) {
+    const r = operatorReason(p.name, p.credentials ?? [], need, shift.localDate, p.windowDays ?? 30);
+    if (r) (r.hard ? blocks : warnings).push(r.reason);
+  }
+
   if (p.hoursPerFortnight !== null) {
     for (const f of fortnightsContaining(shift.localDate)) {
       const total = shift.hours + others.filter(o => o.localDate >= f.from && o.localDate <= f.to).reduce((s, o) => s + o.hours, 0);
@@ -125,4 +139,20 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
   }
 
   return { eligible: blocks.length === 0, blocks, warnings };
+}
+
+/**
+ * Whether a person can operate a piece of equipment on a date: they need a verified credential of the
+ * operator type that hasn't expired by then. Expiring soon is a warning.
+ */
+export function operatorReason(
+  personName: string, credentials: CredentialFacts[], need: OperatorNeed, onDate: string, windowDays: number,
+): { hard: boolean; reason: Reason } | null {
+  const held = credentials.filter(c => c.credentialTypeId === need.credentialTypeId && c.verification === 'verified');
+  const statuses = held.map(c => credentialStatus(c.expiryDate, onDate, windowDays));
+  if (statuses.includes('valid')) return null;
+  if (statuses.includes('expiring')) {
+    return { hard: false, reason: { code: 'operator', message: `${personName}'s ${need.typeName} expires soon (needed to operate ${need.equipmentName})` } };
+  }
+  return { hard: true, reason: { code: 'operator', message: `${personName} doesn't hold a current, verified ${need.typeName}, needed to operate ${need.equipmentName}` } };
 }

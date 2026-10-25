@@ -2,6 +2,13 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-10-25 late night (scheduled run)
+
+- Shipped: equipment on the roster, first part (backlog item 4). The business can keep a register of its machines, vehicles and tools, record the dates each must be current for (registration, service, inspection), and book equipment to shifts. Booking is refused when the equipment is out of service, a date will be overdue on the shift date, it's already booked at that time, or the person on the shift doesn't hold the licence needed to operate it (and a person without that licence can't be put on a shift that has the machine). The roster now shows equipment rows with hours booked.
+- Still to do on item 4: reminders for equipment dates, wet vs dry hire, and equipment on the roster screen.
+- Next: items and consumables (item 5), unless David clears the roster screen (item 2).
+- Waiting on David: confirm whether the 25 Oct meeting with Steve counts as the Ribbon roster review, so runs can build the roster screen.
+
 ## 2026-10-25 night (scheduled run)
 
 - Shipped: eligibility when assigning (backlog item 3). The roster now refuses to put someone on a shift if they don't have the role, a required credential or right to work won't be current on the shift date, they're already rostered then, or it would take a visa holder over their fortnightly hours. It warns about short rest between shifts (10 hours by default, changeable) and credentials expiring soon. New "who can work this shift" list, ready people first.

@@ -18,6 +18,8 @@ const LABELS: Record<string, string> = {
   code: 'Code', startTime: 'Start time', endTime: 'End time', breakMinutes: 'Break (minutes)', quantity: 'Number of people',
   date: 'Date', startDate: 'Start date', endDate: 'End date', employmentType: 'Employment type', startsOn: 'Start date',
   facilityId: 'Site', areaId: 'Area', shiftCodeId: 'Shift code', workerId: 'Person',
+  equipmentTypeId: 'Equipment type', equipmentId: 'Equipment', assetNumber: 'Asset number', registration: 'Registration',
+  homeFacilityId: 'Home site', dueOn: 'Due date', operatorCredentialTypeId: 'Operator credential',
 };
 const label = (key: string) => LABELS[key] ?? key;
 
