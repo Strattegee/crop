@@ -4,6 +4,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## The product, as decided by David and Steve Thomson (25 Oct 2026 meeting)
 
+- **CROP's main customer is the employer**: any small to medium business (restaurant, construction equipment, traffic management, hospital ward). The employer product is roster-first and must be simple to set up without help. Agencies are a second customer type, allocation-first, serving CROP employers and outside clients.
 - **CROP is first a roster for any employer**, in any industry: a hospital, a hotel, a construction firm. "The most important key to the success of this program is the system working as a roster for an employer."
 - **The employer** owns the site and sets the credential criteria for its work. It rosters its own staff (full-time, part-time, casual and bank) and sees the roster by day, week or month, by department or by person, with each person's hours.
 - **Bank staff** are the employer's own pool of relief staff. To fill a gap, the employer looks at them **as a list**: who is available today and qualified (like an allocation screen), and puts someone in.
