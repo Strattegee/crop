@@ -21,7 +21,7 @@ const LABELS: Record<string, string> = {
   equipmentTypeId: 'Equipment type', equipmentId: 'Equipment', assetNumber: 'Asset number', registration: 'Registration',
   homeFacilityId: 'Home site', equipmentOnly: 'Equipment only', dueOn: 'Due date', operatorCredentialTypeId: 'Operator credential',
   unit: 'Unit', sku: 'SKU', unitCostCents: 'Unit cost (cents)', chargeCents: 'Charge to client (cents)', tracksStock: 'Count stock', active: 'Active',
-  shiftId: 'Shift',
+  shiftId: 'Shift', workerIds: 'People', expiresInMinutes: 'Offer open for (minutes)', notify: 'Send messages',
 };
 const label = (key: string) => LABELS[key] ?? key;
 

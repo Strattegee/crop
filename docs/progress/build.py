@@ -23,6 +23,7 @@ prog={
  'TPL':('active',.6,None,'Shift codes, shifts (single or blocks) and equipment booked to shifts (with a person, or on its own for dry hire) built; equipment dates in the daily office email; items and consumables (PPE, fuel, sundries) with stock per site, issued to people or used on shifts, cost per shift; roster screen next'),
  'GRID':('active',.2,None,'Roster data with hours per person and per piece of equipment built; screen next'),
  'MATCH':('active',.6,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours, equipment operator licences) and rest warnings done; who-can-work list built. Leave comes with availability'),
+ 'BCAST':('active',.5,None,'Bank fill: open shifts offered to several bank and casual staff by email and text, first to accept is booked, no double booking. Staff reply to the office until the worker app is ready'),
  'PROTO':('active',.3,None,'Ribbon roster prototype done. Roster session with David next'),
 }
 rows=[]
