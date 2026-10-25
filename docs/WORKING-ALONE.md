@@ -18,7 +18,7 @@ Anything covered by the backlog that passes tests: new features, fixes, tests, d
 
 ## Hold for David (prepare it on a branch or as a note, don't merge or act)
 
-- Product direction changes, or anything about the Ribbon roster's design before Steve's review.
+- Product direction changes. (The Ribbon roster is cleared to build as of 26 Oct; questions from Steve's sessions go in `docs/decisions/`.)
 - Anything that costs money, signs up to or changes an outside service, or changes DNS, Zitadel, DigitalOcean or GitHub settings.
 - Contacting anyone outside (email, SMS to real people, app store submissions).
 - Deleting or rewriting data, or migrations that drop or rename columns holding data.
