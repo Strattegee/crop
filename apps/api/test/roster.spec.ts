@@ -43,6 +43,11 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     area = (await http().post(`/facilities/${site}/areas`).set(as('admin')).send({ name: 'Kitchen' }).expect(201)).body.id;
     ana = (await http().post('/workers').set(as('admin')).send({ firstName: 'Ana', lastName: 'Example', roles: ['Chef'] }).expect(201)).body.id;
     ben = (await http().post('/workers').set(as('admin')).send({ firstName: 'Ben', lastName: 'Sample', roles: ['Barista'] }).expect(201)).body.id;
+    // Right to work is a hard rule for everyone, so record and verify it.
+    for (const w of [ana, ben]) {
+      await http().put(`/workers/${w}/right-to-work`).set(as('admin')).send({ status: 'citizen', citizenProofType: 'au_passport' }).expect(200);
+      await http().post(`/workers/${w}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
+    }
   });
 
   afterAll(async () => {
@@ -102,9 +107,10 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     const clash = await http().post(`/shifts/${overlap}/assign`).set(as('alloc')).send({ workerId: ana }).expect(409);
     expect(clash.body.message).toMatch(/Ana Example is already rostered .*07:00–15:30 at Harbour Kitchen/);
 
-    // Wrong role is a warning, not a block (full eligibility comes next).
-    const b = await http().post(`/shifts/${nd}/assign`).set(as('alloc')).send({ workerId: ben }).expect(200);
-    expect(b.body.warnings).toEqual(['Ben Sample doesn\'t have the role Chef']);
+    // Wrong role is a hard block.
+    const b = await http().post(`/shifts/${nd}/assign`).set(as('alloc')).send({ workerId: ben }).expect(409);
+    expect(b.body.message).toBe('Ben Sample doesn\'t have the role Chef');
+    await http().post(`/shifts/${nd}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
 
     const c = await http().post(`/shifts/${am}/confirm`).set(as('alloc')).expect(200);
     expect(c.body).toMatchObject({ status: 'booked', assignmentStatus: 'confirmed' });
@@ -138,6 +144,55 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     expect(anaRow).toMatchObject({ employmentType: 'full_time', contractedHours: 38, rosteredHours: 6 }); // only the 14:00–20:00 shift remains
     expect(roster.body.shifts.every((s: { status: string }) => s.status !== 'cancelled')).toBe(true);
     await http().get('/roster?from=2026-11-08&to=2026-11-02').set(as('alloc')).expect(400);
+  });
+
+  it('lists who could work a shift and enforces credentials, visa hours and rest', async () => {
+    const food = (await http().post('/credential-types').set(as('admin')).send({ name: 'Food handling', category: 'training', hasNumber: false, needsEvidence: false }).expect(201)).body.id;
+    await http().post('/credential-requirements').set(as('admin')).send({ credentialTypeId: food, scope: 'role', role: 'Chef', severity: 'hard' }).expect(201);
+    const today = new Date().toISOString().slice(0, 10);
+    const cara = (await http().post('/workers').set(as('admin')).send({ firstName: 'Cara', lastName: 'Demo', roles: ['Chef'] }).expect(201)).body.id;
+    await http().put(`/workers/${cara}/right-to-work`).set(as('admin')).send({
+      status: 'visa_holder', visaType: 'Student', visaSubclass: '500', visaExpiry: '2030-01-01', workLimit: 'limited', workHoursPerFortnight: 20,
+      vevoCheckedOn: today, vevoResult: 'confirmed',
+    }).expect(200);
+    await http().post(`/workers/${cara}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
+    const addFood = async (w: string, expiryDate: string) => {
+      const c = (await http().post(`/workers/${w}/credentials`).set(as('admin')).send({ credentialTypeId: food, expiryDate }).expect(201)).body.id;
+      await http().post(`/workers/${w}/credentials/${c}/verify`).set(as('admin')).send({}).expect(201);
+    };
+    await addFood(cara, '2030-01-01');
+    await addFood(ana, '2026-11-05'); // current today, expired by the shift date
+
+    const mk = async (date: string, startTime: string, endTime: string) =>
+      (await http().post('/shifts').set(as('alloc')).send({ facilityId: site, role: 'Chef', date, startTime, endTime }).expect(201)).body.ids[0] as string;
+    const tue = await mk('2026-11-10', '09:00', '17:00');
+    await http().get(`/shifts/${tue}/candidates`).set(as('worker')).expect(403);
+    const c = await http().get(`/shifts/${tue}/candidates`).set(as('alloc')).expect(200);
+    expect(c.body.shift).toMatchObject({ id: tue, localDate: '2026-11-10' });
+    expect(c.body.candidates.map((x: { name: string; eligible: boolean }) => `${x.name}:${x.eligible}`)).toEqual(['Cara Demo:true', 'Ana Example:false', 'Ben Sample:false']);
+    const anaRow = c.body.candidates.find((x: { workerId: string }) => x.workerId === ana);
+    expect(anaRow.blocks).toEqual([{ code: 'credential', message: 'Ana Example\'s Food handling will have expired by the shift date' }]);
+    expect(c.body.candidates.find((x: { workerId: string }) => x.workerId === ben).blocks.map((b: { code: string }) => b.code)).toEqual(['role']);
+
+    const blocked = await http().post(`/shifts/${tue}/assign`).set(as('alloc')).send({ workerId: ana }).expect(409);
+    expect(blocked.body.message).toMatch(/Food handling will have expired/);
+    await http().post(`/shifts/${tue}/assign`).set(as('alloc')).send({ workerId: cara }).expect(200);
+
+    // Eight hours after Tuesday's finish: allowed, with a rest warning (default minimum 10 hours).
+    const early = await mk('2026-11-11', '01:00', '04:00');
+    const w = await http().post(`/shifts/${early}/assign`).set(as('alloc')).send({ workerId: cara }).expect(200);
+    expect(w.body.warnings).toEqual([expect.stringMatching(/Cara Demo would have 8 hours' rest between this shift and Tue 10 Nov 09:00–17:00/)]);
+
+    // 11 hours so far this fortnight; 10 more would be over her visa's 20.
+    const thu = await mk('2026-11-12', '09:00', '19:00');
+    const over = await http().post(`/shifts/${thu}/assign`).set(as('alloc')).send({ workerId: cara }).expect(409);
+    expect(over.body.message).toMatch(/Cara Demo's visa allows 20 hours a fortnight; this shift would make 21 hours/);
+    const list = (await http().get(`/shifts/${thu}/candidates`).set(as('alloc')).expect(200)).body.candidates;
+    expect(list.find((x: { workerId: string }) => x.workerId === cara)).toMatchObject({ eligible: false, weekHours: 11 });
+
+    // The business can change its rest rule.
+    await http().patch('/settings').set(as('admin')).send({ minRestHours: 30 }).expect(400);
+    expect((await http().patch('/settings').set(as('admin')).send({ minRestHours: 8 }).expect(200)).body.minRestHours).toBe(8);
   });
 
   it('keeps each business\'s roster separate', async () => {

@@ -19,7 +19,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 1. [x] **Employer roster foundations.** Done 25 Oct: API and tests (`roster.controller.ts`); screens come with item 2. Model *resources* generally so a shift can need people and equipment (people built first, equipment rows to follow in item 4). Departments/areas within sites (sites and areas exist), staff with employment type (full-time, part-time, casual, bank) and contracted hours, shift codes (start, end, break) per site, and shifts on a roster with statuses (open, assigned, booked, cancelled). Times in UTC plus the site's time zone. Keep requirement, allocation and booking separate (CLAUDE.md). API and tests first.
 2. [ ] **Roster screen (Ribbon).** Week view by department, by person and by equipment with hours and balance per person; day and month views; draft → publish → live with a change log. Use the prototype and the full-screen design as the starting point (Steve has endorsed the roster concept); keep it simple and fast.
-3. [ ] **Eligibility when assigning.** Only staff who hold the role and every hard requirement on the shift date (`compliance.ts` with `onDate`), aren't double-booked, and are within visa hours and rest rules; warnings vs hard blocks.
+3. [x] **Eligibility when assigning.** Done 25 Oct (scheduled run): `roster/eligibility.ts` (pure, unit-tested) and `GET /shifts/:id/candidates` (everyone active, ready first, with reasons). Hard blocks on assign: wrong role, hard credential rules and right to work on the shift date, double booking, visa hours over any fortnight starting on a Monday. Warnings: expiring credentials, warning-level rules, rest under the business minimum (`tenant_settings.min_rest_hours`, default 10). Still to do: site and client rules that are stricter than the business's (with Clients), availability and leave (item 10). Original brief: only staff who hold the role and every hard requirement on the shift date (`compliance.ts` with `onDate`), aren't double-booked, and are within visa hours and rest rules; warnings vs hard blocks.
 4. [ ] **Equipment on the roster.** Equipment register (type, registration/service/inspection dates with expiry reminders using the credential engine), book equipment to shifts with no double booking, operator rules (a machine needs an operator holding a given credential), equipment rows on the roster, wet hire vs dry hire.
 5. [ ] **Items and consumables.** Item catalogue (PPE, fuel, sundries) with unit cost; issue items to a person or use them on a shift/job; quantities on hand per site; cost per shift and optional charge to the client.
 6. [ ] **Bank fill.** For an open shift, a list of the employer's own bank and casual staff who are available and eligible, ranked; assign directly or offer to several and first to accept is booked (no double booking, enforced in the database). Notify by email/SMS now, push once the app exists.
@@ -45,6 +45,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - AI auto-fill (intake of requests by email/text, waves of offers) after Release 1.
 
 ## Waiting on David or others
+
+- Roster screen (item 2): scheduled runs left it for a session with David, because `docs/WORKING-ALONE.md` holds Ribbon roster design for Steve's review. Confirm whether the 25 Oct meeting counts as that review, so runs can build it.
 
 - Open questions from the 25 Oct meeting (see `docs/decisions/2026-10-25-roster-meeting.md`).
 - ClickSend dedicated number (David, Mon 26 Oct) → set `CLICKSEND_FROM`.
