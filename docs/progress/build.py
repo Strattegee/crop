@@ -1,0 +1,31 @@
+import os
+HERE=os.path.dirname(os.path.abspath(__file__))
+import json
+S=json.load(open(os.path.join(HERE,'schedule.json')))
+import datetime
+AS_AT=datetime.date.today().isoformat()
+prog={
+ 'SCAN':('done',1,'24 Oct','Entire OnHire, Access Evo, Deputy and Logezy compared'),
+ 'SPEC':('done',1,'22 Oct','CROP MVP Specification written'),
+ 'ARCH':('done',1,'22 Oct','Build plan and technical decisions recorded'),
+ 'D2':('done',1,'22 Oct','CROP name, DigitalOcean hosting, Zitadel sign-in'),
+ 'ACC':('active',.9,None,'DigitalOcean, GitHub, cropwms.com, Zitadel, Resend email done. ClickSend number to buy on Monday'),
+ 'STORE':('active',.8,None,'Both accounts created. Apple is verifying the business'),
+ 'REPO':('done',1,'22 Oct','Code repository, automatic checks, auto-deploy to staging.cropwms.com'),
+ 'DM':('done',1,'22 Oct','Core data model built; extended module by module'),
+ 'SCH':('done',1,'22 Oct','Agencies, data separation between agencies, facilities'),
+ 'AUTH':('active',.8,None,'Sign-in, 2FA, roles and invitations done. Audit log to do'),
+ 'PPL':('active',.4,None,'Worker profiles done. Employment records to do'),
+ 'DOC':('done',1,'24 Oct','Uploads stored privately in Sydney, opened by short-lived links'),
+ 'CRED':('done',1,'24 Oct','Credentials, rules, verification, right to work (VEVO), expiry reminders'),
+ 'CLI':('active',.6,None,'Clients, facilities and areas done. Contacts and client rules to do'),
+ 'NOTE':('active',.6,None,'Email working. Texts ready once the ClickSend number is set up. Push comes with the app'),
+ 'PROTO':('active',.3,None,'Ribbon roster prototype done. Roster session with David next'),
+}
+rows=[]
+for t in sorted(S['tasks'],key=lambda t:(t['es'],t['ef'])):
+  st,pc,done,note=prog.get(t['id'],('todo',0,None,''))
+  rows.append(dict(id=t['id'],name=t['name'],lane=t['lane'],who=t['who'],start=t['start'],end=t['end'],days=t['dur'],crit=t['crit'],status=st,pct=pc,done=done,note=note))
+data=dict(asAt=AS_AT,tasks=rows,holidays=S['hol'])
+html=open(os.path.join(HERE,'page.tpl.html')).read().replace('/*DATA*/null',json.dumps(data))
+open(os.path.join(HERE,'crop-progress.html'),'w').write(html)
