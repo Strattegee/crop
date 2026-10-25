@@ -68,6 +68,30 @@ describe('expiry reminders', () => {
       `insert into right_to_work_records(tenant_id, worker_id, status, visa_type, visa_subclass, visa_expiry, work_limit, vevo_checked_on, vevo_result)
        values ($1,$2,'visa_holder','Student','500',$3,'unlimited',$4,'confirmed')`, [tenantId, w, addDays(TODAY, 50), TODAY],
     );
+
+    // Equipment: a forklift with a registration coming due and a service already overdue, booked on shifts after both.
+    const site = (await owner.query<{ id: string }>(`insert into facilities(tenant_id, name, timezone) values ($1,'North Yard','Australia/Melbourne') returning id`, [tenantId])).rows[0].id;
+    const ftype = (await owner.query<{ id: string }>(`insert into equipment_types(tenant_id, name) values ($1,'Forklift') returning id`, [tenantId])).rows[0].id;
+    const machine = async (name: string, asset: string | null, status = 'active') =>
+      (await owner.query<{ id: string }>(`insert into equipment(tenant_id, equipment_type_id, name, asset_number, status) values ($1,$2,$3,$4,$5) returning id`,
+        [tenantId, ftype, name, asset, status])).rows[0].id;
+    const check = (equipmentId: string, name: string, due: string, superseded = false) =>
+      owner.query(`insert into equipment_checks(tenant_id, equipment_id, name, due_on, superseded_at) values ($1,$2,$3,$4,$5)`,
+        [tenantId, equipmentId, name, due, superseded ? new Date() : null]);
+    const fork = await machine('Forklift 2', 'FL-02');
+    await check(fork, 'Registration', addDays(TODAY, 5), true);   // replaced by the next one, so not reported
+    await check(fork, 'Registration', addDays(TODAY, 20));
+    await check(fork, 'Service', addDays(TODAY, -3));             // overdue
+    await check(await machine('Old forklift', null, 'retired'), 'Registration', addDays(TODAY, 10)); // retired: ignored
+    const book = async (day: string, status = 'open') => {
+      const s = (await owner.query<{ id: string }>(
+        `insert into shifts(tenant_id, facility_id, role, starts_at, ends_at, status) values ($1,$2,'Operator',$3,$4,$5) returning id`,
+        [tenantId, site, `${day}T21:00:00Z`, `${day}T23:00:00Z`, status])).rows[0].id; // 8am-10am Melbourne the next day
+      await owner.query(`insert into shift_assignments(tenant_id, shift_id, resource_kind, equipment_id, status) values ($1,$2,'equipment',$3,'confirmed')`, [tenantId, s, fork]);
+    };
+    await book(addDays(TODAY, 9));                 // local date TODAY+10: after the service date only
+    await book(addDays(TODAY, 24));                // local date TODAY+25: after both
+    await book(addDays(TODAY, 25), 'cancelled');   // cancelled: not counted
   });
 
   afterAll(async () => {
@@ -110,6 +134,16 @@ describe('expiry reminders', () => {
     expect(digest[0].body).toContain('https://staging.cropwms.com/compliance');
   });
 
+  it('includes equipment dates in the digest, with bookings that fall after them', async () => {
+    const body = (await sent()).find(m => m.template === 'compliance_expiry')!.body;
+    expect(body).toContain('People:\n- Priyanka Sharma');
+    expect(body).toContain('Equipment:\n');
+    expect(body).toContain('- Forklift 2 (FL-02): Service was due 30 October 2026 (overdue); booked on 2 shifts after that date');
+    expect(body).toContain('- Forklift 2 (FL-02): Registration is due 22 November 2026 (20 days); booked on 1 shift after that date');
+    expect(body).not.toContain('7 November 2026 (5 days); booked'); // the replaced registration date
+    expect(body).not.toContain('Old forklift');
+  });
+
   it('never sends the same reminder twice', async () => {
     const before = (await sent()).length;
     await reminders.runOnce(at(15));
@@ -121,5 +155,8 @@ describe('expiry reminders', () => {
     await reminders.runOnce(at(9, addDays(TODAY, 20))); // CPR now 5 days away
     const cpr = (await sent()).filter(m => m.template === 'credential_expiry' && /CPR/.test(m.body));
     expect(cpr.map(m => m.channel).sort()).toEqual(['email', 'email', 'sms']);
+    // The forklift's registration is due that day.
+    const digests = (await sent()).filter(m => m.template === 'compliance_expiry');
+    expect(digests.at(-1)!.body).toContain('- Forklift 2 (FL-02): Registration is due today; booked on 1 shift after that date');
   });
 });
