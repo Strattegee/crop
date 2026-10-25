@@ -61,3 +61,59 @@ export async function bookEquipment(shiftId: string, equipmentId: string, f: For
 export async function removeEquipment(shiftId: string, equipmentId: string, f: FormData) {
   await attempt(back(f), () => api(`/shifts/${shiftId}/equipment/${equipmentId}/remove`, { method: 'POST' }), 'Equipment removed from the shift.');
 }
+
+/**
+ * Staging only (DEMO_TOOLS=on): fills an empty business with an invented week so the roster can be shown.
+ * Every name is made up; nothing here is real data.
+ */
+export async function loadDemoWeek(f: FormData) {
+  if (process.env.DEMO_TOOLS !== 'on') return;
+  const week = str(f, 'week') ?? new Date().toISOString().slice(0, 10);
+  const day = (n: number) => new Date(Date.parse(`${week}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  await attempt(back(f), async () => {
+    type Id = { id: string };
+    const post = <T = Id>(p: string, body: unknown) => api<T>(p, { method: 'POST', body });
+    const cafe = (await post('/facilities', { name: 'Harbour Kitchen', state: 'VIC', suburb: 'Docklands' })).id;
+    const kitchen = (await post(`/facilities/${cafe}/areas`, { name: 'Kitchen' })).id;
+    const floor = (await post(`/facilities/${cafe}/areas`, { name: 'Floor' })).id;
+    const yard = (await post('/facilities', { name: 'Dandenong Hire Yard', state: 'VIC', suburb: 'Dandenong' })).id;
+    const am = (await post('/shift-codes', { code: 'AM', name: 'Morning', startTime: '07:00', endTime: '15:00', breakMinutes: 30 })).id;
+    const pm = (await post('/shift-codes', { code: 'PM', name: 'Evening', startTime: '15:00', endTime: '23:00', breakMinutes: 30 })).id;
+    const staff: [string, string, string, string, number | null][] = [
+      ['Ana', 'Example', 'CHEF', 'full_time', 38], ['Ben', 'Sample', 'CHEF', 'part_time', 24], ['Cara', 'Demo', 'WAITER', 'casual', null],
+      ['Dev', 'Test', 'WAITER', 'bank', null], ['Eli', 'Mock', 'OPERATOR', 'full_time', 38], ['Fay', 'Trial', 'WAITER', 'bank', null],
+      ['Gus', 'Placeholder', 'OPERATOR', 'casual', null],
+    ];
+    const ids: Record<string, string> = {};
+    for (const [first, last, role, type, hours] of staff) {
+      const w = (await post('/workers', { firstName: first, lastName: last, roles: [role] })).id;
+      ids[first] = w;
+      await api(`/workers/${w}/right-to-work`, { method: 'PUT', body: { status: 'citizen', citizenProofType: 'au_passport', documentNumber: 'DEMO0000' } });
+      await post(`/workers/${w}/right-to-work/verify`, { note: 'Demo data' });
+      await post(`/workers/${w}/employment`, { employmentType: type, contractedHours: hours ?? undefined, startsOn: '2026-01-01' });
+    }
+    await post('/shifts', { facilityId: cafe, areaId: kitchen, shiftCodeId: am, role: 'CHEF', startDate: day(0), endDate: day(6) });
+    await post('/shifts', { facilityId: cafe, areaId: kitchen, shiftCodeId: pm, role: 'CHEF', startDate: day(1), endDate: day(5) });
+    await post('/shifts', { facilityId: cafe, areaId: floor, shiftCodeId: pm, role: 'WAITER', startDate: day(3), endDate: day(6), quantity: 2 });
+    await post('/shifts', { facilityId: yard, role: 'OPERATOR', startDate: day(0), endDate: day(4), startTime: '06:00', endTime: '14:30', breakMinutes: 30 });
+    const bobcatType = (await post('/equipment-types', { name: 'Bobcat' })).id;
+    const truckType = (await post('/equipment-types', { name: 'Tipper truck' })).id;
+    const bobcat = (await post('/equipment', { equipmentTypeId: bobcatType, name: 'Bobcat 1', homeFacilityId: yard })).id;
+    await post('/equipment', { equipmentTypeId: truckType, name: 'Tipper 2', registration: 'DEMO02', homeFacilityId: yard });
+    type S = { id: string; role: string; localStart: string; localDate: string };
+    const shifts = await api<S[]>(`/shifts?from=${day(0)}&to=${day(6)}`);
+    const put = async (s: S, w: string, book = true) => {
+      try {
+        await post(`/shifts/${s.id}/assign`, { workerId: w });
+        if (book) await post(`/shifts/${s.id}/confirm`, {});
+      } catch { /* leave it open */ }
+    };
+    for (const s of shifts.filter(s => s.role === 'CHEF' && s.localStart === '07:00' && s.localDate < day(6))) await put(s, ids.Ana);
+    for (const s of shifts.filter(s => s.role === 'CHEF' && s.localStart === '15:00').slice(0, 3)) await put(s, ids.Ben, s.localDate !== day(3));
+    for (const [i, s] of shifts.filter(s => s.role === 'WAITER').slice(0, 4).entries()) await put(s, i % 2 ? ids.Dev : ids.Cara);
+    for (const s of shifts.filter(s => s.role === 'OPERATOR').slice(0, 4)) await put(s, ids.Eli);
+    for (const s of shifts.filter(s => s.role === 'OPERATOR').slice(0, 3)) {
+      try { await post(`/shifts/${s.id}/equipment`, { equipmentId: bobcat }); } catch { /* skip */ }
+    }
+  }, 'Demo week loaded. All names and sites are invented.');
+}

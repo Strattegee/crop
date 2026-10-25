@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import {
-  assign, bookEquipment, cancelShift, confirm, createShifts, offer, recordReply, removeEquipment, unassign,
+  assign, bookEquipment, cancelShift, confirm, createShifts, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -195,6 +195,15 @@ export default async function RosterPage({ searchParams }: {
         <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
         <div><span>Equipment hours</span><strong>{fmtHours(equipHours)}</strong></div>
       </section>
+
+      {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
+        <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="week" value={week} />
+          <span>This business is empty. Load an invented demo week (two sites, seven staff, equipment) to try the roster?</span>
+          <button className="btn small">Load demo week</button>
+        </form>
+      )}
 
       <details className="card" open={shifts.length === 0}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add shifts</summary>
