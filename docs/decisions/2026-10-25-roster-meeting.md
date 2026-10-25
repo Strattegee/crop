@@ -3,6 +3,7 @@
 ## Decided
 
 - **CROP's main customer is the employer**: any small to medium business staffing its own operation (a restaurant, construction equipment hire, traffic management, a hospital ward). The employer product is heavily roster-focused and must be simple enough for a small business to set up itself.
+- **CROP's edge: a complete organisation system for staff, equipment and consumables** (David, 25 Oct). Equipment and items are core, not an add-on.
 - **The agency is a second, different customer**: its product centres on the allocation screen, and it supplies staff to CROP employers and to clients that don't use CROP.
 
 - CROP is first a **roster for employers** in any industry. That is the key to its success.
