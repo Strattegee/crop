@@ -21,6 +21,16 @@ interface Expiring {
   expiry: string; // YYYY-MM-DD
 }
 
+/** A piece of equipment's date (registration, service, inspection…) coming due. */
+interface EquipmentDue {
+  key: string;
+  label: string; // "Forklift 2 (FL-02)"
+  what: string; // "Registration"
+  due: string; // YYYY-MM-DD
+  /** Shifts it is booked on, from now, whose local date is after the due date (it can't be used on them). */
+  bookedAfter: number;
+}
+
 function daysBetween(from: string, to: string) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 }
@@ -32,7 +42,9 @@ function longDate(iso: string) {
 /**
  * Expiry reminders (spec CRD-7), checked hourly and sent from 8am agency time:
  * - Workers: at 60, 30 and 7 days before a credential or visa expires (7 days: email and text).
- * - Office (owners and admins): one daily email listing what reaches 30 days and what expired.
+ * - Office (owners and admins): one daily email listing what reaches 30 days and what expired, for people
+ *   and for equipment dates (registration, service, inspection…), with how many shifts a machine is booked on
+ *   after its date runs out.
  * Each reminder has a de-duplication key, so running more often never sends twice.
  * Messages carry no health information or document numbers (vaccinations are "a vaccination record").
  */
@@ -111,13 +123,34 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
       lines.push(`- ${it.workerName}: ${it.what} expired ${longDate(it.expiry)}`);
       keys.push(k);
     }
-    if (lines.length) {
+
+    // Equipment dates: the same stages as people (30 days, due day, overdue in the last week).
+    const equipLines: string[] = [];
+    const booked = (e: EquipmentDue) => e.bookedAfter ? `; booked on ${e.bookedAfter} shift${e.bookedAfter === 1 ? '' : 's'} after that date` : '';
+    for (const e of await this.equipmentDue(db, today, addDays(today, -7), addDays(today, OFFICE_STAGE))) {
+      const days = daysBetween(today, e.due);
+      const k = `${e.key}:office:${days < 0 ? 'expired' : days === 0 ? 'expiry' : OFFICE_STAGE}`;
+      if (await marked(db, k)) continue;
+      const stage = days < 0 ? `was due ${longDate(e.due)} (overdue)` : days === 0 ? 'is due today' : `is due ${longDate(e.due)} (${days} days)`;
+      equipLines.push(`- ${e.label}: ${e.what} ${stage}${booked(e)}`);
+      keys.push(k);
+    }
+
+    const total = lines.length + equipLines.length;
+    if (total) {
       const appUrl = (process.env.APP_URL ?? '').replace(/\/$/, '');
-      const body = `These need attention at ${agency}:\n\n${lines.join('\n')}\n\n${appUrl ? `See the compliance page: ${appUrl}/compliance` : 'See the Compliance page in CROP.'}`;
+      const sections: string[] = [];
+      if (lines.length) {
+        sections.push(`${equipLines.length ? 'People:\n' : ''}${lines.join('\n')}\n\n${appUrl ? `See the compliance page: ${appUrl}/compliance` : 'See the Compliance page in CROP.'}`);
+      }
+      if (equipLines.length) {
+        sections.push(`Equipment:\n${equipLines.join('\n')}\n\nRecord the new date against the equipment in CROP once it's done.`);
+      }
+      const body = `These need attention at ${agency}:\n\n${sections.join('\n\n')}`;
       const offices = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
       for (const o of offices) {
         await q({ channel: 'email', to: o.email, template: 'compliance_expiry', dedupeKey: `office-digest:${today}:${o.email}`,
-          subject: `Compliance: ${lines.length} expir${lines.length === 1 ? 'y' : 'ies'} to follow up`, body });
+          subject: `Compliance: ${total} ${total === 1 ? 'date' : 'dates'} to follow up`, body });
       }
       // Mark each item as reported, so the next digest only has what's new.
       for (const k of keys) {
@@ -148,6 +181,25 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
       [from, to],
     )).rows;
     return [...creds, ...visas];
+  }
+
+  /**
+   * Current dates of equipment still in use (not retired) falling between two dates (inclusive), with how many
+   * upcoming bookings fall after the date on the shift site's local calendar (so the office knows to act).
+   */
+  private async equipmentDue(db: PoolClient, today: string, from: string, to: string): Promise<EquipmentDue[]> {
+    return (await db.query<EquipmentDue>(
+      `select 'equip:' || c.id as key, e.name || coalesce(' (' || e.asset_number || ')', '') as label, c.name as what,
+              to_char(c.due_on, 'YYYY-MM-DD') as due,
+              (select count(*)::int from shift_assignments a join shifts s on s.id = a.shift_id join facilities f on f.id = s.facility_id
+                where a.equipment_id = e.id and a.resource_kind = 'equipment' and a.status in ('assigned', 'confirmed')
+                  and s.status <> 'cancelled' and (s.starts_at at time zone f.timezone)::date > c.due_on
+                  and (s.starts_at at time zone f.timezone)::date >= $1::date) as "bookedAfter"
+         from equipment_checks c join equipment e on e.id = c.equipment_id
+        where c.superseded_at is null and e.status <> 'retired' and c.due_on between $2::date and $3::date
+        order by c.due_on, e.name`,
+      [today, from, to],
+    )).rows;
   }
 }
 

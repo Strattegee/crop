@@ -62,8 +62,10 @@ export class RightToWorkController {
   @Roles(...OFFICE_ROLES)
   @Put()
   record(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('workerId', ParseUUIDPipe) workerId: string, @Body() body: Record<string, unknown>) {
-    const v = validate(body);
     return withTenant(this.pool, t.tenantId, async db => {
+      // "Today" is the agency's date, not the server's (UTC is still yesterday on Australian mornings).
+      const settings = await loadSettings(db, t.tenantId);
+      const v = validate(body, todayIn(settings.timezone));
       await workerExists(db, workerId);
       const prev = (await db.query<{ id: string }>(
         `update right_to_work_records set superseded_at = now() where worker_id = $1 and superseded_at is null returning id`, [workerId],
@@ -161,7 +163,7 @@ export class RightToWorkController {
   }
 }
 
-function validate(body: Record<string, unknown>) {
+function validate(body: Record<string, unknown>, today: string) {
   const status = oneOf(body, 'status', STATUSES, { required: true })!;
   const v = {
     status,
@@ -176,7 +178,7 @@ function validate(body: Record<string, unknown>) {
   }
   v.vevoCheckedOn = date(body, 'vevoCheckedOn', { required: true });
   v.vevoResult = oneOf(body, 'vevoResult', ['confirmed', 'not_confirmed'] as const, { required: true });
-  if (v.vevoCheckedOn! > new Date().toISOString().slice(0, 10)) throw new BadRequestException('VEVO check date can’t be in the future');
+  if (v.vevoCheckedOn! > today) throw new BadRequestException('VEVO check date can’t be in the future');
   if (status === 'permanent_resident') v.visaGrantNumber = text(body, 'visaGrantNumber', { max: 60 });
   if (status === 'visa_holder') {
     v.visaType = text(body, 'visaType', { required: true, max: 80 });
