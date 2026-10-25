@@ -6,6 +6,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { FacilitiesController } from './facilities/facilities.controller.js';
 import { HealthController } from './health/health.controller.js';
+import { ItemsController, ShiftItemsController, StockController, WorkerItemsController } from './items/items.controller.js';
 import { EquipmentController, EquipmentTypesController, ShiftEquipmentController } from './roster/equipment.controller.js';
 import { EmploymentController, ShiftCodesController, ShiftsController } from './roster/roster.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
@@ -19,6 +20,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController,
+    ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
 })
 export class AppModule {}
