@@ -2,6 +2,11 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-10-25 evening (with David)
+
+- Shipped: employer roster foundations — employment terms (full-time, part-time, casual, bank; contracted hours), shift codes, shifts (single or blocks across weekdays, overnight shifts, site time zones), assigning people with double-booking blocked, confirm, unassign, cancel, and a roster endpoint with hours per person. Website rewritten to lead with employers.
+- Next: roster screen (backlog item 2).
+
 ## 2026-10-25 afternoon (with David, after meeting Steve)
 
 - Changed direction: CROP is first an employer roster; agencies fill shifts through an allocation screen when employers press Agency fill. Backlog reordered; decisions and open questions in `docs/decisions/2026-10-25-roster-meeting.md`.

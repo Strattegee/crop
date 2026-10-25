@@ -6,6 +6,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { FacilitiesController } from './facilities/facilities.controller.js';
 import { HealthController } from './health/health.controller.js';
+import { EmploymentController, ShiftCodesController, ShiftsController } from './roster/roster.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
 import { CredentialRequirementsController, CredentialTypesController } from './workforce/credential-types.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
@@ -15,6 +16,7 @@ import { WorkersController } from './workforce/workers.controller.js';
   controllers: [
     HealthController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
+    ShiftCodesController, ShiftsController, EmploymentController,
   ],
 })
 export class AppModule {}
