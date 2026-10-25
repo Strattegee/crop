@@ -9,6 +9,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
+import { closePendingOffers } from './offers-data.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'bank'] as const;
@@ -361,6 +362,7 @@ export class ShiftsController {
         `insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1,$2,$3,$4)`,
         [t.tenantId, id, workerId, auth.userId]);
       await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
+      await closePendingOffers(db, id, 'filled', auth.userId); // filled directly, so any bank-fill offers close
       return { ...(await shiftById(db, id)), warnings: check.warnings.map(w => w.message) };
     });
   }
@@ -396,7 +398,7 @@ export class ShiftsController {
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/cancel')
   @HttpCode(200)
-  cancel(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+  cancel(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { required: true, max: 300 })!;
     return withTenant(this.pool, t.tenantId, async db => {
       const r = await db.query(
@@ -407,6 +409,7 @@ export class ShiftsController {
       }
       await db.query(
         `update shift_assignments set status = 'removed', ended_at = now() where shift_id = $1 and status in ('assigned', 'confirmed')`, [id]);
+      await closePendingOffers(db, id, 'withdrawn', auth.userId);
       return shiftById(db, id);
     });
   }
