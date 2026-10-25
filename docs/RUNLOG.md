@@ -2,6 +2,13 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-10-26 (scheduled run)
+
+- Shipped: items and consumables, first part (backlog item 5). The business can keep a list of things it hands out or uses up (gloves, hi-vis, fuel, sundries) with what each costs and, if it's charged on, what the client pays. Stock is counted at each site: deliveries in, items issued to a person or used on a shift, returns, and stocktakes. It won't hand out more than a site has, and flags low stock. Each shift shows what it used, what that cost and what can be charged to the client; each person shows what they've been issued and not returned. Fuel bought on a card can be recorded against a shift without counting stock.
+- Still to do on item 5: moving stock between sites, and office screens.
+- Next: bank fill (item 6), unless David clears the roster screen (item 2).
+- Waiting on David: confirm whether the 25 Oct meeting with Steve counts as the Ribbon roster review.
+
 ## 2026-10-26 morning (scheduled run)
 
 - Shipped: equipment booked on its own, without a person (backlog item 4). A shift can now be marked "equipment only", for example a machine dry-hired to a client who brings their own operator. Nobody can be put on it, the licensed-operator rule doesn't apply, and it shows as booked once equipment is on it (open again if everything is removed). The machine still can't be in two places at once. Wet hire stays an ordinary shift with a person and the machine.
