@@ -55,15 +55,16 @@ export class ComplianceController {
   updateSettings(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const windowDays = int(body, 'expiringWindowDays', 1, 365);
     const smsCap = int(body, 'smsMonthlyCap', 0, 1000000);
+    const minRest = int(body, 'minRestHours', 0, 24);
     const tz = text(body, 'timezone', { max: 60 });
     if (tz && !isTimeZone(tz)) throw new BadRequestException('timezone must be an IANA time zone');
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
       await db.query(
-        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap) values ($1,$2,$3,$4)
+        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours) values ($1,$2,$3,$4,$5)
          on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone,
-           sms_monthly_cap = excluded.sms_monthly_cap`,
-        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap],
+           sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours`,
+        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap, minRest ?? cur.minRestHours],
       );
       return loadSettings(db, t.tenantId);
     });

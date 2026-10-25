@@ -22,6 +22,7 @@ prog={
  'NOTE':('active',.6,None,'Email working. Texts ready once the ClickSend number is set up. Push comes with the app'),
  'TPL':('active',.5,None,'Shift codes and shifts (single or blocks) built; roster screen next'),
  'GRID':('active',.15,None,'Roster data and hours per person built; screen next'),
+ 'MATCH':('active',.6,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours) and rest warnings done; who-can-work list built. Leave comes with availability'),
  'PROTO':('active',.3,None,'Ribbon roster prototype done. Roster session with David next'),
 }
 rows=[]

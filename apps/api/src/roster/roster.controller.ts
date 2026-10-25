@@ -8,6 +8,7 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
+import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'bank'] as const;
@@ -306,39 +307,43 @@ export class ShiftsController {
     });
   }
 
-  /** Puts a person on a shift. Hard block: they're already rostered at an overlapping time. */
+  /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3). */
+  @Roles(...OFFICE_ROLES)
+  @Get('shifts/:id/candidates')
+  candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const shift = await shiftById(db, id);
+      return { shift, candidates: rankCandidates(await eligibilityForShift(db, t.tenantId, id)) };
+    });
+  }
+
+  /**
+   * Puts a person on a shift. Hard blocks: wrong role, a hard credential rule or right to work not met on the
+   * shift date, already rostered at an overlapping time, or over their visa's fortnightly hours. Warnings are returned.
+   */
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/assign')
   @HttpCode(200)
   assign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const workerId = uuidField(body, 'workerId', 'person', true)!;
     return withTenant(this.pool, t.tenantId, async db => {
-      const shift = (await db.query<{ status: string; starts_at: Date; ends_at: Date; role: string }>(
-        'select status, starts_at, ends_at, role from shifts where id = $1 for update', [id])).rows[0];
+      const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [id])).rows[0];
       if (!shift) throw new NotFoundException('Shift not found');
       if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
       if (shift.status !== 'open') throw new ConflictException('Someone is already on this shift. Remove them first.');
       // Locking the worker serialises assignments for one person, so two shifts can't be given to them at once.
-      const worker = (await db.query<{ status: string; roles: string[]; name: string }>(
-        `select status, roles, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`,
+      const worker = (await db.query<{ status: string; name: string }>(
+        `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`,
         [workerId])).rows[0];
       if (!worker) throw new BadRequestException('Choose a person');
       if (worker.status !== 'active') throw new BadRequestException(`${worker.name} isn't active`);
-      const clash = (await db.query<{ local: string; facility: string }>(
-        `select to_char(s.starts_at at time zone f.timezone, 'Dy DD Mon HH24:MI') || '–' || to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as local,
-                f.name as facility
-           from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
-          where sa.worker_id = $1 and sa.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
-            and s.starts_at < $3 and s.ends_at > $2
-          limit 1`, [workerId, shift.starts_at, shift.ends_at])).rows[0];
-      if (clash) throw new ConflictException(`${worker.name} is already rostered ${clash.local} at ${clash.facility}`);
+      const [check] = await eligibilityForShift(db, t.tenantId, id, [workerId]);
+      if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
       await db.query(
         `insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1,$2,$3,$4)`,
         [t.tenantId, id, workerId, auth.userId]);
       await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
-      const warnings: string[] = [];
-      if (!worker.roles.map(r => r.toLowerCase()).includes(shift.role.toLowerCase())) warnings.push(`${worker.name} doesn't have the role ${shift.role}`);
-      return { ...(await shiftById(db, id)), warnings };
+      return { ...(await shiftById(db, id)), warnings: check.warnings.map(w => w.message) };
     });
   }
 

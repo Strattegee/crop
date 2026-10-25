@@ -1,0 +1,83 @@
+import { NotFoundException } from '@nestjs/common';
+import type { PoolClient } from 'pg';
+import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
+import { addDays } from '../workforce/compliance.js';
+import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OtherShift, type ShiftFacts } from './eligibility.js';
+
+export interface Candidate {
+  workerId: string;
+  name: string;
+  roles: string[];
+  employmentType: string | null;
+  /** Hours already rostered in the shift's week (Monday to Sunday), not counting this shift. */
+  weekHours: number;
+  eligible: boolean;
+  blocks: Eligibility['blocks'];
+  warnings: Eligibility['warnings'];
+}
+
+/**
+ * Works out who may work a shift (within withTenant). Pass workerIds to check particular people
+ * (any status), or leave it out for every active worker.
+ */
+export async function eligibilityForShift(db: PoolClient, tenantId: string, shiftId: string, workerIds?: string[]): Promise<Candidate[]> {
+  const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number }>(
+    `select s.id, s.role, s.starts_at, s.ends_at, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
+            (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours
+       from shifts s join facilities f on f.id = s.facility_id where s.id = $1`, [shiftId])).rows[0];
+  if (!s) throw new NotFoundException('Shift not found');
+  const shift: ShiftFacts = { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, hours: s.hours };
+
+  const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null }>(
+    `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
+       from workers w
+       left join lateral (select employment_type from employment_terms e
+                           where e.worker_id = w.id and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
+                           order by e.starts_on desc limit 1) et on true
+      where ${workerIds ? 'w.id = any($1)' : "w.status = 'active' and $1::uuid[] is null"}
+      order by w.last_name, w.first_name`, [workerIds ?? null, shift.localDate])).rows;
+  if (!workers.length) return [];
+  const ids = workers.map(w => w.id);
+
+  const ctx = await complianceContext(db, tenantId);
+  const creds = await credentialFactsByWorker(db, ids);
+  const rtw = await rightToWorkByWorker(db, ids);
+  const limits = new Map((await db.query<{ worker_id: string; hours: number }>(
+    `select worker_id, work_hours_per_fortnight as hours from right_to_work_records
+      where superseded_at is null and work_limit = 'limited' and worker_id = any($1)`, [ids])).rows.map(r => [r.worker_id, r.hours]));
+
+  // Everything that could matter: overlaps, rest either side, and both fortnights containing the shift date.
+  const windows = fortnightsContaining(shift.localDate);
+  const others = new Map<string, OtherShift[]>();
+  for (const o of (await db.query<{ worker_id: string; id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number; facility: string; label: string }>(
+    `select sa.worker_id, s.id, s.role, s.starts_at, s.ends_at, f.name as facility,
+            to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
+            (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours,
+            to_char(s.starts_at at time zone f.timezone, 'Dy DD Mon HH24:MI') || '–' || to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as label
+       from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
+      where sa.worker_id = any($1) and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
+        and (s.starts_at at time zone f.timezone)::date between $2::date - 1 and $3::date + 1`,
+    [ids, windows[0].from, windows[1].to])).rows) {
+    const list = others.get(o.worker_id) ?? [];
+    list.push({ id: o.id, role: o.role, startsAt: o.starts_at, endsAt: o.ends_at, localDate: o.local_date, hours: o.hours, facilityName: o.facility, label: o.label });
+    others.set(o.worker_id, list);
+  }
+
+  const weekFrom = mondayOf(shift.localDate);
+  const weekTo = addDays(weekFrom, 6);
+  return workers.map(w => {
+    const mine = others.get(w.id) ?? [];
+    const { issues } = ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate);
+    const e = shiftEligibility(shift, {
+      name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
+    });
+    const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
+    return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100, ...e };
+  });
+}
+
+/** Ready to go first, then those with warnings, then those who can't be assigned; fewest hours this week first. */
+export function rankCandidates(list: Candidate[]): Candidate[] {
+  const group = (c: Candidate) => (!c.eligible ? 2 : c.warnings.length ? 1 : 0);
+  return [...list].sort((a, b) => group(a) - group(b) || a.weekHours - b.weekHours || a.name.localeCompare(b.name));
+}
