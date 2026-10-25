@@ -15,6 +15,9 @@ const LABELS: Record<string, string> = {
   citizenProofType: 'Proof of citizenship', documentNumber: 'Document number', visaType: 'Visa type', visaSubclass: 'Visa subclass',
   visaGrantNumber: 'Visa grant number', visaExpiry: 'Visa expiry', workLimit: 'Work conditions', workHoursPerFortnight: 'Hours per fortnight',
   vevoCheckedOn: 'VEVO check date', vevoResult: 'VEVO result', channel: 'Channel', to: 'Mobile number', smsMonthlyCap: 'Monthly SMS limit', verificationUrl: 'Verification link', expiringWindowDays: 'Expiring window',
+  code: 'Code', startTime: 'Start time', endTime: 'End time', breakMinutes: 'Break (minutes)', quantity: 'Number of people',
+  date: 'Date', startDate: 'Start date', endDate: 'End date', employmentType: 'Employment type', startsOn: 'Start date',
+  facilityId: 'Site', areaId: 'Area', shiftCodeId: 'Shift code', workerId: 'Person',
 };
 const label = (key: string) => LABELS[key] ?? key;
 
