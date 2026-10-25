@@ -9,6 +9,7 @@ import {
   addCredential, rejectCredential, rejectRightToWork, removeDocument, removeRightToWorkDocument, saveRightToWork, updateWorker,
   uploadDocument, uploadRightToWorkDocument, verifyCredential, verifyRightToWork,
 } from '../actions';
+import { DocLink } from '../../../../lib/doc-link';
 import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
 
@@ -18,7 +19,7 @@ type Credential = {
   id: string; typeName: string; number: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
-  documents: { id: string; filename: string; sizeBytes: number }[];
+  documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
 };
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
@@ -31,7 +32,7 @@ type Rtw = {
     id: string; status: string; citizenProofType: string | null; documentNumber: string | null; visaType: string | null; visaSubclass: string | null;
     visaGrantNumber: string | null; visaExpiry: string | null; workLimit: string | null; workHoursPerFortnight: number | null;
     vevoCheckedOn: string | null; vevoResult: string | null; verification: string; verifiedAt: string | null; verificationNote: string | null;
-    rejectionReason: string | null; documents: { id: string; filename: string; sizeBytes: number }[];
+    rejectionReason: string | null; documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
   };
   issue: string | null;
   history: unknown[];
@@ -92,7 +93,7 @@ export default async function WorkerPage({ params, searchParams }: {
             <div style={{ marginBottom: 8 }}>
               {r.documents.map(d => (
                 <div key={d.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14 }}>
-                  <a href={`/workers/${w.id}/rtw-documents/${d.id}`} target="_blank" rel="noreferrer">{d.filename}</a>
+                  <DocLink href={`/workers/${w.id}/rtw-documents/${d.id}`} filename={d.filename} contentType={d.contentType} />
                   <span className="muted">{Math.max(1, Math.round(d.sizeBytes / 1024))} KB</span>
                   <form action={removeRightToWorkDocument.bind(null, w.id, d.id)}>
                     <button type="submit" className="btn small secondary" style={{ padding: '0 6px' }} aria-label={`Remove ${d.filename}`}>×</button>
@@ -144,7 +145,7 @@ export default async function WorkerPage({ params, searchParams }: {
                   <td style={{ minWidth: 200 }}>
                     {c.documents.map(d => (
                       <div key={d.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                        <a href={`/workers/${w.id}/documents/${c.id}/${d.id}`} target="_blank" rel="noreferrer">{d.filename}</a>
+                        <DocLink href={`/workers/${w.id}/documents/${c.id}/${d.id}`} filename={d.filename} contentType={d.contentType} />
                         <span className="muted">{Math.max(1, Math.round(d.sizeBytes / 1024))} KB</span>
                         <form action={removeDocument.bind(null, w.id, c.id, d.id)}>
                           <button type="submit" className="btn small secondary" style={{ padding: '0 6px' }} aria-label={`Remove ${d.filename}`}>×</button>
