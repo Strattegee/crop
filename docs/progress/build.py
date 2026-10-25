@@ -20,9 +20,9 @@ prog={
  'CRED':('done',1,'24 Oct','Credentials, rules, verification, right to work (VEVO), expiry reminders'),
  'CLI':('active',.6,None,'Clients, facilities and areas done. Contacts and client rules to do'),
  'NOTE':('active',.6,None,'Email working. Texts ready once the ClickSend number is set up. Push comes with the app'),
- 'TPL':('active',.5,None,'Shift codes and shifts (single or blocks) built; roster screen next'),
- 'GRID':('active',.15,None,'Roster data and hours per person built; screen next'),
- 'MATCH':('active',.6,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours) and rest warnings done; who-can-work list built. Leave comes with availability'),
+ 'TPL':('active',.55,None,'Shift codes, shifts (single or blocks) and equipment booked to shifts built; roster screen next'),
+ 'GRID':('active',.2,None,'Roster data with hours per person and per piece of equipment built; screen next'),
+ 'MATCH':('active',.6,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours, equipment operator licences) and rest warnings done; who-can-work list built. Leave comes with availability'),
  'PROTO':('active',.3,None,'Ribbon roster prototype done. Roster session with David next'),
 }
 rows=[]

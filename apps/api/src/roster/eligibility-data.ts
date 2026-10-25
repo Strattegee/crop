@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { addDays } from '../workforce/compliance.js';
-import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OtherShift, type ShiftFacts } from './eligibility.js';
+import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OperatorNeed, type OtherShift, type ShiftFacts } from './eligibility.js';
 
 export interface Candidate {
   workerId: string;
@@ -16,17 +16,32 @@ export interface Candidate {
   warnings: Eligibility['warnings'];
 }
 
-/**
- * Works out who may work a shift (within withTenant). Pass workerIds to check particular people
- * (any status), or leave it out for every active worker.
- */
-export async function eligibilityForShift(db: PoolClient, tenantId: string, shiftId: string, workerIds?: string[]): Promise<Candidate[]> {
+/** The facts about a shift that eligibility needs (within withTenant). */
+export async function loadShiftFacts(db: PoolClient, shiftId: string): Promise<ShiftFacts & { id: string }> {
   const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number }>(
     `select s.id, s.role, s.starts_at, s.ends_at, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours
        from shifts s join facilities f on f.id = s.facility_id where s.id = $1`, [shiftId])).rows[0];
   if (!s) throw new NotFoundException('Shift not found');
-  const shift: ShiftFacts = { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, hours: s.hours };
+  return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, hours: s.hours };
+}
+
+/** Operator credentials needed by the equipment booked on a shift. */
+export async function operatorNeedsForShift(db: PoolClient, shiftId: string): Promise<OperatorNeed[]> {
+  return (await db.query<OperatorNeed>(
+    `select e.name as "equipmentName", ct.id as "credentialTypeId", ct.name as "typeName"
+       from shift_assignments sa join equipment e on e.id = sa.equipment_id
+       join equipment_types et on et.id = e.equipment_type_id join credential_types ct on ct.id = et.operator_credential_type_id
+      where sa.shift_id = $1 and sa.resource_kind = 'equipment' and sa.status in ('assigned', 'confirmed')
+      order by e.name`, [shiftId])).rows;
+}
+
+/**
+ * Works out who may work a shift (within withTenant). Pass workerIds to check particular people
+ * (any status), or leave it out for every active worker.
+ */
+export async function eligibilityForShift(db: PoolClient, tenantId: string, shiftId: string, workerIds?: string[]): Promise<Candidate[]> {
+  const shift = await loadShiftFacts(db, shiftId);
 
   const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null }>(
     `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
@@ -63,6 +78,8 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
     others.set(o.worker_id, list);
   }
 
+  const operatorNeeds = await operatorNeedsForShift(db, shiftId);
+
   const weekFrom = mondayOf(shift.localDate);
   const weekTo = addDays(weekFrom, 6);
   return workers.map(w => {
@@ -70,6 +87,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
     const { issues } = ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate);
     const e = shiftEligibility(shift, {
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
+      operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
     });
     const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
     return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100, ...e };

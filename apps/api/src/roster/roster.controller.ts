@@ -58,13 +58,16 @@ const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName
   to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "localEnd",
   round((extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::numeric, 2)::float8 as hours,
   sa.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
-  sa.status as "assignmentStatus"`;
+  sa.status as "assignmentStatus",
+  coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name) order by e.name)
+              from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
+             where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment`;
 const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
   left join areas a on a.id = s.area_id left join shift_codes sc on sc.id = s.shift_code_id
   left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
   left join workers w on w.id = sa.worker_id`;
 
-async function shiftById(db: PoolClient, id: string) {
+export async function shiftById(db: PoolClient, id: string) {
   const s = (await db.query(`select ${SHIFT_COLS} from ${SHIFT_FROM} where s.id = $1`, [id])).rows[0];
   if (!s) throw new NotFoundException('Shift not found');
   return s;
@@ -287,7 +290,18 @@ export class ShiftsController {
                                order by e.starts_on desc limit 1) et on true
           where w.status = 'active'
           order by w.last_name, w.first_name`, [from, to])).rows;
-      return { from, to, shifts, people };
+      // Equipment rows on the roster (backlog item 4): everything not retired, with hours booked in the period.
+      const equipment = (await db.query(
+        `select e.id, e.name, et.name as "typeName", e.status, e.home_facility_id as "homeFacilityId",
+                coalesce((select round(sum(extract(epoch from (s.ends_at - s.starts_at)) / 3600)::numeric, 2)
+                            from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
+                           where sa.equipment_id = e.id and sa.resource_kind = 'equipment' and sa.status in ('assigned', 'confirmed')
+                             and s.status <> 'cancelled' and (s.starts_at at time zone f.timezone)::date between $1 and $2
+                             and ($3::uuid is null or s.facility_id = $3)), 0)::float8 as "bookedHours"
+           from equipment e join equipment_types et on et.id = e.equipment_type_id
+          where e.status <> 'retired'
+          order by et.name, e.name`, [from, to, facilityId])).rows;
+      return { from, to, shifts, people, equipment };
     });
   }
 
