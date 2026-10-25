@@ -162,6 +162,38 @@ describe('equipment on the roster', () => {
     expect((await http().get('/roster?from=2026-11-09&to=2026-11-15').set(as('alloc')).expect(200)).body.equipment).toHaveLength(2);
   });
 
+  it('books equipment on its own, without a person (dry hire)', async () => {
+    await http().post('/shifts').set(as('alloc')).send({ facilityId: site, date: '2026-11-11', startTime: '07:00', endTime: '17:00' }).expect(400); // role needed for people
+    await http().post('/shifts').set(as('alloc')).send({ facilityId: site, equipmentOnly: 'yes', date: '2026-11-11', startTime: '07:00', endTime: '17:00' }).expect(400);
+    const c = await http().post('/shifts').set(as('alloc')).send({ facilityId: site, equipmentOnly: true, date: '2026-11-11', startTime: '07:00', endTime: '17:00', notes: 'Dry hire to a client' }).expect(201);
+    const id = c.body.ids[0] as string;
+    const s = (await http().get(`/shifts/${id}`).set(as('alloc')).expect(200)).body;
+    expect(s).toMatchObject({ role: 'Equipment only', equipmentOnly: true, status: 'open', equipment: [] });
+
+    // The client supplies the operator, so a forklift needs no licence holder from us and the shift is booked.
+    const b = await http().post(`/shifts/${id}/equipment`).set(as('alloc')).send({ equipmentId: fork1 }).expect(200);
+    expect(b.body).toMatchObject({ status: 'booked', equipmentOnly: true, warnings: [] });
+    expect(b.body.equipment.map((e: { name: string }) => e.name)).toEqual(['Forklift 1']);
+
+    // Nobody can be put on it.
+    expect((await http().get(`/shifts/${id}/candidates`).set(as('alloc')).expect(200)).body.candidates).toEqual([]);
+    const no = await http().post(`/shifts/${id}/assign`).set(as('alloc')).send({ workerId: ana }).expect(409);
+    expect(no.body.message).toBe('This shift is for equipment only, so nobody can be put on it');
+
+    // Still one place at once: the forklift can't also go on an overlapping ordinary shift.
+    const other = await mkShift('2026-11-11', '12:00', '18:00');
+    await http().post(`/shifts/${other}/equipment`).set(as('alloc')).send({ equipmentId: fork1 }).expect(409);
+
+    // A second item keeps it booked; removing everything opens it again.
+    await http().post(`/shifts/${id}/equipment`).set(as('alloc')).send({ equipmentId: ute }).expect(200);
+    expect((await http().post(`/shifts/${id}/equipment/${fork1}/remove`).set(as('alloc')).expect(200)).body.status).toBe('booked');
+    expect((await http().post(`/shifts/${id}/equipment/${ute}/remove`).set(as('alloc')).expect(200)).body.status).toBe('open');
+    await http().post(`/shifts/${id}/equipment/${ute}/remove`).set(as('other')).expect(404);
+
+    // Ordinary shifts are unchanged.
+    expect((await http().get(`/shifts/${other}`).set(as('alloc')).expect(200)).body.equipmentOnly).toBe(false);
+  });
+
   it('keeps each business\'s equipment separate', async () => {
     expect((await http().get('/equipment').set(as('other')).expect(200)).body).toEqual([]);
     expect((await http().get('/equipment-types').set(as('other')).expect(200)).body).toEqual([]);

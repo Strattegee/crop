@@ -51,7 +51,7 @@ function range(q: { from?: string; to?: string }) {
 }
 
 const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
-  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", s.role, s.status, s.notes, s.cancelled_reason as "cancelledReason",
+  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
   s.starts_at as "startsAt", s.ends_at as "endsAt", s.break_minutes as "breakMinutes", f.timezone,
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
   to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
@@ -195,7 +195,9 @@ export class ShiftsController {
     const facilityId = uuidField(body, 'facilityId', 'site', true)!;
     const areaId = uuidField(body, 'areaId', 'area');
     const shiftCodeId = uuidField(body, 'shiftCodeId', 'shift code');
-    const role = text(body, 'role', { required: true, max: 60 })!;
+    // Equipment only: booked without a person (e.g. dry hire, where the client supplies the operator).
+    const equipmentOnly = bool(body, 'equipmentOnly') ?? false;
+    const role = text(body, 'role', { required: !equipmentOnly, max: 60 }) ?? 'Equipment only';
     const notes = text(body, 'notes', { max: 1000 });
     const quantity = int(body, 'quantity', 1, 20) ?? 1;
     const single = date(body, 'date');
@@ -236,15 +238,15 @@ export class ShiftsController {
       if (startTime === endTime) throw new BadRequestException('Start and end times must be different');
       const overnight = endTime < startTime;
       const ids = (await db.query<{ id: string }>(
-        `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by)
+        `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person)
          select $1, $2, $3, $4, $5,
                 (d + $7::time) at time zone $6,
                 (d + $9::int + $8::time) at time zone $6,
-                $10, $11, $12
+                $10, $11, $12, $15
            from unnest($13::date[]) d, generate_series(1, $14::int)
          returning id`,
         [t.tenantId, facilityId, areaId, shiftCodeId, role, facility.timezone, startTime, endTime, overnight ? 1 : 0,
-          breakMinutes ?? 0, notes, auth.userId, dates, quantity],
+          breakMinutes ?? 0, notes, auth.userId, dates, quantity, !equipmentOnly],
       )).rows.map(r => r.id);
       return { created: ids.length, ids };
     });
@@ -327,6 +329,7 @@ export class ShiftsController {
   candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const shift = await shiftById(db, id);
+      if (shift.equipmentOnly) return { shift, candidates: [] }; // nobody goes on an equipment-only shift
       return { shift, candidates: rankCandidates(await eligibilityForShift(db, t.tenantId, id)) };
     });
   }
@@ -341,9 +344,10 @@ export class ShiftsController {
   assign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const workerId = uuidField(body, 'workerId', 'person', true)!;
     return withTenant(this.pool, t.tenantId, async db => {
-      const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [id])).rows[0];
+      const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
       if (!shift) throw new NotFoundException('Shift not found');
       if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
+      if (!shift.needs_person) throw new ConflictException('This shift is for equipment only, so nobody can be put on it');
       if (shift.status !== 'open') throw new ConflictException('Someone is already on this shift. Remove them first.');
       // Locking the worker serialises assignments for one person, so two shifts can't be given to them at once.
       const worker = (await db.query<{ status: string; name: string }>(

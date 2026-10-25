@@ -34,6 +34,7 @@ export async function currentChecks(db: PoolClient, equipmentIds: string[]): Pro
  */
 export async function equipmentForShift(db: PoolClient, tenantId: string, shiftId: string, equipmentIds?: string[]): Promise<EquipmentCandidate[]> {
   const shift = await loadShiftFacts(db, shiftId);
+  const { needs_person: needsPerson } = (await db.query<{ needs_person: boolean }>('select needs_person from shifts where id = $1', [shiftId])).rows[0];
   const items = (await db.query<{ id: string; name: string; type_name: string; status: EquipmentStatus; op_id: string | null; op_name: string | null }>(
     `select e.id, e.name, et.name as type_name, e.status, ct.id as op_id, ct.name as op_name
        from equipment e join equipment_types et on et.id = e.equipment_type_id
@@ -71,6 +72,7 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
     ...equipmentEligibility(shift, {
       name: i.name, status: i.status, checks: checks.get(i.id) ?? [], others: others.get(i.id) ?? [],
       operator: i.op_id ? { credentialTypeId: i.op_id, typeName: i.op_name! } : null, person, windowDays: settings.expiringWindowDays,
+      equipmentOnly: !needsPerson,
     }),
   }));
 }
