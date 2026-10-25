@@ -1,7 +1,7 @@
 # CROP: notes for Claude sessions
 
 ## Product
-Multi-tenant SaaS for staffing agencies. Beta tenant: Caring For You (healthcare/nursing, Victoria). Requirement IDs (ROS-, ALC-, CRD-, APP-, NOT-, CLP-, …) come from the CROP MVP Specification: https://claude.ai/artifact/5BSKf7k8EybB9JWnHzLPYt
+Multi-tenant SaaS: first a roster for any employer; agencies plug in through an allocation module and fill shifts employers send them ("Agency fill", ranked agencies, timed escalation). See `docs/decisions/2026-10-25-roster-meeting.md`. Beta tenant: Caring For You (nursing agency, Victoria). Requirement IDs (ROS-, ALC-, CRD-, APP-, NOT-, CLP-, …) come from the CROP MVP Specification: https://claude.ai/artifact/5BSKf7k8EybB9JWnHzLPYt
 Build schedule: https://claude.ai/artifact/RtUPeMVpHrJbUZZAms7Dug
 
 ## Stack (decided)
