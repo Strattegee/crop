@@ -7,7 +7,8 @@
  * - it is already booked at an overlapping time;
  * - the person on the shift doesn't hold the operator credential its type needs (verified, current on the date).
  * Warnings: a date due soon (the business's expiring window), the operator's credential expiring soon,
- * or nobody on the shift yet when an operator is needed.
+ * or nobody on the shift yet when an operator is needed. On an equipment-only shift (e.g. dry hire) the
+ * operator rule doesn't apply: whoever hires the equipment supplies the operator.
  */
 import { credentialStatus, type CredentialFacts } from '../workforce/compliance.js';
 import { fmtDate, operatorReason, type Eligibility, type OperatorNeed, type OtherShift, type Reason, type ShiftFacts } from './eligibility.js';
@@ -31,6 +32,8 @@ export interface EquipmentInput {
   /** The person on the shift, if any. */
   person: { name: string; credentials: CredentialFacts[] } | null;
   windowDays: number;
+  /** Booked without a person from the business (e.g. dry hire): whoever hires it supplies the operator. */
+  equipmentOnly?: boolean;
 }
 
 export type CheckState = 'ok' | 'due_soon' | 'overdue';
@@ -66,7 +69,7 @@ export function equipmentEligibility(shift: ShiftFacts, e: EquipmentInput): Elig
   const clash = e.others.filter(o => o.id !== shift.id).find(o => o.startsAt < shift.endsAt && o.endsAt > shift.startsAt);
   if (clash) blocks.push({ code: 'double_booked', message: `${e.name} is already booked ${clash.label} at ${clash.facilityName}` });
 
-  if (e.operator) {
+  if (e.operator && !e.equipmentOnly) {
     const need: OperatorNeed = { equipmentName: e.name, ...e.operator };
     if (!e.person) {
       warnings.push({ code: 'operator', message: `${e.name} needs an operator holding a ${e.operator.typeName}; nobody is on this shift yet` });

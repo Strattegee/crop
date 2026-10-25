@@ -258,7 +258,7 @@ export class ShiftEquipmentController {
     if (!equipmentId) throw new BadRequestException('Choose equipment');
     return withTenant(this.pool, t.tenantId, async db => {
       // Locking the shift serialises this with assigning a person; locking the equipment stops two bookings at once.
-      const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [id])).rows[0];
+      const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
       if (!shift) throw new NotFoundException('Shift not found');
       if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
       if (!(await db.query('select 1 from equipment where id = $1 for update', [equipmentId])).rowCount) throw new BadRequestException('Choose equipment');
@@ -271,6 +271,8 @@ export class ShiftEquipmentController {
       await db.query(
         `insert into shift_assignments(tenant_id, shift_id, resource_kind, equipment_id, status, assigned_by)
          values ($1,$2,'equipment',$3,'confirmed',$4)`, [t.tenantId, id, equipmentId, auth.userId]);
+      // On an equipment-only shift, status follows the equipment.
+      if (!shift.needs_person) await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [id]);
       return { ...(await shiftById(db, id)), warnings: check.warnings.map(w => w.message) };
     });
   }
@@ -280,10 +282,16 @@ export class ShiftEquipmentController {
   @HttpCode(200)
   remove(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Param('equipmentId', ParseUUIDPipe) equipmentId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
+      if (!(await db.query('select 1 from shifts where id = $1 for update', [id])).rowCount) throw new NotFoundException('Shift not found');
       const r = await db.query(
         `update shift_assignments set status = 'removed', ended_at = now()
           where shift_id = $1 and equipment_id = $2 and resource_kind = 'equipment' and status in ('assigned', 'confirmed')`, [id, equipmentId]);
       if (!r.rowCount) throw new ConflictException('That equipment isn\'t on this shift');
+      // An equipment-only shift goes back to open when nothing is left on it.
+      await db.query(
+        `update shifts set status = 'open', updated_at = now()
+          where id = $1 and not needs_person and status = 'booked'
+            and not exists (select 1 from shift_assignments where shift_id = $1 and status in ('assigned', 'confirmed'))`, [id]);
       return shiftById(db, id);
     });
   }

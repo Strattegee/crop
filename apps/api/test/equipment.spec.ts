@@ -69,6 +69,12 @@ describe('operator needs when putting a person on a shift', () => {
     name: 'Ana Example', roles: ['Operator'], issues: [], others: [], hoursPerFortnight: null, minRestHours: 10,
     operatorNeeds: [{ equipmentName: 'Forklift 2', credentialTypeId: 'lf', typeName: 'Forklift licence' }], windowDays: 30,
   };
+  it('skips the operator rule on an equipment-only shift', () => {
+    const r = equipmentEligibility(shift, { ...withOperator, equipmentOnly: true });
+    expect(r).toEqual({ eligible: true, blocks: [], warnings: [] });
+    expect(equipmentEligibility(shift, { ...withOperator, equipmentOnly: true, status: 'out_of_service' }).eligible).toBe(false);
+  });
+
   it('blocks a person who can\'t operate equipment already on the shift', () => {
     expect(shiftEligibility(shift, { ...p, credentials: [] }).blocks.map(b => b.code)).toEqual(['operator']);
     expect(shiftEligibility(shift, { ...p, credentials: [licence()] }).eligible).toBe(true);
