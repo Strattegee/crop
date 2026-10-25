@@ -2,6 +2,11 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-10-25 afternoon (with David, after meeting Steve)
+
+- Changed direction: CROP is first an employer roster; agencies fill shifts through an allocation screen when employers press Agency fill. Backlog reordered; decisions and open questions in `docs/decisions/2026-10-25-roster-meeting.md`.
+- Next: employer roster foundations (backlog item 1).
+
 ## 2026-10-25 (with David)
 
 - Shipped: document preview on hover; add-credential form shows the right fields per type; clearer Messages test buttons; expiry reminders (CRD-7); notification service and Messages page.
