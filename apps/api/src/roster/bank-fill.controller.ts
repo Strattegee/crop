@@ -7,8 +7,9 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, int } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { queueNotification } from '../notifications/notify.js';
-import { BANK_FILL_TYPES, bookedMessage, filledMessage, offerMessage, offerState, type OfferShift } from './bank-fill.js';
+import { BANK_FILL_TYPES, newOfferLink, offerLinkUrl, offerMessage, offerState, type OfferShift } from './bank-fill.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
+import { acceptOffer, contacts, declineOffer } from './offer-replies.js';
 import { closePendingOffers } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
 
@@ -17,9 +18,9 @@ const MAX_OFFERS = 50;
 
 const OFFER_COLS = `o.id, o.shift_id as "shiftId", o.worker_id as "workerId",
   coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "workerName",
-  o.status, o.expires_at as "expiresAt", o.created_at as "offeredAt", o.responded_at as "respondedAt"`;
+  o.status, o.expires_at as "expiresAt", o.created_at as "offeredAt", o.responded_at as "respondedAt", o.responded_via as "respondedVia"`;
 
-interface OfferRow { id: string; shiftId: string; workerId: string; workerName: string; status: string; expiresAt: Date | null; offeredAt: Date; respondedAt: Date | null }
+interface OfferRow { id: string; shiftId: string; workerId: string; workerName: string; status: string; expiresAt: Date | null; offeredAt: Date; respondedAt: Date | null; respondedVia: string | null }
 const shown = (o: OfferRow) => ({ ...o, status: offerState(o.status, o.expiresAt) });
 
 async function offersFor(db: PoolClient, shiftId: string) {
@@ -32,14 +33,9 @@ function expiresLabel(at: Date, timezone: string) {
   return new Intl.DateTimeFormat('en-AU', { timeZone: timezone, hour: 'numeric', minute: '2-digit', weekday: 'short', day: 'numeric', month: 'short' }).format(at);
 }
 
-async function contacts(db: PoolClient, ids: string[]) {
-  return new Map((await db.query<{ id: string; first: string; email: string | null; phone: string | null }>(
-    `select id, coalesce(preferred_name, first_name) as first, email, phone from workers where id = any($1)`, [ids])).rows.map(r => [r.id, r]));
-}
-
 /**
  * Bank fill (backlog item 6): the business's own bank and casual staff for an open shift, offers to several,
- * and the first to accept is booked. Replies are recorded by the office until the worker app (item 9).
+ * and the first to accept is booked. Replies are recorded by the office, or by the person from the link in their message (`offer-links.controller.ts`).
  */
 @ApiBearerAuth()
 @ApiSecurity('tenant')
@@ -118,9 +114,17 @@ export class BankFillController {
       if (notify && created.length) {
         const shift = await shiftById(db, id) as OfferShift & { timezone: string };
         const who = await contacts(db, fresh);
+        const appUrl = process.env.APP_URL ?? '';
         for (const o of created) {
           const c = who.get(o.worker_id)!;
-          const m = offerMessage(c.first, t.tenantName, shift, expiresAt ? expiresLabel(expiresAt, shift.timezone) : null);
+          // A one-off link to accept or decline without signing in (decided 26 Oct). Only its hash is kept.
+          let link: string | null = null;
+          if (appUrl && (c.email || c.phone)) {
+            const l = newOfferLink();
+            await db.query('update shift_offers set link_hash = $2 where id = $1', [o.id, l.hash]);
+            link = offerLinkUrl(appUrl, l.token);
+          }
+          const m = offerMessage(c.first, t.tenantName, shift, expiresAt ? expiresLabel(expiresAt, shift.timezone) : null, link);
           if (c.email) {
             await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'shift_offer', subject: m.subject, body: m.email,
               workerId: o.worker_id, dedupeKey: `offer:${o.id}:email`, createdBy: auth.userId });
@@ -143,52 +147,14 @@ export class BankFillController {
     });
   }
 
-  /**
-   * Records that the person accepted. The first to accept is booked (confirmed); everyone else's offer closes as filled.
-   * Refused if the shift has been filled, the offer has closed or expired, or the person is no longer eligible.
-   */
+  /** Records that the person accepted (see `acceptOffer`). */
   @Roles(...OFFICE_ROLES)
   @Post('offers/:offerId/accept')
   @HttpCode(200)
   accept(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('offerId', ParseUUIDPipe) offerId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      const ref = (await db.query<{ shift_id: string; worker_id: string }>('select shift_id, worker_id from shift_offers where id = $1', [offerId])).rows[0];
-      if (!ref) throw new NotFoundException('Offer not found');
-      // Lock the shift first, as assigning does: two acceptances for one shift queue here and the second finds it filled.
-      const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [ref.shift_id])).rows[0];
-      const offer = (await db.query<{ status: string; expires_at: Date | null }>('select status, expires_at from shift_offers where id = $1 for update', [offerId])).rows[0];
-      if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
-      if (shift.status !== 'open') throw new ConflictException('This shift has already been filled');
-      const state = offerState(offer.status, offer.expires_at);
-      if (state === 'expired') throw new ConflictException('This offer has expired. Offer the shift again if they still want it.');
-      if (state !== 'pending') throw new ConflictException('This offer is closed');
-      // Locking the worker serialises their bookings, so two overlapping shifts can't both be accepted.
-      const worker = (await db.query<{ status: string; name: string }>(
-        `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [ref.worker_id])).rows[0];
-      if (worker.status !== 'active') throw new ConflictException(`${worker.name} isn't active`);
-      const [check] = await eligibilityForShift(db, t.tenantId, ref.shift_id, [ref.worker_id]);
-      if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
-
-      await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, status, assigned_by) values ($1,$2,$3,'confirmed',$4)`,
-        [t.tenantId, ref.shift_id, ref.worker_id, auth.userId]);
-      await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [ref.shift_id]);
-      await db.query(`update shift_offers set status = 'accepted', responded_at = now(), responded_by = $2 where id = $1`, [offerId, auth.userId]);
-      const others = await closePendingOffers(db, ref.shift_id, 'filled', auth.userId);
-
-      const s = await shiftById(db, ref.shift_id);
-      const who = await contacts(db, [ref.worker_id, ...others]);
-      const me = who.get(ref.worker_id)!;
-      const b = bookedMessage(me.first, t.tenantName, s);
-      if (me.email) await queueNotification(db, t.tenantId, { channel: 'email', to: me.email, template: 'shift_booked', subject: b.subject, body: b.email, workerId: ref.worker_id, dedupeKey: `offer:${offerId}:booked:email`, createdBy: auth.userId });
-      if (me.phone) await queueNotification(db, t.tenantId, { channel: 'sms', to: me.phone, template: 'shift_booked', body: b.sms, workerId: ref.worker_id, dedupeKey: `offer:${offerId}:booked:sms`, createdBy: auth.userId });
-      // Let the others know by email (no SMS: it costs, and they can see it's gone when they ask).
-      for (const w of others) {
-        const c = who.get(w)!;
-        if (!c.email) continue;
-        const f = filledMessage(c.first, t.tenantName, s);
-        await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'shift_filled', subject: f.subject, body: f.email, workerId: w, dedupeKey: `shift:${ref.shift_id}:filled:${w}:${offerId}`, createdBy: auth.userId });
-      }
-      return { ...s, warnings: check.warnings.map(w => w.message), offers: await offersFor(db, ref.shift_id) };
+      const r = await acceptOffer(db, t, offerId, auth.userId, 'office');
+      return { ...r.shift, warnings: r.warnings, offers: await offersFor(db, r.shiftId) };
     });
   }
 
@@ -197,16 +163,7 @@ export class BankFillController {
   @Post('offers/:offerId/decline')
   @HttpCode(200)
   decline(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('offerId', ParseUUIDPipe) offerId: string) {
-    return withTenant(this.pool, t.tenantId, async db => {
-      const r = await db.query<OfferRow>(
-        `update shift_offers set status = 'declined', responded_at = now(), responded_by = $2 where id = $1 and status = 'pending' returning shift_id as "shiftId"`,
-        [offerId, auth.userId]);
-      if (!r.rowCount) {
-        if (!(await db.query('select 1 from shift_offers where id = $1', [offerId])).rowCount) throw new NotFoundException('Offer not found');
-        throw new ConflictException('This offer is closed');
-      }
-      return offersFor(db, r.rows[0].shiftId);
-    });
+    return withTenant(this.pool, t.tenantId, async db => offersFor(db, await declineOffer(db, offerId, auth.userId, 'office')));
   }
 
   /** Withdraws every open offer on the shift. */
