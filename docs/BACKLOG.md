@@ -73,3 +73,10 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [x] Left strip: people / equipment / items, hours and balance, drag to assign or book.
 - [ ] Leave lines on the roster (Steve's "T" line): the data is on `GET /roster` (`leave`) since 26 Oct.
 - [ ] Still from the design: Draft / Live / History and Publish week; Template stage (grey with "Template"); offered/broadcast stage colour; day totals; needs attention and app requests panels; Cards / Detailed / Simple views; leave lines (Steve's "T" line).
+
+## From 26 Oct (David testing staging as a café owner)
+- [ ] Platform admin screen for Strattegee: add a business, add and remove people and change roles, without the GitHub workflow. Needs a "remove from business" action (none exists yet).
+- [ ] Rename the top-right "Agency" switcher to "Business" (employer-first).
+- [ ] Clients page is agency-shaped; small employers may only need Sites. Hide or rename per business (words feature).
+- [ ] Zitadel verification codes don't arrive at strattegee.com (checked junk and archive). Check the Microsoft 365 quarantine and Zitadel's SMTP sender before real staff sign up. Workaround: mark the email verified in the Zitadel console (Users → user → Email).
+- Note: david@strattegee.com has access to Caring For You (since 22 Oct) and The Grand Cafe – Demo (26 Oct), so it shows both.
