@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { DbRulesInterceptor } from './common/db-rules.interceptor.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClientsController } from './clients/clients.controller.js';
 import { DatabaseModule } from './database/database.module.js';
@@ -30,5 +32,6 @@ import { WorkersController } from './workforce/workers.controller.js';
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }],
 })
 export class AppModule {}

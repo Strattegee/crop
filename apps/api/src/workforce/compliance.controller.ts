@@ -10,6 +10,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { addDays } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { loadSettings } from './settings.js';
+import { PUBLISHED_CHANGES, type PublishedChanges } from '../roster/publishing.js';
 
 @ApiBearerAuth()
 @Controller()
@@ -58,13 +59,16 @@ export class ComplianceController {
     const minRest = int(body, 'minRestHours', 0, 24);
     const tz = text(body, 'timezone', { max: 60 });
     if (tz && !isTimeZone(tz)) throw new BadRequestException('timezone must be an IANA time zone');
+    const published = text(body, 'publishedChanges', { max: 20 });
+    if (published && !PUBLISHED_CHANGES.includes(published as PublishedChanges)) throw new BadRequestException('Choose what can change after a roster is published');
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
       await db.query(
-        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours) values ($1,$2,$3,$4,$5)
+        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes) values ($1,$2,$3,$4,$5,$6)
          on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone,
-           sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours`,
-        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap, minRest ?? cur.minRestHours],
+           sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours, published_changes = excluded.published_changes`,
+        [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap, minRest ?? cur.minRestHours,
+          published ?? cur.publishedChanges],
       );
       return loadSettings(db, t.tenantId);
     });

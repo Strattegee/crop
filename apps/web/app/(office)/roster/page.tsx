@@ -69,6 +69,9 @@ function band(s: Shift) {
   return h < 12 ? 'am' : 'pm';
 }
 const LETTER: Record<string, string> = { am: 'A', pm: 'P', nd: 'N' };
+/** The business's after-publishing rule (Settings), in the roster's status bar. */
+type PublishedChanges = 'open' | 'managers' | 'locked';
+const CHANGE_RULE: Record<Exclude<PublishedChanges, 'open'>, string> = { managers: 'only owners and admins can change a live week', locked: 'changes to a live week are turned off' };
 /** Height of one lane of bars in the day timeline. */
 const LANE_PX = 60;
 const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -99,7 +102,7 @@ export default async function RosterPage({ searchParams }: {
 
   const showLog = sp.log === '1' && span !== 'month';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -108,7 +111,9 @@ export default async function RosterPage({ searchParams }: {
     showLog ? api<Change[]>(`/roster/changes?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     Promise.all(monthWeeks.map(w => api<Week[]>(`/roster/weeks?weekStart=${w[0]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]))),
     span === 'month' ? Promise.resolve([] as Template[]) : api<Template[]>(`/roster/templates${site ? `?facilityId=${site}` : ''}`).catch(() => [] as Template[]),
+    api<{ publishedChanges?: PublishedChanges }>('/settings').catch(() => ({} as { publishedChanges?: PublishedChanges })),
   ]);
+  const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
   const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
   const isHistory = weekStates.length > 0 && weekStates.every(w => w.state === 'history');
@@ -305,6 +310,9 @@ export default async function RosterPage({ searchParams }: {
               </span>
             </span>
           ))}
+          {changeRule !== 'open' && weekRows.some(w => w.state === 'live') && (
+            <span className="muted small">After publishing: {CHANGE_RULE[changeRule]} (Settings).</span>
+          )}
         </div>
         <div className="roster-tools">
           <Link className="btn small secondary" href={url({ log: showLog ? undefined : '1' })}>{showLog ? 'Hide changes' : 'Changes'}</Link>
