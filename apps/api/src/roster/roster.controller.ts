@@ -304,7 +304,14 @@ export class ShiftsController {
            from equipment e join equipment_types et on et.id = e.equipment_type_id
           where e.status <> 'retired'
           order by et.name, e.name`, [from, to, facilityId])).rows;
-      return { from, to, shifts, people, equipment };
+      // Leave in the period (backlog item 10): requested and approved, for the roster's leave lines.
+      const leave = (await db.query(
+        `select l.id, l.worker_id as "workerId", l.kind, l.status,
+                to_char(l.starts_on, 'YYYY-MM-DD') as "startsOn", to_char(l.ends_on, 'YYYY-MM-DD') as "endsOn"
+           from leave_records l join workers w on w.id = l.worker_id
+          where w.status = 'active' and l.status in ('requested', 'approved') and l.ends_on >= $1 and l.starts_on <= $2
+          order by l.starts_on`, [from, to])).rows;
+      return { from, to, shifts, people, equipment, leave };
     });
   }
 

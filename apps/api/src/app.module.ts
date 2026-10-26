@@ -9,6 +9,7 @@ import { HealthController } from './health/health.controller.js';
 import { IndustryController } from './industry/industry.controller.js';
 import { TermsController } from './terms/terms.controller.js';
 import { ItemsController, ShiftItemsController, StockController, WorkerItemsController } from './items/items.controller.js';
+import { AvailabilityController, LeaveController } from './roster/availability.controller.js';
 import { BankFillController } from './roster/bank-fill.controller.js';
 import { OfferLinksController } from './roster/offer-links.controller.js';
 import { EquipmentController, EquipmentTypesController, ShiftEquipmentController } from './roster/equipment.controller.js';
@@ -22,7 +23,7 @@ import { WorkersController } from './workforce/workers.controller.js';
   controllers: [
     HealthController, IndustryController, TermsController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
-    ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController,
+    ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
