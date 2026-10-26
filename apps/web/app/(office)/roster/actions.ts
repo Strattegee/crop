@@ -45,6 +45,13 @@ export async function cancelShift(shiftId: string, f: FormData) {
   await attempt(back(f), () => api(`/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason: str(f, 'reason') } }), 'Shift cancelled.');
 }
 
+/** Draft → Live: publishes the week for the site shown (or every site). Changes after this are logged. */
+export async function publishWeek(f: FormData) {
+  const site = str(f, 'site');
+  await attempt(back(f), () => api('/roster/publish', { method: 'POST', body: { weekStart: str(f, 'week'), ...(site ? { facilityId: site } : {}) } }),
+    'Published. The week is live; changes from now on are logged.');
+}
+
 export async function offer(shiftId: string, f: FormData) {
   const workerIds = f.getAll('workerIds').filter((x): x is string => typeof x === 'string');
   const minutes = Number(str(f, 'expiresInMinutes') ?? 0);

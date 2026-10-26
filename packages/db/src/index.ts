@@ -12,17 +12,30 @@ export function createPool(connectionString: string): Pool {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Who is making a change, for change logs written by triggers (e.g. the roster's shift_changes). */
+export interface Actor {
+  id?: string | null;
+  name?: string | null;
+  /** office (signed in), link (a one-off reply link) or system. */
+  via?: 'office' | 'link' | 'system';
+}
+
 /**
  * Runs fn inside a transaction scoped to one tenant. Row-level security
  * policies read app.tenant_id, so queries only see and write that tenant's rows.
- * All tenant data access in the API goes through this.
+ * All tenant data access in the API goes through this. Pass `actor` on changes that are logged.
  */
-export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolClient) => Promise<T>): Promise<T> {
+export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolClient) => Promise<T>, actor?: Actor): Promise<T> {
   if (!UUID.test(tenantId)) throw new Error('invalid tenant id');
   const client = await pool.connect();
   try {
     await client.query('begin');
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+    if (actor) {
+      await client.query(
+        `select set_config('app.actor_id', $1, true), set_config('app.actor_name', $2, true), set_config('app.actor_via', $3, true)`,
+        [actor.id && UUID.test(actor.id) ? actor.id : '', (actor.name ?? '').slice(0, 120), actor.via ?? 'office']);
+    }
     const result = await fn(client);
     await client.query('commit');
     return result;

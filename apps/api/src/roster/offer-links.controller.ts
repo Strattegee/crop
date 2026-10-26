@@ -66,7 +66,7 @@ export class OfferLinksController {
       const name = (await db.query<{ name: string }>('select name from tenants where id = $1', [tenantId])).rows[0].name;
       await acceptOffer(db, { tenantId, tenantName: name }, offerId, null, 'link');
       return this.view(db, offerId);
-    });
+    }, { via: 'link' });
   }
 
   @Public()
