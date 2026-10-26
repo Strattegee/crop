@@ -3,6 +3,7 @@
 import { api } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
+import { fillOpenShifts } from '../demo-tools';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -69,4 +70,13 @@ export async function loadDemoWeek(f: FormData) {
   const week = str(f, 'week') ?? new Date().toISOString().slice(0, 10);
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
   await attempt(back(f), () => loadCafeDemo(week, today), 'Demo café loaded: 32 invented staff, credentials, equipment, stock and a week of shifts.');
+}
+
+/** Staging only: fills this week's open shifts with ready demo staff. */
+export async function fillWeekDemo(f: FormData) {
+  if (process.env.DEMO_TOOLS !== 'on') return;
+  const week = str(f, 'week')!;
+  let r = { open: 0, filled: 0 };
+  await attempt(back(f), async () => { r = await fillOpenShifts(week); }, 'Open shifts filled where a ready person was available.');
+  void r;
 }

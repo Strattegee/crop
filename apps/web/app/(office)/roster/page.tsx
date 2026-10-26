@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import {
-  assign, bookEquipment, cancelShift, confirm, createShifts, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
+  assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -202,6 +202,15 @@ export default async function RosterPage({ searchParams }: {
           <input type="hidden" name="week" value={week} />
           <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
           <button className="btn small">Load café demo</button>
+        </form>
+      )}
+
+      {process.env.DEMO_TOOLS === 'on' && open > 0 && (
+        <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="week" value={week} />
+          <span className="muted small">Demo only:</span>
+          <button className="btn small secondary">Fill open shifts with demo staff</button>
         </form>
       )}
 

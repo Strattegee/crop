@@ -3,25 +3,55 @@ import { currentAgency } from '../../../lib/current-user';
 import { CATEGORY_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
 import { addCredentialType, addRule, addStarterSet, removeRule, saveSettings, setTypeActive } from './actions';
+import { addDemoStaff, applyPack, completeDemo } from './industry-actions';
 
 export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
+type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number } };
 type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
-  const [types, rules, settings, agency, sp] = await Promise.all([
-    api<CredentialType[]>('/credential-types'), api<Rule[]>('/credential-requirements'), api<Settings>('/settings'), currentAgency(), searchParams,
+  const [packs, types, rules, settings, agency, sp] = await Promise.all([
+    api<PackSummary[]>('/industry-packs'), api<CredentialType[]>('/credential-types'), api<Rule[]>('/credential-requirements'), api<Settings>('/settings'), currentAgency(), searchParams,
   ]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
 
   return (
     <>
       <h1>Settings</h1>
-      <p className="muted">Credential types, the rules for who needs them, and compliance settings.</p>
+      <p className="muted">Industry templates, credential types, the rules for who needs them, and compliance settings.</p>
       <Notices error={sp.error} done={sp.done} />
       {!canEdit && <div className="notice error">Only owners and administrators can change these settings.</div>}
+
+      <div className="card">
+        <h2>Industry templates</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Pick the industries this business works in. Each adds starter roles, the credentials each role needs, shift codes, equipment types and stock items. Apply as many as you like; nothing is duplicated, and you can change or switch off anything afterwards. Templates are a starting point, not legal advice: check your state&apos;s requirements.</p>
+        <div className="grid">
+          {packs.map(p => (
+            <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong>{p.name}{p.appliedAt && <span className="badge ok" style={{ marginLeft: 6 }}>Applied</span>}</strong>
+              <span className="muted" style={{ fontSize: 13 }}>{p.description}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{p.counts.roles} roles · {p.counts.credentials} credentials · {p.counts.shiftCodes} shift codes · {p.counts.equipmentTypes} equipment types · {p.counts.items} items</span>
+              {canEdit && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
+                  <form action={applyPack.bind(null, p.id)}><button type="submit" className={`btn small ${p.appliedAt ? 'secondary' : ''}`}>{p.appliedAt ? 'Apply again' : 'Use this template'}</button></form>
+                  {process.env.DEMO_TOOLS === 'on' && p.appliedAt && (
+                    <form action={addDemoStaff.bind(null, p.id)}><button type="submit" className="btn small secondary">Add demo staff</button></form>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {process.env.DEMO_TOOLS === 'on' && canEdit && (
+          <form action={completeDemo} style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="muted small">Demo only: give invented demo staff any credentials your current rules require.</span>
+            <button className="btn small secondary">Complete demo staff credentials</button>
+          </form>
+        )}
+      </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Credential types</h2>
