@@ -5,6 +5,7 @@ import { Badge } from '../../../../lib/format';
 import { CLIENT_STATUS, STATES } from '../../../../lib/places';
 import { Notices } from '../../notices';
 import { addFacility, updateClient } from '../actions';
+import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ type ClientDetail = {
 };
 
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
+  const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [c, agency] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency()]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
@@ -26,7 +28,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>
-        <h2>Facilities</h2>
+        <h2>{tw.many(T.site)}</h2>
         {c.facilities.length === 0 ? <p className="muted">No facilities yet.</p> : (
           <table>
             <thead><tr><th>Name</th><th>Location</th><th>Areas</th></tr></thead>

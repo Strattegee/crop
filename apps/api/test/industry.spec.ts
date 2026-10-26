@@ -78,7 +78,7 @@ describe('industry packs: applying', () => {
     expect(c.body.added).toMatchObject({ roles: pack.roles.length, credentials: pack.credentials.length, equipmentTypes: pack.equipmentTypes.length, items: pack.items.length });
 
     const again = await http().post('/industry-packs/construction/apply').set(as('admin')).expect(200);
-    expect(again.body.added).toEqual({ roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0 });
+    expect(again.body.added).toEqual({ roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, words: 0 });
 
     // Labour hire shares the forklift licence, White Card and others: they aren't added twice.
     const l = await http().post('/industry-packs/labour-hire/apply').set(as('admin')).expect(200);
@@ -99,6 +99,20 @@ describe('industry packs: applying', () => {
     // Another business sees none of it.
     expect((await http().get('/roles').set(as('other')).expect(200)).body).toEqual([]);
     expect((await http().get('/industry-packs').set(as('other')).expect(200)).body.every((p: { appliedAt: unknown }) => p.appliedAt === null)).toBe(true);
+  });
+
+  it('uses the words from the first template applied, lets the business change them, and keeps them per business', async () => {
+    const t = await http().get('/terms').set(as('alloc')).expect(200);
+    const w = (code: number) => t.body.find((x: { code: number }) => x.code === code);
+    expect(w(1050)).toMatchObject({ singular: 'Ticket', plural: 'Tickets', defaultSingular: 'Credential' }); // construction came first
+    expect(w(1060)).toMatchObject({ singular: 'Plant' });
+    await http().put('/terms').set(as('alloc')).send({ terms: [{ code: 1010, singular: 'Operator' }] }).expect(403);
+    await http().put('/terms').set(as('admin')).send({ terms: [{ code: 9999, singular: 'X' }] }).expect(400);
+    const saved = await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1010, singular: 'Operator', plural: 'Operators' }, { code: 1050, singular: '' }] }).expect(200);
+    expect(saved.body.find((x: { code: number }) => x.code === 1010)).toMatchObject({ singular: 'Operator', plural: 'Operators' });
+    expect(saved.body.find((x: { code: number }) => x.code === 1050)).toMatchObject({ singular: 'Credential' }); // reset to default
+    const theirs = await http().get('/terms').set(as('other')).expect(200);
+    expect(theirs.body.find((x: { code: number }) => x.code === 1010)).toMatchObject({ singular: 'Worker' });
   });
 
   it('a business can add its own role', async () => {

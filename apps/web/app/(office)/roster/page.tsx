@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
+import { T, words } from '../../../lib/terms';
 import {
   assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
 } from './actions';
@@ -51,6 +52,7 @@ const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 export default async function RosterPage({ searchParams }: {
   searchParams: Promise<{ week?: string; site?: string; view?: string; shift?: string; error?: string; done?: string }>;
 }) {
+  const tw = await words();
   const sp = await searchParams;
   const today = todayMelbourne();
   const week = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? '') ? sp.week! : today);
@@ -162,7 +164,7 @@ export default async function RosterPage({ searchParams }: {
     <div className="roster-page">
       <div className="roster-head">
         <div>
-          <h1>Roster</h1>
+          <h1>{tw.one(T.roster)}</h1>
           <p className="muted" style={{ margin: 0 }}>Week of {longDate(days[0])} – {longDate(days[6])}</p>
         </div>
         <div className="roster-tools">

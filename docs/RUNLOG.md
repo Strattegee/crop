@@ -77,3 +77,8 @@ Newest first. One entry per working session or scheduled run.
 - Decided: CROP is multi-industry (packs: healthcare, labour hire, construction, hospitality); CFY's first release centres on shift filling, not the Ribbon roster; scheduled runs work alone with the approval rules in `docs/WORKING-ALONE.md`.
 - Next: shifts and shift requests (backlog item 1).
 - Waiting: ClickSend number (Mon), Steve's roster review.
+
+
+## 26 Oct, afternoon (interactive)
+- Words and codes: numbered concepts and screens, per-business words, Settings editor; templates suggest words. Checked locally end to end.
+- David: "the ribbon seems to be missing". Asked which part of the full-screen design he means (likely the left people strip); not started.

@@ -7,6 +7,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { PACKS, packById, type IndustryPack } from './packs.js';
+import { applyPackTerms } from '../terms/terms.controller.js';
 
 const summary = (p: IndustryPack) => ({
   id: p.id, name: p.name, description: p.description,
@@ -15,7 +16,7 @@ const summary = (p: IndustryPack) => ({
 
 /** Adds what's missing from a pack, matched by name (or code). Returns how many of each were added. */
 async function applyPack(db: PoolClient, tenantId: string, userId: string, pack: IndustryPack) {
-  const added = { roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0 };
+  const added = { roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, words: 0 };
   const typeIds = new Map<string, string>();
   for (const cr of pack.credentials) {
     const found = (await db.query<{ id: string }>('select id from credential_types where lower(name) = lower($1) limit 1', [cr.name])).rows[0];
@@ -60,6 +61,7 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
       [tenantId, it.name, it.category, it.unit, it.costCents, it.category !== 'fuel', it.reorderLevel ?? null]);
     added.items += r.rowCount ?? 0;
   }
+  added.words = await applyPackTerms(db, tenantId, pack.id, userId);
   await db.query(
     `insert into industry_pack_applications(tenant_id, pack_id, applied_by) values ($1,$2,$3)
      on conflict (tenant_id, pack_id) do update set applied_at = now(), applied_by = excluded.applied_by`, [tenantId, pack.id, userId]);
