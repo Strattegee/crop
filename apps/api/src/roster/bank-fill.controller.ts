@@ -12,6 +12,7 @@ import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { acceptOffer, contacts, declineOffer } from './offer-replies.js';
 import { closePendingOffers } from './offers-data.js';
 import { actorOf } from './publishing.js';
+import { rosterChangeRefusal } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,6 +95,9 @@ export class BankFillController {
       if (!row.needs_person) throw new ConflictException('This shift is for equipment only, so nobody can be put on it');
       if (row.status !== 'open') throw new ConflictException('Someone is already on this shift');
       if (row.ended) throw new ConflictException('This shift has already finished');
+      // Offering doesn't change the shift, but accepting would, so the after-publishing rule is checked now.
+      const refusal = await rosterChangeRefusal(db, id);
+      if (refusal) throw new ConflictException(refusal);
       const checks = await eligibilityForShift(db, t.tenantId, id, workerIds);
       if (checks.length !== workerIds.length) throw new BadRequestException('Choose people from your staff list');
       const blocked = checks.filter(c => !c.eligible);
@@ -145,7 +149,7 @@ export class BankFillController {
         warnings: checks.flatMap(c => c.warnings.map(w => w.message)),
         offers: await offersFor(db, id),
       };
-    });
+    }, actorOf(auth));
   }
 
   /** Records that the person accepted (see `acceptOffer`). */

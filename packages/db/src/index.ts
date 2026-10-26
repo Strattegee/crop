@@ -18,6 +18,8 @@ export interface Actor {
   name?: string | null;
   /** office (signed in), link (a one-off reply link) or system. */
   via?: 'office' | 'link' | 'system';
+  /** Their role in the business (owner, admin, allocator…), for rules such as who may change a published roster. */
+  role?: string | null;
 }
 
 /**
@@ -33,8 +35,9 @@ export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolC
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
     if (actor) {
       await client.query(
-        `select set_config('app.actor_id', $1, true), set_config('app.actor_name', $2, true), set_config('app.actor_via', $3, true)`,
-        [actor.id && UUID.test(actor.id) ? actor.id : '', (actor.name ?? '').slice(0, 120), actor.via ?? 'office']);
+        `select set_config('app.actor_id', $1, true), set_config('app.actor_name', $2, true), set_config('app.actor_via', $3, true),
+                set_config('app.actor_role', $4, true)`,
+        [actor.id && UUID.test(actor.id) ? actor.id : '', (actor.name ?? '').slice(0, 120), actor.via ?? 'office', (actor.role ?? '').slice(0, 20)]);
     }
     const result = await fn(client);
     await client.query('commit');

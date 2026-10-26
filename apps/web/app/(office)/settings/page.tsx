@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number } };
-type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number };
+type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -169,19 +169,26 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card">
-        <h2>Agency settings</h2>
+        <h2>Business settings</h2>
         <form action={saveSettings} className="form-row">
           <label>Show as expiring this many days ahead<input name="expiringWindowDays" type="number" min={1} max={365} defaultValue={settings.expiringWindowDays} disabled={!canEdit} /></label>
-          <label>Agency time zone
+          <label>Time zone
             <select name="timezone" defaultValue={settings.timezone} disabled={!canEdit}>
               {['Australia/Melbourne', 'Australia/Sydney', 'Australia/Brisbane', 'Australia/Adelaide', 'Australia/Perth', 'Australia/Hobart', 'Australia/Darwin']
                 .map(tz => <option key={tz} value={tz}>{tz.replace('Australia/', '')}</option>)}
             </select>
           </label>
           <label>Monthly text limit<input name="smsMonthlyCap" type="number" min={0} max={1000000} defaultValue={settings.smsMonthlyCap} disabled={!canEdit} /></label>
+          <label>After a week&apos;s roster is published
+            <select name="publishedChanges" defaultValue={settings.publishedChanges ?? 'open'} disabled={!canEdit}>
+              <option value="open">Anyone in the office can change it</option>
+              <option value="managers">Only owners and admins can change it</option>
+              <option value="locked">Nobody can change it (turned off)</option>
+            </select>
+          </label>
           {canEdit && <button type="submit" className="btn">Save</button>}
         </form>
-        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages.</p>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off.</p>
       </div>
     </>
   );

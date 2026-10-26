@@ -126,3 +126,10 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: roster templates and copying a week (backlog item 2, Steve's "ideal week"). On the roster, "Templates and copying" lets the office save a site's week as a template, fill any week from a template, or copy last week (or any week). Each shift gets its usual person where they can work it (waiting for them to confirm); anyone who can't (on leave, already rostered, missing a credential) leaves the shift open and the office is told why. A week that already has shifts isn't doubled unless the office ticks "Add to the shifts already there", and weeks that are over can't be filled. Shift times stay the same across the daylight saving change.
 - Next: the after-publishing settings (approved changes, lock), then a screen for employment terms; carrying equipment over with a template later.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
+
+## 2026-10-27 late morning (scheduled run)
+
+- Shipped: what can change after a roster is published (backlog item 2, Steve's answer 5). Settings now has "After a week's roster is published" with three choices: anyone in the office can change it (as before), only owners and admins, or nobody until it's turned back on. Every way of changing a shift follows it (adding, putting someone on, taking them off, cancelling, equipment, notes, templates, offers). Staff can still accept an offer by its link unless changes are turned off. The roster says which rule applies on a live week, and refusals say why in plain words.
+- Also: Settings heading now says "Business settings" instead of "Agency settings".
+- Next: requesting and approving a change (so allocators can ask when only owners and admins can change a live week), then a screen for employment terms.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

@@ -21,7 +21,7 @@ export function mondayOf(date: string): string {
 
 /** The person making a change, for the shift change log. */
 export function actorOf(auth: AuthContext): Actor {
-  return { id: auth.userId, name: auth.displayName || auth.email, via: 'office' };
+  return { id: auth.userId, name: auth.displayName || auth.email, via: 'office', role: auth.tenant?.role ?? null };
 }
 
 export type ChangeKind = 'created' | 'assigned' | 'booked' | 'confirmed' | 'unassigned' | 'pulled_out' | 'cancelled'
@@ -45,3 +45,19 @@ export function changeSummary(c: { kind: ChangeKind; workerName: string | null; 
     case 'notes_changed': return 'Notes changed';
   }
 }
+
+/** What may change once a week is published (tenant_settings.published_changes, migration 0024). */
+export type PublishedChanges = 'open' | 'managers' | 'locked';
+export const PUBLISHED_CHANGES: PublishedChanges[] = ['open', 'managers', 'locked'];
+
+/** The rule in plain words, for the roster's status bar and Settings. */
+export function publishedChangesLabel(rule: PublishedChanges): string {
+  switch (rule) {
+    case 'open': return 'Anyone in the office can make changes; every change is recorded';
+    case 'managers': return 'Only owners and admins can make changes';
+    case 'locked': return 'Changes are turned off';
+  }
+}
+
+/** The database's code for a change refused by the business's after-publishing rule (migration 0024). */
+export const ROSTER_LOCKED = 'CRLK1';
