@@ -46,6 +46,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 5500 | Items (reserved) | term 1070 |
 | 6000 | Messages | Messages |
 | 9000 | Settings | Settings |
+| 9100 | Shift types (under Settings, not in the menu) | Shift types |
 
 ## Still to do
 - Use the words in more places: roster labels and panels, form labels, API error messages, notification text, the worker app.

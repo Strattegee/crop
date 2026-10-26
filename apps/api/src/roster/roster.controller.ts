@@ -23,6 +23,15 @@ function time(body: Record<string, unknown>, key: string, label: string): string
   return v;
 }
 
+/** A shift type's letter for roster cards: 1–3 letters or digits, stored in capitals. Blank clears it. */
+function letterField(body: Record<string, unknown>): string | null | undefined {
+  if (!(body && 'letter' in body)) return undefined;
+  const v = body.letter;
+  if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) return null;
+  if (typeof v !== 'string' || !/^[A-Za-z0-9]{1,3}$/.test(v.trim())) throw new BadRequestException('The letter must be 1 to 3 letters or numbers, like D or NS');
+  return v.trim().toUpperCase();
+}
+
 function uuidField(body: Record<string, unknown>, key: string, label: string, required = false): string | null {
   const v = text(body, key, { max: 40, required });
   if (v === null) return null;
@@ -52,7 +61,7 @@ function range(q: { from?: string; to?: string }) {
 }
 
 const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
-  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
+  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", sc.letter as "shiftLetter", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
   s.starts_at as "startsAt", s.ends_at as "endsAt", s.break_minutes as "breakMinutes", f.timezone,
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
   to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
@@ -78,6 +87,9 @@ export async function shiftById(db: PoolClient, id: string) {
   return s;
 }
 
+const CODE_COLS = `id, facility_id as "facilityId", code, name, letter, to_char(start_time, 'HH24:MI') as "startTime",
+  to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes", active`;
+
 /** Shift codes: named start and finish times, for the whole business or one site. */
 @ApiBearerAuth()
 @ApiSecurity('tenant')
@@ -89,7 +101,7 @@ export class ShiftCodesController {
   @Get()
   list(@Tenant() t: Membership, @Query('facilityId') facilityId?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
-      `select sc.id, sc.facility_id as "facilityId", f.name as "facilityName", sc.code, sc.name,
+      `select sc.id, sc.facility_id as "facilityId", f.name as "facilityName", sc.code, sc.name, sc.letter,
               to_char(sc.start_time, 'HH24:MI') as "startTime", to_char(sc.end_time, 'HH24:MI') as "endTime",
               sc.break_minutes as "breakMinutes", sc.active
          from shift_codes sc left join facilities f on f.id = sc.facility_id
@@ -109,15 +121,15 @@ export class ShiftCodesController {
     if (startTime === endTime) throw new BadRequestException('Start and end times must be different');
     const facilityId = uuidField(body, 'facilityId', 'site');
     const breakMinutes = int(body, 'breakMinutes', 0, 240) ?? 0;
+    const letter = letterField(body) ?? null;
     return withTenant(this.pool, t.tenantId, async db => {
       if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose a site');
       try {
         return (await db.query(
-          `insert into shift_codes(tenant_id, facility_id, code, name, start_time, end_time, break_minutes)
-           values ($1,$2,$3,$4,$5,$6,$7)
-           returning id, facility_id as "facilityId", code, name, to_char(start_time, 'HH24:MI') as "startTime",
-                     to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes", active`,
-          [t.tenantId, facilityId, code, text(body, 'name', { max: 60 }), startTime, endTime, breakMinutes],
+          `insert into shift_codes(tenant_id, facility_id, code, name, start_time, end_time, break_minutes, letter)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)
+           returning ${CODE_COLS}`,
+          [t.tenantId, facilityId, code, text(body, 'name', { max: 60 }), startTime, endTime, breakMinutes, letter],
         )).rows[0];
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new BadRequestException(`There is already a shift code ${code}`);
@@ -126,16 +138,30 @@ export class ShiftCodesController {
     });
   }
 
+  /**
+   * Change a shift type: name, letter, standard times, break, on/off. Shifts already on the roster keep the
+   * times they were created with; only new shifts use the new times.
+   */
   @Roles('owner', 'admin')
   @Patch(':id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const active = bool(body, 'active');
     const name = text(body, 'name', { max: 60 });
+    const letter = letterField(body);
+    const startTime = time(body, 'startTime', 'Start time');
+    const endTime = time(body, 'endTime', 'End time');
+    const breakMinutes = int(body, 'breakMinutes', 0, 240);
     return withTenant(this.pool, t.tenantId, async db => {
+      const cur = (await db.query(`select to_char(start_time, 'HH24:MI') as s, to_char(end_time, 'HH24:MI') as e from shift_codes where id = $1 for update`, [id])).rows[0];
+      if (!cur) throw new NotFoundException('Shift type not found');
+      if ((startTime ?? cur.s) === (endTime ?? cur.e)) throw new BadRequestException('Start and end times must be different');
       const r = await db.query(
-        `update shift_codes set active = coalesce($2, active), name = coalesce($3, name) where id = $1
-         returning id, code, name, active`, [id, active, name]);
-      if (!r.rowCount) throw new NotFoundException('Shift code not found');
+        `update shift_codes set active = coalesce($2, active), name = coalesce($3, name),
+                letter = case when $4 then $5 else letter end,
+                start_time = coalesce($6::time, start_time), end_time = coalesce($7::time, end_time),
+                break_minutes = coalesce($8, break_minutes)
+          where id = $1 returning ${CODE_COLS}`,
+        [id, active, name, letter !== undefined, letter ?? null, startTime, endTime, breakMinutes]);
       return r.rows[0];
     });
   }

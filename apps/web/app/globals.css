@@ -197,6 +197,7 @@ body[data-dragging='person'] .rcard[data-needs-person='1'], body[data-dragging='
 /* Shift letter (A/P/N), leave lines and day totals (Steve's ribbon roster) */
 .rcard .band .ltr { display: inline-block; min-width: 14px; text-align: center; margin-right: 5px; padding: 0 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.65); color: inherit; font-weight: 800; }
 .band.nd .ltr { background: rgba(255, 255, 255, 0.2); }
+.type-letter { display: inline-block; min-width: 22px; text-align: center; padding: 1px 5px; border-radius: 4px; background: var(--border); font-weight: 800; }
 .leave-line { display: block; font-size: 11px; padding: 2px 6px; margin-bottom: 4px; border-radius: 4px; background: repeating-linear-gradient(135deg, #eef0f3, #eef0f3 6px, #e3e7ec 6px, #e3e7ec 12px); color: #46525f; font-weight: 600; }
 .leave-line.requested { background: #fff6e5; color: #7a4b0c; border: 1px dashed #e0b25c; }
 .roster-legend .leave-key { display: inline-block; width: 22px; height: 10px; vertical-align: middle; margin-right: 4px; border-radius: 2px; background: repeating-linear-gradient(135deg, #eef0f3, #eef0f3 4px, #d6dbe1 4px, #d6dbe1 8px); }

@@ -44,8 +44,8 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
   }
   for (const sc of pack.shiftCodes) {
     const r = await db.query(
-      `insert into shift_codes(tenant_id, code, name, start_time, end_time, break_minutes) values ($1,$2,$3,$4,$5,$6) on conflict do nothing`,
-      [tenantId, sc.code, sc.name, sc.start, sc.end, sc.breakMinutes]);
+      `insert into shift_codes(tenant_id, code, name, start_time, end_time, break_minutes, letter) values ($1,$2,$3,$4,$5,$6,$7) on conflict do nothing`,
+      [tenantId, sc.code, sc.name, sc.start, sc.end, sc.breakMinutes, sc.letter ?? null]);
     added.shiftCodes += r.rowCount ?? 0;
   }
   for (const et of pack.equipmentTypes) {
