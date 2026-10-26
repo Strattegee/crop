@@ -37,7 +37,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Credential records: issuing organisation field.
 
 - [ ] Clients that don't use CROP yet: a simple portal for an agency's clients to order shifts (CFY's current clients). Confirm with David whether this is a light employer account.
-- [ ] Industry packs: healthcare (current starter list), labour hire, construction, hospitality — roles, shift codes, credential types, default rules. Neutral wording in the UI (Client, Site, Area, Role, Shift).
+- [x] Industry packs (26 Oct, David's session): healthcare, hospitality, construction, labour hire, traffic management, cleaning, security — roles, credentials with must/should rules, shift codes, equipment types (with operator licences) and items; Settings → Industry templates. Still to do: pick industries at sign-up; neutral wording across the UI (Client, Site, Area, Role, Shift).
 - [ ] Audit log of office actions (finishes AUTH).
 - [ ] Remove the leftover "Right to work" credential type rows created before right to work had its own section (staging test data only).
 - [ ] Employment records (effective-dated) for workers.

@@ -2,6 +2,11 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-10-26 late morning (with David)
+
+- Shipped: café demo (15 roles, credential library, 32 invented staff, equipment, stock, a week of shifts); industry templates for 7 industries in Settings; staging-only demo staff per template, credential top-up and fill-open-shifts buttons. Demo staff now meet a business's own rules (e.g. a police check for everyone), which had left the first café demo unfillable.
+- Next: offer links without sign-in (item 6).
+
 ## 2026-10-26 morning (with David)
 
 - David cleared the roster screen (Steve endorsed the concept) and agreed staff may accept offers from a single-use link without signing in.

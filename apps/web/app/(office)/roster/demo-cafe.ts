@@ -4,6 +4,7 @@
  * Built only through the public API, so the demo exercises the same rules as real use.
  */
 import { api } from '../../../lib/api';
+import { completeDemoCredentials } from '../demo-tools';
 
 type Id = { id: string };
 const post = <T = Id>(p: string, body: unknown) => api<T>(p, { method: 'POST', body });
@@ -145,6 +146,9 @@ export async function loadCafeDemo(week: string, today: string) {
     }
   };
   for (let i = 0; i < STAFF.length; i += 4) await Promise.all(STAFF.slice(i, i + 4).map(addPerson));
+
+  // The business may already have its own rules (e.g. a police check for everyone): meet those too.
+  await completeDemoCredentials({ workerIds: Object.values(ids).map(p => p.id), businessWideOnly: true });
 
   // Equipment and consumables.
   const vanType = (await post('/equipment-types', { name: 'Van', operatorCredentialTypeId: types['Driver Licence (Car)'] })).id;
