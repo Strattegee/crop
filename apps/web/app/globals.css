@@ -25,7 +25,7 @@ h2 { font-size: 17px; margin: 0 0 12px; }
 .muted { color: var(--muted); }
 
 .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
-.sidebar { background: var(--brand); color: var(--brand-contrast); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
+.sidebar { background: var(--brand); color: var(--brand-contrast); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .sidebar .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; padding: 0 10px 16px; }
 .sidebar a { color: #dfe7f1; text-decoration: none; padding: 8px 10px; border-radius: 6px; font-size: 15px; }
 .sidebar a:hover, .sidebar a[aria-current='page'] { background: rgba(255, 255, 255, 0.12); color: #fff; }
@@ -63,7 +63,7 @@ input, select, textarea { font: inherit; font-size: 14px; padding: 8px 10px; bor
 
 @media (max-width: 760px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px; }
+  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px; position: static; height: auto; }
   .sidebar .logo { padding: 8px 10px; }
   .sidebar .spacer { display: none; }
   .content { padding: 16px; }
