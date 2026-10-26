@@ -16,9 +16,9 @@
 
 ## Open questions (hold until answered)
 
-1. Can one CROP business be both an employer and an agency (CFY rosters its own office staff and supplies nurses)? Assumed yes: modules are switched on per business.
+1. **Answered 26 Oct: yes** (see 2026-10-26-steve-answers.md). Can one CROP business be both an employer and an agency (CFY rosters its own office staff and supplies nurses)? Assumed yes: modules are switched on per business.
 2. ~~Clients that don't use CROP~~ Answered: yes, agencies serve clients outside CROP too, so they still need a way for those clients to order shifts (assumed: a light employer account).
-3. Who sets escalation times: per employer, per site, or per request (urgency)? Assumed per employer, adjustable per request.
-4. What may an employer see about an agency worker: name, role, compliant yes/no? Documents? Assumed no documents; the agency stays responsible for credentials.
-5. When an agency nominates someone, does the employer approve, or is it booked straight away? Assumed booked straight away if they meet the criteria.
+3. **Answered 26 Oct:** the client, by urgency, with defaults. Who sets escalation times: per employer, per site, or per request (urgency)? Assumed per employer, adjustable per request.
+4. **Answered 26 Oct:** everything except contracts and agreements, by role, via a document visibility list. What may an employer see about an agency worker: name, role, compliant yes/no? Documents? Assumed no documents; the agency stays responsible for credentials.
+5. **Answered 26 Oct:** a client setting (automatic or approve first). When an agency nominates someone, does the employer approve, or is it booked straight away? Assumed booked straight away if they meet the criteria.
 6. Charge rates between employer and agency: per agreement, per role? (Release 2, invoicing.)
