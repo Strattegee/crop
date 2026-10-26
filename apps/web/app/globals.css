@@ -238,6 +238,14 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-log li { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
 .shift-history li { padding: 4px 0; font-size: 13px; border-top: 1px solid var(--border); }
 @media (max-width: 640px) { .roster-log li { grid-template-columns: 1fr; gap: 2px; } }
+/* Templates and copying (roster): three small forms side by side. */
+.template-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 8px; }
+.template-forms form.form-row { flex-direction: column; align-items: stretch; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 0; }
+.template-forms form.form-row label { flex: 0 0 auto; }
+.template-forms form.form-row .btn { align-self: flex-start; }
+.template-forms h3 { margin: 0 0 4px; font-size: 0.95rem; }
+.template-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.template-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 
 /* Roster day view: a timeline per row (bars placed by start and end time) */
 .ribbon.day { min-width: 760px; }

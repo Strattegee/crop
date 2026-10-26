@@ -16,6 +16,7 @@ import { OfferLinksController } from './roster/offer-links.controller.js';
 import { EquipmentController, EquipmentTypesController, ShiftEquipmentController } from './roster/equipment.controller.js';
 import { EmploymentController, ShiftCodesController, ShiftsController } from './roster/roster.controller.js';
 import { PublishingController } from './roster/publishing.controller.js';
+import { RosterTemplatesController } from './roster/templates.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
 import { CredentialRequirementsController, CredentialTypesController } from './workforce/credential-types.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
@@ -26,7 +27,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
-    EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController,
+    EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
 })
