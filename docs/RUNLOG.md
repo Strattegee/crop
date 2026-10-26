@@ -91,3 +91,4 @@ Newest first. One entry per working session or scheduled run.
 - Words and codes: numbered concepts and screens, per-business words, Settings editor; templates suggest words. Checked locally end to end.
 - David: "the ribbon seems to be missing". Asked which part of the full-screen design he means (likely the left people strip); not started.
 - Ribbon: David confirmed the ribbon is the coloured stage line (booked/assigned/cancelled). Built it plus the left people strip with drag to assign.
+- Platform screen (add businesses, give/change/remove access, audit log) and "Business" instead of "Agency" in the switcher. Standing principle written into WORKING-ALONE.md: finish, then take the next item. Questions for David and Steve listed in the backlog.

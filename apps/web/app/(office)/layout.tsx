@@ -13,7 +13,7 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   if (!current) redirect('/');
   const memberships = user.me.memberships.filter(m => OFFICE_ROLES.includes(m.role));
   const w = await words();
-  const links = FUNCTIONS.map(f => ({ href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label }));
+  const links = FUNCTIONS.filter(f => !('platformOnly' in f) || user.me.platformAdmin).map(f => ({ href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label }));
 
   return (
     <div className="shell">
@@ -34,7 +34,7 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
           {memberships.length > 1 && (
             <form action="/agency" method="post">
               <label style={{ flexDirection: 'row', alignItems: 'center' }}>
-                Agency
+                Business
                 <select name="agency" defaultValue={current.tenantSlug}>
                   {memberships.map(m => <option key={m.tenantSlug} value={m.tenantSlug}>{m.tenantName}</option>)}
                 </select>

@@ -7,6 +7,10 @@ const ROLES = ['owner', 'admin', 'allocator', 'worker', 'client'];
  * invites someone by email. They get access the first time they sign in with that verified email.
  *
  *   node dist/invite-cli.js --tenant cfy --name "Caring For You" --email someone@example.com --role owner
+ *   node dist/invite-cli.js --email someone@example.com --role platform-admin
+ *
+ * platform-admin makes an existing, verified CROP user a Strattegee platform administrator (the
+ * Platform screen: add businesses, manage access). It can only be granted here, never from the app.
  */
 async function main() {
   const args = new Map<string, string>();
@@ -15,6 +19,7 @@ async function main() {
   const slug = args.get('tenant');
   const email = args.get('email')?.trim().toLowerCase();
   const role = args.get('role') ?? 'worker';
+  if (role === 'platform-admin' && email) return grantPlatformAdmin(email);
   if (!slug || !email || !ROLES.includes(role)) {
     throw new Error('usage: --tenant <slug> [--name "Agency name"] --email <address> --role <owner|admin|allocator|worker|client>');
   }
@@ -51,6 +56,21 @@ async function main() {
   } catch (err) {
     await db.query('rollback');
     throw err;
+  } finally {
+    await db.end();
+  }
+}
+
+async function grantPlatformAdmin(email: string) {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL is not set');
+  const db = new Client({ connectionString: url });
+  await db.connect();
+  try {
+    const u = await db.query<{ id: string }>('select id from users where email = $1 and email_verified order by last_seen_at desc limit 1', [email]);
+    if (!u.rows[0]) throw new Error(`${email} has not signed in to CROP with a verified email yet; sign in once, then run this again`);
+    await db.query('insert into platform_admins(user_id) values ($1) on conflict do nothing', [u.rows[0].id]);
+    console.log(`${email} is a platform administrator`);
   } finally {
     await db.end();
   }

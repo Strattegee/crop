@@ -75,8 +75,12 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Still from the design: Draft / Live / History and Publish week; Template stage (grey with "Template"); offered/broadcast stage colour; day totals; needs attention and app requests panels; Cards / Detailed / Simple views; leave lines (Steve's "T" line).
 
 ## From 26 Oct (David testing staging as a café owner)
-- [ ] Platform admin screen for Strattegee: add a business, add and remove people and change roles, without the GitHub workflow. Needs a "remove from business" action (none exists yet).
-- [ ] Rename the top-right "Agency" switcher to "Business" (employer-first).
+- [x] Platform admin screen for Strattegee: add a business, give/change/remove access, audit log (26 Oct). Next: welcome email when access is given (ask David), and a way to rename a business.
+- [x] Rename the top-right "Agency" switcher to "Business" (26 Oct).
 - [ ] Clients page is agency-shaped; small employers may only need Sites. Hide or rename per business (words feature).
 - [ ] Zitadel verification codes don't arrive at strattegee.com (checked junk and archive). Check the Microsoft 365 quarantine and Zitadel's SMTP sender before real staff sign up. Workaround: mark the email verified in the Zitadel console (Users → user → Email).
 - Note: david@strattegee.com has access to Caring For You (since 22 Oct) and The Grand Cafe – Demo (26 Oct), so it shows both.
+
+## Questions for David and Steve (sent 26 Oct; answers go in docs/decisions/)
+- Steve: colour for an offered shift; what Template (grey) shifts are; what the "T" line holds; A/P/N from start time or shift code; does Publish week notify staff and are later changes logged; what sets "Pri" (priority).
+- David: employer and agency in one business (assumed yes); who sets agency escalation times (assumed employer, per request override); what employers see of agency workers (assumed name, role, compliant yes/no); agency nominations booked straight away (assumed yes); light accounts for CFY clients not on CROP (assumed yes); hide Clients for small employers; welcome emails from the Platform screen; Zitadel codes in M365 quarantine; ClickSend number; 26 Oct transcript.
