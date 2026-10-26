@@ -207,3 +207,7 @@ body[data-dragging='person'] .rcard[data-needs-person='1'], body[data-dragging='
 .avail-week { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
 .avail-week label { flex: 1 1 110px; }
 table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
+
+.item-forms { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-width: 520px; }
+.item-forms .form-row { align-items: center; gap: 6px; }
+.bad-text { color: var(--bad); font-weight: 600; }

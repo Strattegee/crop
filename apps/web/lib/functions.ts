@@ -10,6 +10,8 @@ export const FUNCTIONS = [
   { code: 3500, path: '/compliance', label: 'Compliance' },
   { code: 4000, path: '/clients', term: 1015 },
   { code: 4100, path: '/facilities', term: 1020 },
+  { code: 5000, path: '/equipment', term: 1060 },
+  { code: 5500, path: '/items', term: 1070 },
   { code: 6000, path: '/messages', label: 'Messages' },
   { code: 9000, path: '/settings', label: 'Settings' },
   { code: 9900, path: '/platform', label: 'Platform', platformOnly: true },

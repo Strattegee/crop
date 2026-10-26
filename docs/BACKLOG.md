@@ -41,8 +41,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Audit log of office actions (finishes AUTH).
 - [ ] Remove the leftover "Right to work" credential type rows created before right to work had its own section (staging test data only).
 - [ ] Employment records (effective-dated) for workers.
-- [ ] Office screens for items and stock (catalogue, receive, issue, stocktake, low stock): API exists, no web page yet.
-- [ ] Office screens for equipment (register, dates, booking to shifts): the API exists, no web page yet. Comes with or after the roster screen (item 2).
+- [x] Office screens for items and stock (26 Oct). Still to do: transfers between sites, issuing to a shift from the roster panel.
+- [x] Office screens for equipment (26 Oct): register, types, status, dates, upcoming bookings. Booking stays on the roster.
 - [ ] Check other date checks use the business's time zone, not the server's (found 25 Oct: the VEVO "not in the future" check used UTC, so a Melbourne morning entry of today's date was refused; fixed).
 
 ## Later
