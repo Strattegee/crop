@@ -32,6 +32,10 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## Next
 
+- [ ] **Shift duties (conditional requirements).** A shift can carry duties such as "serves alcohol" or "food safety supervisor on site"; a duty adds its own credential requirements, so a waiter with an expired RSA can still work a shift without alcohol service. Also: a site rule that every open shift period needs at least one person holding a credential (e.g. a food safety supervisor on every shift). From the café demo review (26 Oct).
+- [ ] Requirement levels: today hard (blocks) and warning; consider adding recommended/optional (recorded for development, never warns).
+- [ ] Credential records: issuing organisation field.
+
 - [ ] Clients that don't use CROP yet: a simple portal for an agency's clients to order shifts (CFY's current clients). Confirm with David whether this is a light employer account.
 - [ ] Industry packs: healthcare (current starter list), labour hire, construction, hospitality — roles, shift codes, credential types, default rules. Neutral wording in the UI (Client, Site, Area, Role, Shift).
 - [ ] Audit log of office actions (finishes AUTH).
@@ -44,7 +48,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 ## Later
 
 - Expenses and travel claims from the app (with Release 2).
-- Release 2: timesheets, pay and invoice export; agency invoices the employer.
+- Release 2: timesheets, pay and invoice export; agency invoices the employer. Awards and classifications as their own module, separate from job titles (e.g. Restaurant Industry Award vs Fast Food Award), never assumed from the role name.
 - AI auto-fill (intake of requests by email/text, waves of offers) after Release 1.
 
 ## Decisions on 26 Oct
