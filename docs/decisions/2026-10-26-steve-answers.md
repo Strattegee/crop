@@ -23,7 +23,7 @@ Replies to the questions sent on 26 Oct. Their words are kept close; my reading 
 
 7. **Employer and agency in one business: yes.** Agencies are always employers too (internal, casual and bank staff).
 8. **Agency fill timing** depends on urgency; set by the client, with defaults and room for more rules. As given: "If a shift is within two hours (10 minutes) for the same day it would be (2 hours), next day or later (2 hours)."
-   Reading (to confirm): starts within 2 hours → each agency gets 10 minutes; later the same day → 2 hours?; next day or later → 2 hours. **Ask David to confirm the same-day figure.**
+   **Confirmed by David (26 Oct):** defaults per agency before the shift moves to the next one: starts within 2 hours → **10 minutes**; later the same day → **1 hour**; next day or later → **2 hours**. Each client can change these and add their own rules.
 9. **What clients see of agency workers:** everything the agency sees except contracts and agreements with the agency, and it varies by the client user's role (a nurse in charge sees AHPRA registration and supporting documents, not the signed contract). Build: a list of all document types, and for each, who can see it (agency roles, employer roles).
 10. **Agency nominations:** the client chooses: accept automatically (e.g. urgent shifts) or approve first (more notice). Adjustable per client.
 11. **Clients not on CROP: yes,** a light account to order shifts.
