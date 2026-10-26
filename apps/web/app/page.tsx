@@ -44,7 +44,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
             <h2 style={{ fontSize: 18, margin: '0 0 4px' }}>Welcome, {user.me.name ?? user.me.email}</h2>
             <p style={{ margin: '0 0 12px', color: '#5d6775' }}>{user.me.email}</p>
             {user.me.memberships.length === 0 ? (
-              <p>You&apos;re signed in, but you haven&apos;t been given access to an agency yet. Ask your agency to invite this email address.</p>
+              <p>You&apos;re signed in, but you haven&apos;t been given access to a business yet. Ask the business to invite this email address.</p>
             ) : (
               <>
                 <ul style={{ paddingLeft: 20 }}>

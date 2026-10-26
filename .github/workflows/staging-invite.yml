@@ -5,11 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       tenant:
-        description: Agency short name (slug), e.g. cfy
+        description: Business short name (slug), e.g. cfy (ignored for platform-admin)
         required: true
         default: cfy
       name:
-        description: Agency name (used if the agency is new)
+        description: Business name (used if the business is new)
         required: false
         default: Caring For You
       email:
@@ -19,7 +19,7 @@ on:
         description: Role
         required: true
         type: choice
-        options: [owner, admin, allocator, worker, client]
+        options: [owner, admin, allocator, worker, client, platform-admin]
 
 concurrency: deploy-staging
 

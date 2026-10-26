@@ -2,10 +2,14 @@
 
 David wants Claude to keep building CROP while he is away, using its judgement about what needs his approval. A scheduled task starts a fresh session every few hours with these instructions. Read `CLAUDE.md` and `docs/BACKLOG.md` first.
 
+## Standing principle (David, 26 Oct)
+
+Keep going. When an item is finished, look at what's left and start the next one without waiting to be asked. This applies to scheduled runs and to sessions with David alike. Stop only for the "Hold for David" list below. Collect questions for David or Steve in the backlog under "Questions for David and Steve" rather than stopping to ask. A run ends only when its time is up or every remaining item is held.
+
 ## Each run
 
 1. `git fetch` and start from the latest `main`. List open pull requests (`gh api repos/Strattegee/crop/pulls`). If one is open from an earlier run, finish it first (fix CI, then merge) rather than starting something new.
-2. Take the top unfinished item in `docs/BACKLOG.md` that isn't waiting on someone. Big items: do a coherent, shippable slice (for example, the data model and API with tests), and leave the rest of the item described in the backlog.
+2. Take the top unfinished item in `docs/BACKLOG.md` that isn't waiting on someone, and when it ships, take the next one (see the standing principle). Big items: do a coherent, shippable slice (for example, the data model and API with tests), and leave the rest of the item described in the backlog.
 3. Build on a branch, with tests. Run `pnpm -r build && pnpm typecheck && pnpm test` (start Postgres with `service postgresql start` if needed). For UI changes, check the page renders (Playwright against a local stack) before shipping.
 4. Open a pull request with a plain-English description, wait for CI, merge when green. Merging to `main` deploys to staging; wait for the "Deploy staging" run and check it succeeded.
 5. Update `docs/BACKLOG.md` (tick, add discoveries) and `CLAUDE.md` (new conventions) in the same pull request.

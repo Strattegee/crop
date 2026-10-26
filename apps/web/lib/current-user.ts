@@ -8,6 +8,8 @@ export interface Me {
   email: string;
   name: string | null;
   memberships: { tenantSlug: string; tenantName: string; role: string }[];
+  /** Strattegee staff who can see the Platform screen. */
+  platformAdmin?: boolean;
 }
 
 export type CurrentUser =

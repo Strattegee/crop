@@ -37,8 +37,11 @@ export class AuthGuard implements CanActivate {
       | { id: string; email: string; display_name: string | null } | undefined;
     let memberships = user ? await this.memberships(user.id) : [];
 
-    // New user, or one with no agency yet (an invitation may have arrived since): refresh from the identity provider.
-    if (!user || memberships.length === 0) {
+    // New user, one with no business yet, or one with an invitation waiting: refresh from the identity provider
+    // (invitations are only accepted when it says the email is verified).
+    const waiting = !!user && memberships.length > 0
+      && (await this.pool.query<{ w: boolean }>('select app_user_has_invite($1) as w', [user.id])).rows[0]?.w;
+    if (!user || memberships.length === 0 || waiting) {
       const p = await this.verifier.profile(token);
       if (p.subject !== claims.sub) throw new UnauthorizedException('profile does not match token');
       user = (await this.pool.query('select * from app_sign_in($1, $2, $3, $4)', [p.subject, p.email, p.emailVerified, p.name])).rows[0];
@@ -48,15 +51,15 @@ export class AuthGuard implements CanActivate {
     const noTenant = this.reflector.getAllAndOverride<boolean>(NO_TENANT, targets);
     let tenant: Membership | null = null;
     if (!noTenant) {
-      if (memberships.length === 0) throw new ForbiddenException('you have not been given access to an agency yet');
+      if (memberships.length === 0) throw new ForbiddenException('you have not been given access to a business yet');
       const wanted = req.headers['x-tenant'];
       if (typeof wanted === 'string' && wanted) {
         tenant = memberships.find(m => m.tenantSlug === wanted) ?? null;
-        if (!tenant) throw new ForbiddenException('you do not have access to that agency');
+        if (!tenant) throw new ForbiddenException('you do not have access to that business');
       } else if (memberships.length === 1) {
         tenant = memberships[0];
       } else {
-        throw new BadRequestException('choose an agency with the x-tenant header');
+        throw new BadRequestException('choose a business with the x-tenant header');
       }
       const roles = this.reflector.getAllAndOverride<MemberRole[] | undefined>(ROLES, targets);
       if (roles && !roles.includes(tenant.role)) throw new ForbiddenException('your role does not allow this');
