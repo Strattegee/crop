@@ -16,6 +16,20 @@ export async function addWorker(f: FormData) {
   } catch (err) {
     failTo('/workers', err);
   }
+  // Optional employment from today (the business's date): full-time, part-time, casual or bank, with hours a week.
+  const employmentType = str(f, 'employmentType');
+  if (employmentType) {
+    const hours = str(f, 'contractedHours');
+    try {
+      const { timezone } = await api<{ timezone?: string }>('/settings');
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'Australia/Melbourne' }).format(new Date());
+      await api(`/workers/${id}/employment`, { method: 'POST', body: { employmentType, contractedHours: hours === undefined ? null : Number(hours), startsOn: today } });
+    } catch (err) {
+      if (err && typeof err === 'object' && 'digest' in err) throw err; // Next.js redirect (e.g. to sign in)
+      const why = err instanceof Error ? err.message : 'Something went wrong';
+      redirect(`/workers/${id}?error=${encodeURIComponent(`Worker added, but their employment wasn't saved: ${why}`)}`);
+    }
+  }
   redirect(`/workers/${id}?done=${encodeURIComponent('Worker added. Now add their credentials.')}`);
 }
 

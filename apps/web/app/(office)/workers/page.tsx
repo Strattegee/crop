@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
+import { currentAgency } from '../../../lib/current-user';
 import { Badge, COMPLIANCE_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
 import { addWorker } from './actions';
@@ -19,7 +20,9 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   if (p.search) qs.set('search', p.search);
   if (p.compliance) qs.set('compliance', p.compliance);
   if (p.status) qs.set('status', p.status);
-  const workers = await api<Worker[]>(`/workers?${qs}`);
+  const [workers, agency] = await Promise.all([api<Worker[]>(`/workers?${qs}`), currentAgency()]);
+  // Employment terms are set by owners and admins.
+  const canSetEmployment = agency?.role === 'owner' || agency?.role === 'admin';
 
   return (
     <>
@@ -35,6 +38,15 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           <label>Email<input name="email" type="email" maxLength={200} /></label>
           <label>Mobile<input name="phone" maxLength={30} /></label>
           <label>Roles<input name="roles" placeholder="e.g. RN, EN, AIN" maxLength={200} /></label>
+          {canSetEmployment && <>
+            <label>Employment
+              <select name="employmentType" defaultValue="">
+                <option value="">Not yet</option><option value="full_time">Full-time</option><option value="part_time">Part-time</option>
+                <option value="casual">Casual</option><option value="bank">Bank (relief pool)</option>
+              </select>
+            </label>
+            <label>Hours a week<input name="contractedHours" type="number" min={0} max={80} step={0.25} placeholder="If set" /></label>
+          </>}
           <button type="submit" className="btn">Add worker</button>
         </form>
       </details>
