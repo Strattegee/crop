@@ -12,6 +12,12 @@ export interface NewNotification {
   createdBy?: string | null;
 }
 
+/** Reserved example domains (RFC 2606): invented demo people use these, and they can never receive mail. */
+export function isExampleAddress(email: string) {
+  const domain = email.trim().toLowerCase().split('@')[1] ?? '';
+  return /^(example\.(com|org|net)|.+\.(example|test|invalid|localhost))$/.test(domain);
+}
+
 export type QueueResult = { id: string; status: 'queued' | 'skipped'; reason?: string } | { id: null; status: 'duplicate' };
 
 /**
@@ -19,11 +25,16 @@ export type QueueResult = { id: string; status: 'queued' | 'skipped'; reason?: s
  * - SMS numbers must be Australian mobiles.
  * - Over the agency's monthly SMS limit, the message is logged as skipped instead of sent (NOT-4).
  * - A dedupeKey that was used before means the message was already queued, so nothing happens.
+ * - With real email delivery on (RESEND_API_KEY), email to example addresses (demo people) is logged as skipped.
  */
 export async function queueNotification(db: PoolClient, tenantId: string, n: NewNotification): Promise<QueueResult> {
   let to = n.to.trim();
   let status: 'queued' | 'skipped' = 'queued';
   let reason: string | null = null;
+  if (n.channel === 'email' && process.env.RESEND_API_KEY && isExampleAddress(to)) {
+    status = 'skipped';
+    reason = 'Demo person (example address): not sent';
+  }
   if (n.channel === 'sms') {
     const mobile = auMobile(to);
     if (!mobile) {
