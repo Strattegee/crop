@@ -14,5 +14,6 @@ export const FUNCTIONS = [
   { code: 5500, path: '/items', term: 1070 },
   { code: 6000, path: '/messages', label: 'Messages' },
   { code: 9000, path: '/settings', label: 'Settings' },
+  { code: 9100, path: '/settings/shift-types', label: 'Shift types', subPage: true },
   { code: 9900, path: '/platform', label: 'Platform', platformOnly: true },
 ] as const;

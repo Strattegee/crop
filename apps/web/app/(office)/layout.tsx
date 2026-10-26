@@ -13,7 +13,7 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   if (!current) redirect('/');
   const memberships = user.me.memberships.filter(m => OFFICE_ROLES.includes(m.role));
   const w = await words();
-  const links = FUNCTIONS.filter(f => !('platformOnly' in f) || user.me.platformAdmin).map(f => ({ href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label }));
+  const links = FUNCTIONS.filter(f => !('subPage' in f) && (!('platformOnly' in f) || user.me.platformAdmin)).map(f => ({ href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label }));
 
   return (
     <div className="shell">

@@ -99,3 +99,10 @@ Newest first. One entry per working session or scheduled run.
 - Equipment and Items pages: the register with dates and status, and stock per site with receive, issue and stocktake.
 - Ribbon colours to Steve's scheme (unfilled grey, offered pale yellow, allocated darker yellow, pulled out purple, booked green, cancelled red; pink reserved for approve-first). "They pulled out" button on the shift panel.
 - Welcome emails from the Platform screen (with the sign-in link and their role), logged in the business's Messages.
+
+## 2026-10-26 evening (scheduled run)
+
+- Shipped: shift types (Steve's answer 4; backlog item 2). Each business now sets its own usual shifts on Settings → Shift types: a letter (for example D, or AM / PM / NS on a ward), a name and the standard hours and break. Owners and admins can add, change and switch them off. The letter shows on every shift on the roster; shifts without one still show A, P or N from the start time. Changing the hours only affects shifts added afterwards. Industry templates now come with letters.
+- Next: the rest of the roster screen (item 2): Draft / Live / History with a change log, then day and month views, then roster templates.
+- Waiting on David: nothing new.
+

@@ -208,4 +208,28 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     await http().post('/shifts').set(as('other')).send({ facilityId: site, role: 'Chef', date: '2026-11-02', startTime: '09:00', endTime: '17:00' }).expect(400);
     await http().get(`/workers/${ana}/employment`).set(as('other')).expect(404);
   });
+
+  it('shift types carry a letter for the roster, and edits only affect new shifts', async () => {
+    await http().post('/shift-codes').set(as('admin')).send({ code: 'DAY', letter: 'Day!', startTime: '07:00', endTime: '15:30' }).expect(400);
+    const created = await http().post('/shift-codes').set(as('admin')).send({ code: 'DAY', name: 'Day shift', letter: 'd', startTime: '07:00', endTime: '15:30', breakMinutes: 30 }).expect(201);
+    expect(created.body).toMatchObject({ code: 'DAY', letter: 'D', startTime: '07:00', endTime: '15:30', breakMinutes: 30 });
+    const dayCode = created.body.id;
+    const before = await http().post('/shifts').set(as('alloc')).send({ facilityId: site, shiftCodeId: dayCode, role: 'Chef', date: '2026-11-20' }).expect(201);
+
+    await http().patch(`/shift-codes/${dayCode}`).set(as('alloc')).send({ letter: 'X' }).expect(403);
+    await http().patch(`/shift-codes/${dayCode}`).set(as('admin')).send({ startTime: '15:30' }).expect(400);
+    const edited = await http().patch(`/shift-codes/${dayCode}`).set(as('admin')).send({ letter: 'ns', startTime: '06:00', endTime: '14:30', breakMinutes: 0 }).expect(200);
+    expect(edited.body).toMatchObject({ code: 'DAY', name: 'Day shift', letter: 'NS', startTime: '06:00', endTime: '14:30', breakMinutes: 0 });
+
+    // The shift already on the roster keeps its times; it shows the type's current letter.
+    const old = await http().get(`/shifts/${before.body.ids[0]}`).set(as('alloc')).expect(200);
+    expect(old.body).toMatchObject({ localStart: '07:00', localEnd: '15:30', shiftCode: 'DAY', shiftLetter: 'NS' });
+    const after = await http().post('/shifts').set(as('alloc')).send({ facilityId: site, shiftCodeId: dayCode, role: 'Chef', date: '2026-11-21' }).expect(201);
+    expect((await http().get(`/shifts/${after.body.ids[0]}`).set(as('alloc')).expect(200)).body).toMatchObject({ localStart: '06:00', localEnd: '14:30' });
+
+    // A blank letter clears it; leaving it out keeps it.
+    expect((await http().patch(`/shift-codes/${dayCode}`).set(as('admin')).send({ name: 'Day' }).expect(200)).body.letter).toBe('NS');
+    expect((await http().patch(`/shift-codes/${dayCode}`).set(as('admin')).send({ letter: '' }).expect(200)).body.letter).toBeNull();
+    await http().patch(`/shift-codes/${dayCode}`).set(as('other')).send({ letter: 'Z' }).expect(404);
+  });
 });

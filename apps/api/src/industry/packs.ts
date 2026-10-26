@@ -9,7 +9,7 @@ export type ItemCategory = 'ppe' | 'fuel' | 'sundries' | 'tools' | 'other';
 
 export interface PackCredential { name: string; category: Category; number: boolean; expiry: boolean; method: string }
 export interface PackRole { name: string; area: string; must?: string[]; should?: string[] }
-export interface PackShiftCode { code: string; name: string; start: string; end: string; breakMinutes: number }
+export interface PackShiftCode { code: string; letter?: string; name: string; start: string; end: string; breakMinutes: number }
 export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string }
 export interface PackItem { name: string; category: ItemCategory; unit: string; costCents: number; reorderLevel?: number }
 export interface IndustryPack {
@@ -63,9 +63,9 @@ export const PACKS: IndustryPack[] = [
       { name: 'Ward Clerk', area: 'Ward', must: ['National Police Check'] },
     ],
     shiftCodes: [
-      { code: 'AM', name: 'Morning', start: '07:00', end: '15:30', breakMinutes: 30 },
-      { code: 'PM', name: 'Afternoon', start: '13:30', end: '22:00', breakMinutes: 30 },
-      { code: 'ND', name: 'Night duty', start: '21:30', end: '07:30', breakMinutes: 30 },
+      { code: 'AM', letter: 'AM', name: 'Morning', start: '07:00', end: '15:30', breakMinutes: 30 },
+      { code: 'PM', letter: 'PM', name: 'Afternoon', start: '13:30', end: '22:00', breakMinutes: 30 },
+      { code: 'ND', letter: 'ND', name: 'Night duty', start: '21:30', end: '07:30', breakMinutes: 30 },
     ],
     equipmentTypes: [{ name: 'Pool car', operatorCredential: 'Driver Licence (C, car)' }, { name: 'Patient lifter', note: 'Track service and test-and-tag dates' }],
     items: [
@@ -109,11 +109,11 @@ export const PACKS: IndustryPack[] = [
       { name: 'Administration Officer', area: 'Back Office' },
     ],
     shiftCodes: [
-      { code: 'EARLY', name: 'Breakfast', start: '06:30', end: '14:30', breakMinutes: 30 },
-      { code: 'MID', name: 'Lunch', start: '10:00', end: '16:00', breakMinutes: 30 },
-      { code: 'CLOSE', name: 'Dinner', start: '15:30', end: '22:30', breakMinutes: 30 },
-      { code: 'K-AM', name: 'Kitchen early', start: '06:00', end: '14:00', breakMinutes: 30 },
-      { code: 'K-PM', name: 'Kitchen late', start: '14:00', end: '22:00', breakMinutes: 30 },
+      { code: 'EARLY', letter: 'E', name: 'Breakfast', start: '06:30', end: '14:30', breakMinutes: 30 },
+      { code: 'MID', letter: 'M', name: 'Lunch', start: '10:00', end: '16:00', breakMinutes: 30 },
+      { code: 'CLOSE', letter: 'C', name: 'Dinner', start: '15:30', end: '22:30', breakMinutes: 30 },
+      { code: 'K-AM', letter: 'KE', name: 'Kitchen early', start: '06:00', end: '14:00', breakMinutes: 30 },
+      { code: 'K-PM', letter: 'KL', name: 'Kitchen late', start: '14:00', end: '22:00', breakMinutes: 30 },
     ],
     equipmentTypes: [
       { name: 'Catering van', operatorCredential: 'Driver Licence (C, car)' },
@@ -164,9 +164,9 @@ export const PACKS: IndustryPack[] = [
       { name: 'Yard Hand', area: 'Yard', must: ['White Card (General Construction Induction)'], should: ['High Risk Work Licence: Forklift (LF)'] },
     ],
     shiftCodes: [
-      { code: 'DAY', name: 'Day', start: '07:00', end: '15:30', breakMinutes: 30 },
-      { code: 'EARLY', name: 'Early start', start: '06:00', end: '14:30', breakMinutes: 30 },
-      { code: 'NIGHT', name: 'Night works', start: '19:00', end: '05:00', breakMinutes: 30 },
+      { code: 'DAY', letter: 'D', name: 'Day', start: '07:00', end: '15:30', breakMinutes: 30 },
+      { code: 'EARLY', letter: 'E', name: 'Early start', start: '06:00', end: '14:30', breakMinutes: 30 },
+      { code: 'NIGHT', letter: 'N', name: 'Night works', start: '19:00', end: '05:00', breakMinutes: 30 },
     ],
     equipmentTypes: [
       { name: 'Excavator (5 t)', operatorCredential: 'Plant Ticket: Excavator (VOC)' },
@@ -221,9 +221,9 @@ export const PACKS: IndustryPack[] = [
       { name: 'Delivery Driver', area: 'Dispatch', must: ['Driver Licence (C, car)'], should: ['National Police Check'] },
     ],
     shiftCodes: [
-      { code: 'DAY', name: 'Day', start: '06:00', end: '14:30', breakMinutes: 30 },
-      { code: 'ARVO', name: 'Afternoon', start: '14:00', end: '22:30', breakMinutes: 30 },
-      { code: 'NIGHT', name: 'Night', start: '22:00', end: '06:30', breakMinutes: 30 },
+      { code: 'DAY', letter: 'D', name: 'Day', start: '06:00', end: '14:30', breakMinutes: 30 },
+      { code: 'ARVO', letter: 'A', name: 'Afternoon', start: '14:00', end: '22:30', breakMinutes: 30 },
+      { code: 'NIGHT', letter: 'N', name: 'Night', start: '22:00', end: '06:30', breakMinutes: 30 },
     ],
     equipmentTypes: [
       { name: 'Counterbalance forklift', operatorCredential: 'High Risk Work Licence: Forklift (LF)' },
@@ -266,8 +266,8 @@ export const PACKS: IndustryPack[] = [
       { name: 'Traffic Planner', area: 'Depot', must: ['Traffic Management Design / Planning'] },
     ],
     shiftCodes: [
-      { code: 'DAY', name: 'Day works', start: '07:00', end: '15:30', breakMinutes: 30 },
-      { code: 'NIGHT', name: 'Night works', start: '20:00', end: '05:00', breakMinutes: 30 },
+      { code: 'DAY', letter: 'D', name: 'Day works', start: '07:00', end: '15:30', breakMinutes: 30 },
+      { code: 'NIGHT', letter: 'N', name: 'Night works', start: '20:00', end: '05:00', breakMinutes: 30 },
     ],
     equipmentTypes: [
       { name: 'TMA truck', operatorCredential: 'Truck Mounted Attenuator (TMA) Training' },
@@ -299,8 +299,8 @@ export const PACKS: IndustryPack[] = [
       { name: 'Floor Technician', area: 'Client site', must: ['Floor Machine Competency', 'Chemical Handling (SDS) Training'] },
     ],
     shiftCodes: [
-      { code: 'EARLY', name: 'Early clean', start: '05:00', end: '09:00', breakMinutes: 0 },
-      { code: 'EVE', name: 'Evening clean', start: '17:00', end: '21:00', breakMinutes: 0 },
+      { code: 'EARLY', letter: 'E', name: 'Early clean', start: '05:00', end: '09:00', breakMinutes: 0 },
+      { code: 'EVE', letter: 'EV', name: 'Evening clean', start: '17:00', end: '21:00', breakMinutes: 0 },
     ],
     equipmentTypes: [
       { name: 'Ride-on floor scrubber', operatorCredential: 'Floor Machine Competency' },
@@ -331,9 +331,9 @@ export const PACKS: IndustryPack[] = [
       { name: 'Security Supervisor', area: 'Client site', must: ['Security Licence: Security Guard', 'First Aid (HLTAID011)'] },
     ],
     shiftCodes: [
-      { code: 'D12', name: 'Day (12 h)', start: '07:00', end: '19:00', breakMinutes: 30 },
-      { code: 'N12', name: 'Night (12 h)', start: '19:00', end: '07:00', breakMinutes: 30 },
-      { code: 'VENUE', name: 'Venue night', start: '20:00', end: '03:00', breakMinutes: 0 },
+      { code: 'D12', letter: 'D', name: 'Day (12 h)', start: '07:00', end: '19:00', breakMinutes: 30 },
+      { code: 'N12', letter: 'N', name: 'Night (12 h)', start: '19:00', end: '07:00', breakMinutes: 30 },
+      { code: 'VENUE', letter: 'V', name: 'Venue night', start: '20:00', end: '03:00', breakMinutes: 0 },
     ],
     equipmentTypes: [{ name: 'Patrol car', operatorCredential: 'Driver Licence (C, car)' }, { name: 'Two-way radio', note: 'Issue per shift' }],
     items: [{ name: 'Body-worn camera batteries', category: 'tools', unit: 'each', costCents: 4500, reorderLevel: 4 }, { name: 'Security uniform shirt', category: 'ppe', unit: 'each', costCents: 4200, reorderLevel: 6 }],
