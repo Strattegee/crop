@@ -134,3 +134,13 @@ label.inline input[type='checkbox'] { margin: 0; }
 .roster-legend .sw.assigned { border: 1px solid #9cc0d9; background: #fff; }
 .roster-legend .sw.open { border: 1.5px dashed var(--warn); background: #fff; }
 .small { font-size: 12px; }
+
+/* Offer link page (no sign-in), phone first */
+.offer-page { max-width: 480px; margin: 0 auto; padding: 24px 16px; }
+.offer-brand { font-weight: 700; letter-spacing: 0.08em; color: var(--brand); margin: 0 0 12px; }
+.offer-page h1 { font-size: 21px; margin: 4px 0 12px; }
+.offer-shift { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 16px; font-size: 15px; }
+.offer-shift dt { color: var(--muted); }
+.offer-shift dd { margin: 0; font-weight: 600; }
+.offer-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.offer-actions .btn { flex: 1 1 140px; padding: 12px 16px; font-size: 16px; }

@@ -21,7 +21,7 @@ type FacilityDetail = Facility & { areas: { id: string; name: string; active: bo
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; startTime: string; endTime: string; active: boolean };
 type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
-type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string };
+type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -156,6 +156,7 @@ export default async function RosterPage({ searchParams }: {
   }
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
   const pendingOffers = offers.filter(o => o.status === 'pending');
+  const declinedOffers = offers.filter(o => o.status === 'declined');
 
   return (
     <div className="roster-page">
@@ -352,6 +353,11 @@ export default async function RosterPage({ searchParams }: {
                           </div>
                         ))}
                       </div>
+                    )}
+                    {declinedOffers.length > 0 && (
+                      <p className="muted small" style={{ margin: 0 }}>
+                        Said no: {declinedOffers.map(o => `${o.workerName ?? o.name ?? ''}${o.respondedVia === 'link' ? ' (by link)' : ''}`).join(', ')}
+                      </p>
                     )}
                     {bankReady.length > 0 && (
                       <form action={offer.bind(null, selected.id)} className="bankfill">

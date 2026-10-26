@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { offerMessage, offerState, shiftLabel } from '../src/roster/bank-fill.js';
+import { hashLinkToken, LINK_TOKEN, newOfferLink, offerLinkUrl, offerMessage, offerState, shiftLabel } from '../src/roster/bank-fill.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('bank fill: pure helpers', () => {
@@ -17,6 +17,17 @@ describe('bank fill: pure helpers', () => {
     const m = offerMessage('Ana', 'Demo Cafe', { ...s, areaName: null }, '3:30 pm Mon 2 Nov');
     expect(m.sms).toBe('Hi Ana, Demo Cafe has a shift for you: Mon 2 Nov, 07:00–15:30, Chef at Harbour Kitchen. Contact Demo Cafe if you\'d like it; the first to accept gets it. The offer is open until 3:30 pm Mon 2 Nov.');
     expect(m.subject).toBe('Shift available: Mon 2 Nov 07:00–15:30');
+  });
+  it('puts a one-off link in the offer when there is one', () => {
+    const m = offerMessage('Ana', 'Demo Cafe', s, null, 'https://crop.test/offer/abc');
+    expect(m.sms).toBe('Hi Ana, Demo Cafe has a shift for you: Mon 2 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen). Accept or decline: https://crop.test/offer/abc (first to accept gets it).');
+    expect(m.email).toContain("Accept or decline here: https://crop.test/offer/abc");
+    const a = newOfferLink();
+    const b = newOfferLink();
+    expect(LINK_TOKEN.test(a.token)).toBe(true);
+    expect(a.token).not.toBe(b.token);
+    expect(hashLinkToken(a.token).equals(a.hash)).toBe(true);
+    expect(offerLinkUrl('https://x.test/', a.token)).toBe(`https://x.test/offer/${a.token}`);
   });
   it('shows a pending offer past its time as expired', () => {
     const now = new Date('2026-11-01T00:00:00Z');
@@ -182,6 +193,70 @@ describe('bank fill: offers, first to accept is booked', () => {
     const s = (await http().post('/shifts').set(as('alloc')).send({ facilityId: site, equipmentOnly: true, date: '2026-11-10', startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
     expect((await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body.candidates).toEqual([]);
     await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana] }).expect(409);
+  });
+
+  it('lets people accept or decline from the link in their message, without signing in', async () => {
+    process.env.APP_URL = 'https://crop.test/';
+    try {
+      const s = await shift('2026-11-12');
+      await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, ben] }).expect(201);
+      const sent = (await owner.query<{ channel: string; to_address: string; body: string }>(
+        `select n.channel, n.to_address, n.body from notifications n where template = 'shift_offer' and body like '%https://crop.test/offer/%' order by channel, to_address`)).rows;
+      expect(sent.map(m => [m.channel, m.to_address])).toEqual([['email', 'ana@example.com'], ['email', 'ben@example.com'], ['sms', '+61491570156']]);
+      const tokenIn = (body: string) => /https:\/\/crop\.test\/offer\/([A-Za-z0-9_-]{43})/.exec(body)![1];
+      const anaTok = tokenIn(sent[0].body);
+      const benTok = tokenIn(sent[1].body);
+      expect(tokenIn(sent[2].body)).toBe(anaTok); // one link per person and offer
+      expect(anaTok).not.toBe(benTok);
+      expect(sent[2].body).toContain('Accept or decline: https://crop.test/offer/');
+      // Only a hash is stored.
+      const stored = (await owner.query<{ link_hash: Buffer }>('select link_hash from shift_offers where shift_id = $1', [s])).rows;
+      expect(stored.every(r => r.link_hash?.length === 32)).toBe(true);
+      expect(stored.some(r => r.link_hash.toString('base64url') === anaTok)).toBe(false);
+
+      expect((await http().get('/offer-links/nope').expect(404)).body.message).toMatch(/isn't valid/);
+      await http().get(`/offer-links/${'A'.repeat(43)}`).expect(404);
+      await http().post(`/offer-links/${'A'.repeat(43)}/accept`).expect(404);
+
+      const view = (await http().get(`/offer-links/${anaTok}`).expect(200)).body;
+      expect(view).toMatchObject({ business: 'Demo Cafe', firstName: 'Ana', status: 'pending', shift: { label: 'Thu 12 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)' } });
+      expect(JSON.stringify(view)).not.toContain('Example'); // first name only, nothing about anyone else
+      expect((await http().get(`/offer-links/${anaTok}`).expect(200)).body.status).toBe('pending'); // opening the link changes nothing
+
+      expect((await http().post(`/offer-links/${benTok}/decline`).expect(200)).body.status).toBe('declined');
+      expect((await http().post(`/offer-links/${benTok}/decline`).expect(409)).body.message).toBe("You've already said no to this shift");
+      expect((await http().post(`/offer-links/${benTok}/accept`).expect(409)).body.message).toBe('This offer is closed');
+
+      const ok = (await http().post(`/offer-links/${anaTok}/accept`).expect(200)).body;
+      expect(ok.status).toBe('accepted');
+      const after = (await http().get(`/shifts/${s}/offers`).set(as('alloc')).expect(200)).body;
+      expect(after.map((o: { status: string; respondedVia: string }) => [o.status, o.respondedVia]).sort()).toEqual([['accepted', 'link'], ['declined', 'link']]);
+      const a = (await owner.query('select status, assigned_by, worker_id from shift_assignments where shift_id = $1', [s])).rows[0];
+      expect(a).toMatchObject({ status: 'confirmed', assigned_by: null, worker_id: ana });
+      expect((await http().post(`/offer-links/${anaTok}/accept`).expect(409)).body.message).toBe("You've already accepted this shift");
+      expect((await http().post(`/offer-links/${anaTok}/decline`).expect(409)).body.message).toBe('This offer is closed');
+
+      // An expired link can't be used.
+      const s2 = await shift('2026-11-13');
+      await http().post(`/shifts/${s2}/offers`).set(as('alloc')).send({ workerIds: [ben], expiresInMinutes: 30 }).expect(201);
+      const benTok2 = tokenIn((await owner.query<{ body: string }>(
+        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 13 Nov%'`)).rows[0].body);
+      await owner.query(`update shift_offers set expires_at = now() - interval '1 minute' where shift_id = $1`, [s2]);
+      expect((await http().get(`/offer-links/${benTok2}`).expect(200)).body.status).toBe('expired');
+      expect((await http().post(`/offer-links/${benTok2}/accept`).expect(409)).body.message).toBe("This offer has expired. Contact Demo Cafe if you'd still like the shift.");
+      expect((await http().post(`/offer-links/${benTok2}/decline`).expect(409)).body.message).toBe('This offer has expired');
+
+      // If they can no longer be booked, they get a plain message, not the detail of their records.
+      const s3 = await shift('2026-11-16', '07:00', '15:00');
+      await http().post(`/shifts/${s3}/offers`).set(as('alloc')).send({ workerIds: [ben] }).expect(201);
+      const benTok3 = tokenIn((await owner.query<{ body: string }>(
+        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Mon 16 Nov%'`)).rows[0].body);
+      const clash = await shift('2026-11-16', '10:00', '18:00');
+      await http().post(`/shifts/${clash}/assign`).set(as('alloc')).send({ workerId: ben }).expect(200);
+      expect((await http().post(`/offer-links/${benTok3}/accept`).expect(409)).body.message).toBe("You can't be booked for this shift right now. Contact Demo Cafe to sort it out.");
+    } finally {
+      delete process.env.APP_URL;
+    }
   });
 
   it('keeps offers to the business and never deletes them', async () => {
