@@ -268,7 +268,7 @@ export class ShiftsController {
     )).rows);
   }
 
-  /** The roster for a period: shifts plus each active worker's terms and hours rostered. */
+  /** The roster for a period: shifts plus each active worker's terms and hours rostered. `cancelled=true` includes cancelled shifts (the pink ribbon). */
   @Roles(...OFFICE_ROLES)
   @Get('roster')
   roster(@Tenant() t: Membership, @Query() q: Record<string, string>) {
@@ -278,8 +278,8 @@ export class ShiftsController {
       const shifts = (await db.query(
         `select ${SHIFT_COLS} from ${SHIFT_FROM}
           where (s.starts_at at time zone f.timezone)::date between $1 and $2 and ($3::uuid is null or s.facility_id = $3)
-            and s.status <> 'cancelled'
-          order by s.starts_at, f.name, a.name nulls first, s.role`, [from, to, facilityId])).rows;
+            and ($4 or s.status <> 'cancelled')
+          order by s.starts_at, f.name, a.name nulls first, s.role`, [from, to, facilityId, q.cancelled === 'true'])).rows;
       const people = (await db.query(
         `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles,
                 et.employment_type as "employmentType", et.contracted_hours::float8 as "contractedHours",

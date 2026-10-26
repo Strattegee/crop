@@ -82,3 +82,4 @@ Newest first. One entry per working session or scheduled run.
 ## 26 Oct, afternoon (interactive)
 - Words and codes: numbered concepts and screens, per-business words, Settings editor; templates suggest words. Checked locally end to end.
 - David: "the ribbon seems to be missing". Asked which part of the full-screen design he means (likely the left people strip); not started.
+- Ribbon: David confirmed the ribbon is the coloured stage line (booked/assigned/cancelled). Built it plus the left people strip with drag to assign.
