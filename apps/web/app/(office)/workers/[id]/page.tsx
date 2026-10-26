@@ -12,6 +12,7 @@ import {
 import { DocLink } from '../../../../lib/doc-link';
 import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
+import { AvailabilityCard } from './availability-card';
 import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
@@ -44,8 +45,9 @@ export default async function WorkerPage({ params, searchParams }: {
 }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [w, types, agency, rtw] = await Promise.all([
+  const [w, types, agency, rtw, avail] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
+    api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),
   ]);
   const r = rtw.current;
   const canVerify = agency?.role === 'owner' || agency?.role === 'admin';
@@ -74,6 +76,8 @@ export default async function WorkerPage({ params, searchParams }: {
         </div>
       )}
 
+
+      {avail && <AvailabilityCard workerId={id} a={avail} canApprove={canVerify} />}
 
       <div className="card">
         <h2>Right to work</h2>
