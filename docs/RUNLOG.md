@@ -119,3 +119,10 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: Day and month views of the roster (backlog item 2). A Day / Week / Month switch sits next to the arrows. Day shows one day hour by hour: each shift is a bar from its start to its finish (night shifts run past midnight, overlapping shifts stack), with the same side panel and drag and drop as the week. Month is a calendar: each day shows how many shifts are filled, the hours, how many are still open and who's on leave, and each week shows whether it's draft, live or history. Clicking a day opens it; clicking a week opens the week. Day headings in the week view now open that day too.
 - Next: roster templates (Steve's "ideal week": save a week as a template, apply it, or copy the previous week), then the after-publishing settings.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
+
+## 2026-10-27 morning (scheduled run)
+
+- Merged the day and month views left open by the previous run (CI was green; staging deploy succeeded).
+- Shipped: roster templates and copying a week (backlog item 2, Steve's "ideal week"). On the roster, "Templates and copying" lets the office save a site's week as a template, fill any week from a template, or copy last week (or any week). Each shift gets its usual person where they can work it (waiting for them to confirm); anyone who can't (on leave, already rostered, missing a credential) leaves the shift open and the office is told why. A week that already has shifts isn't doubled unless the office ticks "Add to the shifts already there", and weeks that are over can't be filled. Shift times stay the same across the daylight saving change.
+- Next: the after-publishing settings (approved changes, lock), then a screen for employment terms; carrying equipment over with a template later.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

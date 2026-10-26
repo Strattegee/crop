@@ -3,7 +3,8 @@ import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
-  assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, publishWeek, recordReply, removeEquipment, unassign,
+  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyWeek, createShifts, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  recordReply, removeEquipment, saveTemplate, unassign,
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
@@ -35,6 +36,8 @@ type Change = { id: string; kind: string; summary: string; afterPublish: boolean
 const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
 const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(t));
 const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
+/** A saved usual week for one site (migration 0023). */
+type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; createdByName: string | null };
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -68,6 +71,7 @@ function band(s: Shift) {
 const LETTER: Record<string, string> = { am: 'A', pm: 'P', nd: 'N' };
 /** Height of one lane of bars in the day timeline. */
 const LANE_PX = 60;
+const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
@@ -95,7 +99,7 @@ export default async function RosterPage({ searchParams }: {
 
   const showLog = sp.log === '1' && span !== 'month';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -103,6 +107,7 @@ export default async function RosterPage({ searchParams }: {
     api<Week[]>(`/roster/weeks?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]),
     showLog ? api<Change[]>(`/roster/changes?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     Promise.all(monthWeeks.map(w => api<Week[]>(`/roster/weeks?weekStart=${w[0]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]))),
+    span === 'month' ? Promise.resolve([] as Template[]) : api<Template[]>(`/roster/templates${site ? `?facilityId=${site}` : ''}`).catch(() => [] as Template[]),
   ]);
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
   const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
@@ -409,6 +414,71 @@ export default async function RosterPage({ searchParams }: {
           </form>
         )}
       </details>
+
+      {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
+        <details className="card roster-templates" open={shifts.length === 0 && templates.length > 0}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
+          <p className="muted small">Save a site&apos;s usual week as a template, then fill any week from it, or copy last week. Each shift gets its usual person where they can work it (waiting for them to confirm); the rest stay open and you&apos;re told why.</p>
+          <div className="template-forms">
+            <form action={copyWeek} className="form-row">
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="week" value={week} />
+              <h3>Copy a week into this one</h3>
+              <label>Site
+                <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+                  {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </label>
+              <label>Copy from the week of<input name="fromWeek" type="date" defaultValue={addDaysIso(week, -7)} /></label>
+              <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
+              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+              <button className="btn small">Copy week</button>
+            </form>
+            <form action={applyTemplate} className="form-row">
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="week" value={week} />
+              <h3>Fill this week from a template</h3>
+              {templates.length === 0 ? <p className="muted small">No templates yet. Save a week below.</p> : <>
+                <label>Template
+                  <select name="templateId" required>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}{!site ? ` (${t.facilityName})` : ''} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}</option>)}
+                  </select>
+                </label>
+                <label className="inline"><input type="checkbox" name="people" defaultChecked />With the usual people</label>
+                <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+                <button className="btn small">Fill week</button>
+              </>}
+            </form>
+            <form action={saveTemplate} className="form-row">
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="week" value={week} />
+              <h3>Save this week as a template</h3>
+              <label>Site
+                <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+                  {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </label>
+              <label>Name<input name="name" required maxLength={80} placeholder="e.g. Usual week" /></label>
+              <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each shift</label>
+              <button className="btn small secondary">Save template</button>
+            </form>
+          </div>
+          {templates.length > 0 && (
+            <ul className="template-list">
+              {templates.map(t => (
+                <li key={t.id}>
+                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
+                  <form action={archiveTemplate}>
+                    <input type="hidden" name="back" value={here} />
+                    <input type="hidden" name="templateId" value={t.id} />
+                    <button className="btn small secondary" title="Hides the template. Weeks already filled from it don't change.">Put away</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </details>
+      )}
 
       {span === 'month' && (
         <section className="card roster-month" aria-label={monthLabel(range.anchor)}>

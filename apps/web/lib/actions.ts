@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { ApiError } from './api';
 
-/** Runs an API call from a form; on failure returns to the page with the error shown. */
-export async function attempt(back: string, fn: () => Promise<unknown>, success?: string): Promise<never> {
+/** Runs an API call from a form; on failure returns to the page with the error shown. `success` may be worked out after the call. */
+export async function attempt(back: string, fn: () => Promise<unknown>, successText?: string | (() => string)): Promise<never> {
   try {
     await fn();
   } catch (err) {
@@ -10,6 +10,7 @@ export async function attempt(back: string, fn: () => Promise<unknown>, success?
     const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
     redirect(`${back}${back.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`);
   }
+  const success = typeof successText === 'function' ? successText() : successText;
   redirect(success ? `${back}${back.includes('?') ? '&' : '?'}done=${encodeURIComponent(success)}` : back);
 }
 

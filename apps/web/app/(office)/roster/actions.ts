@@ -1,6 +1,6 @@
 'use server';
 
-import { api } from '../../../lib/api';
+import { api, ApiError } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
 import { fillOpenShifts } from '../demo-tools';
@@ -98,4 +98,39 @@ export async function dropOnShift(kind: 'person' | 'equipment', shiftId: string,
   } else {
     await attempt(to, () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId: id } }), 'Equipment booked.');
   }
+}
+
+/** Roster templates (Steve's "ideal week") and copying a week. The API's summary says what was added and what stayed open. */
+type ApplyResult = { summary: string };
+
+export async function saveTemplate(f: FormData) {
+  await attempt(back(f), () => api('/roster/templates', {
+    method: 'POST', body: { facilityId: str(f, 'facilityId'), weekStart: str(f, 'week'), name: str(f, 'name'), people: f.get('people') === 'on' },
+  }), `Saved as the template "${str(f, 'name') ?? ''}".`);
+}
+
+export async function applyTemplate(f: FormData) {
+  const id = str(f, 'templateId');
+  let r: ApplyResult = { summary: '' };
+  await attempt(back(f), async () => {
+    if (!id) throw new ApiError(400, 'Choose a template');
+    r = await api<ApplyResult>(`/roster/templates/${id}/apply`, {
+      method: 'POST', body: { weekStart: str(f, 'week'), people: f.get('people') === 'on', addToExisting: f.get('addToExisting') === 'on' },
+    });
+  }, () => r.summary);
+}
+
+export async function copyWeek(f: FormData) {
+  let r: ApplyResult = { summary: '' };
+  await attempt(back(f), async () => {
+    r = await api<ApplyResult>('/roster/copy-week', {
+      method: 'POST',
+      body: { facilityId: str(f, 'facilityId'), toWeek: str(f, 'week'), fromWeek: str(f, 'fromWeek'), people: f.get('people') === 'on', addToExisting: f.get('addToExisting') === 'on' },
+    });
+  }, () => r.summary);
+}
+
+export async function archiveTemplate(f: FormData) {
+  const id = str(f, 'templateId');
+  await attempt(back(f), () => api(`/roster/templates/${id}/archive`, { method: 'POST' }), 'Template put away.');
 }
