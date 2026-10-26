@@ -15,7 +15,7 @@ type Log = { messages: Message[]; smsThisMonth: number; smsMonthlyCap: number; e
 const STATUS: Record<string, [string, 'ok' | 'warn' | 'bad' | 'neutral']> = {
   queued: ['Queued', 'neutral'], sending: ['Sending', 'neutral'], sent: ['Sent', 'ok'], failed: ['Failed', 'bad'], skipped: ['Not sent', 'warn'],
 };
-const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert' };
+const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled' };
 
 function when(iso: string) {
   return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(iso));

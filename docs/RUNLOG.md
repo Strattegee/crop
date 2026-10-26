@@ -98,3 +98,4 @@ Newest first. One entry per working session or scheduled run.
 - Demo people's @example.com emails are now skipped (logged) instead of failing at Resend. SMS waits for David to add the ClickSend username and API key on the server.
 - Equipment and Items pages: the register with dates and status, and stock per site with receive, issue and stocktake.
 - Ribbon colours to Steve's scheme (unfilled grey, offered pale yellow, allocated darker yellow, pulled out purple, booked green, cancelled red; pink reserved for approve-first). "They pulled out" button on the shift panel.
+- Welcome emails from the Platform screen (with the sign-in link and their role), logged in the business's Messages.

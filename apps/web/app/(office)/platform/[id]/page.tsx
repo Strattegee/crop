@@ -35,7 +35,7 @@ export default async function PlatformBusinessPage({ params, searchParams }: { p
           </label>
           <button type="submit" className="btn">Give access</button>
         </form>
-        <p className="muted small" style={{ marginBottom: 0 }}>If they already use CROP with a verified email, access starts straight away. Otherwise it starts at their first sign-in with that email.</p>
+        <p className="muted small" style={{ marginBottom: 0 }}>They get a welcome email with the sign-in link. If they already use CROP with a verified email, access starts straight away; otherwise at their first sign-in with that email.</p>
       </div>
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>People ({b.people.length})</h2>

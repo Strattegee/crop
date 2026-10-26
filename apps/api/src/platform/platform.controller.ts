@@ -4,6 +4,32 @@ import type { Pool } from 'pg';
 import type { AuthContext, MemberRole } from '../auth/auth.types.js';
 import { Auth, NoTenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
+import { withTenant } from '@crop/db';
+import { queueNotification } from '../notifications/notify.js';
+
+const ROLE_WORDS: Record<MemberRole, string> = {
+  owner: 'an owner (everything, including settings)', admin: 'an administrator (everything, including settings)',
+  allocator: 'a rostering and staff user', worker: 'a worker (your own shifts)', client: 'a client (the client portal)',
+};
+
+/** The welcome email when someone is given access (David, 26 Oct). Plain words; no secrets; a sign-in link. */
+export function welcomeEmail(businessName: string, role: MemberRole, email: string, appUrl: string) {
+  const url = appUrl.replace(/\/$/, '') || 'https://staging.cropwms.com';
+  return {
+    subject: `You've been given access to ${businessName} on CROP`,
+    body: [
+      `Hello,`,
+      ``,
+      `${businessName} has given you access to CROP, its rostering and workforce system, as ${ROLE_WORDS[role]}.`,
+      ``,
+      `To start, go to ${url} and sign in with this email address (${email}). If you haven't used CROP before, choose to register, then confirm your email when the code arrives.`,
+      ``,
+      `If you weren't expecting this, you can ignore this email.`,
+      ``,
+      `CROP Workforce Management`,
+    ].join('\n'),
+  };
+}
 
 const ROLES: MemberRole[] = ['owner', 'admin', 'allocator', 'worker', 'client'];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,6 +62,15 @@ export class PlatformController {
     return this.pool.query(sql, params).then(r => r.rows as T[]).catch(pgFail);
   }
 
+  /** Queues the welcome email in the business's own message log (after the platform function has checked the caller). */
+  private async welcome(tenantId: string, businessName: string, email: string, role: MemberRole, by: string) {
+    const m = welcomeEmail(businessName, role, email, process.env.APP_URL ?? '');
+    await withTenant(this.pool, tenantId, db => queueNotification(db, tenantId, {
+      channel: 'email', to: email, template: 'welcome', subject: m.subject, body: m.body, createdBy: by,
+      dedupeKey: `welcome:${email}:${role}:${new Date().toISOString().slice(0, 10)}`,
+    }));
+  }
+
   @Get('businesses')
   async businesses(@Auth() a: AuthContext) {
     return this.q('select id, slug, name, created_at as "createdAt", people, invited, owners from app_platform_tenants($1)', [a.userId]);
@@ -53,7 +88,10 @@ export class PlatformController {
     let slug = base;
     for (let n = 2; existing.has(slug); n++) slug = `${base}-${n}`;
     const [{ id }] = await this.q<{ id: string }>('select app_platform_create_tenant($1, $2, $3) as id', [a.userId, slug, name]);
-    if (ownerEmail) await this.q('select app_platform_invite($1, $2, $3, $4)', [a.userId, id, ownerEmail, 'owner']);
+    if (ownerEmail) {
+      await this.q('select app_platform_invite($1, $2, $3, $4)', [a.userId, id, ownerEmail, 'owner']);
+      await this.welcome(id, name, ownerEmail, 'owner', a.userId);
+    }
     return { id, slug, name };
   }
 
@@ -74,6 +112,10 @@ export class PlatformController {
     if (!ROLES.includes(role)) throw new BadRequestException('Choose a role: owner, admin, allocator, worker or client');
     const action = body?.change === true ? 'set_role' : 'invite';
     const [{ status }] = await this.q<{ status: string }>('select app_platform_invite($1, $2, $3, $4, $5) as status', [a.userId, id, email, role, action]);
+    if (action === 'invite' && body?.welcome !== false) {
+      const b = (await this.businesses(a)).find(x => (x as { id: string }).id === id) as { name: string } | undefined;
+      if (b) await this.welcome(id, b.name, email, role, a.userId);
+    }
     return { email, role, status };
   }
 
