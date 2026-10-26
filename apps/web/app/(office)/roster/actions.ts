@@ -80,3 +80,13 @@ export async function fillWeekDemo(f: FormData) {
   await attempt(back(f), async () => { r = await fillOpenShifts(week); }, 'Open shifts filled where a ready person was available.');
   void r;
 }
+
+/** From the ribbon strip: a person or piece of equipment dropped onto a shift card. */
+export async function dropOnShift(kind: 'person' | 'equipment', shiftId: string, id: string, backTo: string) {
+  const to = backTo.startsWith('/roster') ? backTo : '/roster';
+  if (kind === 'person') {
+    await attempt(to, () => api(`/shifts/${shiftId}/assign`, { method: 'POST', body: { workerId: id } }), 'Assigned. Confirm once they have agreed.');
+  } else {
+    await attempt(to, () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId: id } }), 'Equipment booked.');
+  }
+}

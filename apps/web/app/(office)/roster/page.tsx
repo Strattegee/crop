@@ -5,13 +5,14 @@ import { T, words } from '../../../lib/terms';
 import {
   assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
 } from './actions';
+import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 
 export const dynamic = 'force-dynamic';
 
 type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null;
   role: string; status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
-  workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null;
+  workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
 };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
@@ -28,6 +29,7 @@ type EquipCandidate = { equipmentId: string; name: string; typeName: string; eli
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
 const STATUS: Record<string, { label: string; cls: string }> = {
   open: { label: 'Open', cls: 'open' }, assigned: { label: 'Assigned', cls: 'assigned' }, booked: { label: 'Booked', cls: 'booked' },
+  cancelled: { label: 'Cancelled', cls: 'cancelled' },
 };
 const DAY = 86_400_000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -67,16 +69,19 @@ export default async function RosterPage({ searchParams }: {
   };
   const here = url({});
 
-  const [roster, facilities, codes] = await Promise.all([
-    api<Roster>(`/roster?from=${days[0]}&to=${days[6]}${site ? `&facilityId=${site}` : ''}`),
+  const [roster, facilities, codes, itemList] = await Promise.all([
+    api<Roster>(`/roster?from=${days[0]}&to=${days[6]}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
+    api<{ id: string; name: string; category: string; unit: string; tracksStock: boolean; reorderLevel: number | null; onHand: number }[]>('/items').catch(() => []),
   ]);
   const activeFacilities = facilities.filter(f => f.active);
   const details = await Promise.all(activeFacilities.slice(0, 30).map(f => api<FacilityDetail>(`/facilities/${f.id}`)));
-  const shifts = roster.shifts;
+  const allShifts = roster.shifts;
+  const cancelled = allShifts.filter(s => s.status === 'cancelled');
+  const shifts = allShifts.filter(s => s.status !== 'cancelled');
   const equipment = roster.equipment ?? [];
-  const selected = sp.shift ? shifts.find(s => s.id === sp.shift) : undefined;
+  const selected = sp.shift ? allShifts.find(s => s.id === sp.shift) : undefined;
 
   // Summary
   const peopleShifts = shifts.filter(s => !s.equipmentOnly);
@@ -86,7 +91,7 @@ export default async function RosterPage({ searchParams }: {
   const equipHours = equipment.reduce((a, e) => a + e.bookedHours, 0);
 
   // Rows
-  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment'; cells: Shift[][]; balance?: { text: string; cls: string } };
+  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled'; cells: Shift[][]; balance?: { text: string; cls: string } };
   const cellsFor = (pred: (s: Shift) => boolean, list: Shift[]) => days.map(d => list.filter(s => s.localDate === d && pred(s)));
   const personRow = (p: Person, list: Shift[]): Row => {
     const bal = p.contractedHours == null ? null : p.contractedHours - p.rosteredHours;
@@ -119,10 +124,13 @@ export default async function RosterPage({ searchParams }: {
       if (list.some(s => !s.workerId && !s.equipmentOnly)) rows.push(openRow(k, list));
       const eq = equipOnlyRow(k, list);
       if (eq) rows.push(eq);
+      const gone = cancelled.filter(c => `${c.facilityName}|||${c.areaName ?? ''}` === k);
+      if (gone.length) rows.push({ key: `x-${k}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this week`, cells: cellsFor(() => true, gone) });
       groups.push({ key: k, title: fac, sub: area || 'No area', rows });
     }
   } else {
-    groups.push({ key: 'people', title: 'People', rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts)] });
+    groups.push({ key: 'people', title: 'People', rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
+      ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this week`, cells: cellsFor(() => true, cancelled) }] : [])] });
   }
   if (equipment.length) {
     groups.push({
@@ -140,7 +148,7 @@ export default async function RosterPage({ searchParams }: {
   let offers: Offer[] = [];
   let equipCandidates: EquipCandidate[] = [];
   let panelError: string | null = null;
-  if (selected) {
+  if (selected && selected.status !== 'cancelled') {
     try {
       const [bank, all, eq] = await Promise.all([
         api<{ candidates: Candidate[]; offers: Offer[] }>(`/shifts/${selected.id}/bank-fill`),
@@ -156,6 +164,25 @@ export default async function RosterPage({ searchParams }: {
       panelError = 'Could not load the details for this shift.';
     }
   }
+  // Left-hand strip (Steve's ribbon): everyone, their hours and balance; marked against the selected shift.
+  const fitOf = (c?: { eligible: boolean; warnings: Reason[]; blocks: Reason[] }) => !c ? {} : !c.eligible
+    ? { fit: 'blocked' as const, fitNote: c.blocks[0]?.message } : c.warnings.length ? { fit: 'warn' as const, fitNote: c.warnings[0].message } : { fit: 'ready' as const };
+  const stripPeople: StripPerson[] = roster.people.map(p => ({
+    id: p.id, name: p.name, roles: p.roles, role: p.roles[0] ?? 'No role',
+    initials: p.name.split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase(),
+    type: p.employmentType ?? 'none', typeLabel: { full_time: 'F', part_time: 'P', bank: 'B', casual: 'C' }[p.employmentType ?? ''] ?? '–',
+    hours: p.rosteredHours, contracted: p.contractedHours,
+    ...(selected && !selected.equipmentOnly && !selected.workerId ? fitOf(candidates.find(c => c.workerId === p.id)) : {}),
+  }));
+  const stripEquip: StripEquip[] = equipment.map(e => ({
+    id: e.id, name: e.name, typeName: e.typeName, status: e.status, hours: e.bookedHours,
+    ...(selected ? fitOf(equipCandidates.find(c => c.equipmentId === e.id)) : {}),
+  }));
+  const stripItems: StripItem[] = itemList.map(i => ({
+    id: i.id, name: i.name, category: i.category, unit: i.unit, onHand: i.tracksStock ? i.onHand : null,
+    low: i.tracksStock && i.reorderLevel != null && i.onHand <= i.reorderLevel,
+  }));
+
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
   const pendingOffers = offers.filter(o => o.status === 'pending');
   const declinedOffers = offers.filter(o => o.status === 'declined');
@@ -265,7 +292,9 @@ export default async function RosterPage({ searchParams }: {
       </details>
 
       <div className="roster-layout">
-        <div className="roster-scroll">
+        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag
+          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role) }} />
+        <DropZone back={here}>
           <table className="ribbon">
             <thead>
               <tr>
@@ -298,10 +327,11 @@ export default async function RosterPage({ searchParams }: {
                     {r.cells.map((cell, i) => (
                       <td key={i} className={days[i] === today ? 'today' : ''}>
                         {cell.map(s => (
-                          <Link key={s.id} href={url({ shift: s.id })} className={`rcard ${s.equipmentOnly ? (s.status === 'open' ? 'open' : 'booked') : STATUS[s.status]?.cls ?? ''} ${selected?.id === s.id ? 'sel' : ''}`}>
+                          <Link key={s.id} href={url({ shift: s.id })} data-shift={s.id}
+                            data-needs-person={!s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0'} data-takes-equipment={s.status !== 'cancelled' ? '1' : '0'} className={`rcard ${s.equipmentOnly ? (s.status === 'open' ? 'open' : 'booked') : STATUS[s.status]?.cls ?? ''} ${selected?.id === s.id ? 'sel' : ''}`}>
                             <span className={`band ${band(s)}`}>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-                            <span className="st">{s.equipmentOnly ? (s.status === 'open' ? 'Needs equipment' : 'Equipment booked') : STATUS[s.status]?.label}</span>
-                            <span className="ln">{r.kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : s.workerName ?? s.role}</span>
+                            <span className="st">{s.equipmentOnly && s.status !== 'cancelled' ? (s.status === 'open' ? 'Needs equipment' : 'Equipment booked') : STATUS[s.status]?.label}</span>
+                            <span className="ln">{r.kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : r.kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
                             {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
                           </Link>
                         ))}
@@ -313,7 +343,7 @@ export default async function RosterPage({ searchParams }: {
               </tbody>
             ))}
           </table>
-        </div>
+        </DropZone>
 
         {selected && (
           <aside className="roster-panel card" aria-label="Selected shift">
@@ -326,6 +356,9 @@ export default async function RosterPage({ searchParams }: {
               <span className="muted">{selected.facilityName}{selected.areaName ? ` · ${selected.areaName}` : ''} · {fmtHours(selected.hours)} h</span>
             </p>
             {panelError && <div className="notice error">{panelError}</div>}
+            {selected.status === 'cancelled' ? (
+              <section><h3>Cancelled</h3><p style={{ margin: 0 }}>{selected.cancelledReason || 'No reason recorded.'}</p></section>
+            ) : (<>
 
             {!selected.equipmentOnly && (
               <section>
@@ -438,13 +471,14 @@ export default async function RosterPage({ searchParams }: {
                 <button className="btn small secondary">Cancel shift</button>
               </form>
             </section>
+            </>)}
           </aside>
         )}
       </div>
 
       <div className="roster-legend">
         <span><i className="band am" /> AM</span><span><i className="band pm" /> PM</span><span><i className="band nd" /> Night</span>
-        <span><i className="sw booked" /> Booked</span><span><i className="sw assigned" /> Assigned</span><span><i className="sw open" /> Open</span>
+        <span><i className="rb booked" /> Booked</span><span><i className="rb assigned" /> Assigned, waiting to confirm</span><span><i className="rb open" /> Open</span><span><i className="rb cancelled" /> Cancelled</span>
       </div>
     </div>
   );

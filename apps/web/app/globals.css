@@ -144,3 +144,52 @@ label.inline input[type='checkbox'] { margin: 0; }
 .offer-shift dd { margin: 0; font-weight: 600; }
 .offer-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .offer-actions .btn { flex: 1 1 140px; padding: 12px 16px; font-size: 16px; }
+
+/* Ribbon strip: people, equipment and items down the left of the roster */
+.roster-strip { flex: 0 0 270px; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 8px; max-height: calc(100vh - 24px); }
+@media (min-width: 1200px) { .roster-layout { flex-wrap: nowrap; } .roster-panel { flex: 0 0 340px; } }
+@media (max-width: 900px) { .roster-strip { flex: 1 1 100%; position: static; max-height: 420px; } }
+.strip-tabs, .strip-search, .strip-filters, .strip-head, .strip-help { flex-shrink: 0; }
+.strip-tabs { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.strip-tabs button { flex: 1; border: 0; background: var(--surface); padding: 6px 4px; font-size: 13px; cursor: pointer; color: var(--text); }
+.strip-tabs button[aria-selected='true'] { background: var(--brand); color: var(--brand-contrast); font-weight: 600; }
+.strip-search { width: 100%; }
+.strip-filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.strip-filters select { flex: 1 1 120px; min-width: 0; }
+.strip-head, .strip-row { display: grid; grid-template-columns: 28px 1fr 38px 38px; gap: 6px; align-items: center; }
+.strip-row.eq { grid-template-columns: 1fr auto; }
+.strip-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; padding: 0 4px; }
+.strip-head span:nth-child(n+3), .strip-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.strip-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.strip-group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; padding: 8px 4px 3px; border-bottom: 1px solid var(--border); }
+.strip-group span { float: right; font-weight: 400; }
+.strip-row { padding: 5px 4px; font-size: 13px; border-bottom: 1px solid #f0f2f4; border-left: 3px solid transparent; }
+.strip-row[draggable='true'] { cursor: grab; }
+.strip-row[draggable='true']:hover { background: #f4f7f9; }
+.strip-row .av { width: 26px; height: 26px; border-radius: 50%; background: #e5ebf1; color: #34475c; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.strip-row .nm { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-row .nm small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.strip-row .ty { display: inline-block; min-width: 14px; text-align: center; border-radius: 3px; font-size: 10px; margin-right: 2px; background: #eef1f4; color: #34475c; }
+.strip-row .ty-bank, .strip-row .ty-casual { background: #fbe9c8; color: #7a4b0c; }
+.strip-row .num.over { color: var(--bad); font-weight: 600; }
+.strip-row .num.under { color: var(--warn); }
+.strip-row .num.even { color: var(--ok); }
+.strip-row.ready { border-left-color: var(--ok); }
+.strip-row.warn { border-left-color: var(--warn); }
+.strip-row.blocked { opacity: 0.5; }
+.strip-help { margin: 0; }
+body[data-dragging='person'] .rcard[data-needs-person='1'], body[data-dragging='equipment'] .rcard[data-takes-equipment='1'] { outline: 2px dashed var(--brand); outline-offset: -2px; }
+.rcard.drop { background: #e6f3ec; outline: 2px solid var(--ok) !important; }
+.roster-scroll.busy { opacity: 0.6; pointer-events: none; }
+
+/* The ribbon (Steve): a coloured line along each shift showing its stage */
+.rcard { border-bottom-width: 4px !important; border-bottom-style: solid !important; }
+.rcard.booked { border-bottom-color: #2e9d57 !important; }
+.rcard.assigned { border-bottom-color: #f2c200 !important; }
+.rcard.open { border-bottom-color: #b8c0c8 !important; }
+.rcard.cancelled { border-bottom-color: #e040a0 !important; opacity: 0.75; }
+.rcard.cancelled .st { color: #b0247a; }
+.rcard.cancelled .band { text-decoration: line-through; }
+.ribbon tr.row-cancelled th.who .name { color: #b0247a; }
+.roster-legend .rb { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+.rb.booked { background: #2e9d57; } .rb.assigned { background: #f2c200; } .rb.open { background: #b8c0c8; } .rb.cancelled { background: #e040a0; }

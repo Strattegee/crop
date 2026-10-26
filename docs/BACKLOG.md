@@ -67,3 +67,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 ## Words and codes (26 Oct, Steve and David)
 - [x] Term codes and function codes; one set of words per business; Settings → Words we use; menu and page titles use them (docs/CODES.md).
 - [ ] Use the words in roster labels, forms, API errors, notifications and the worker app.
+
+## Ribbon roster (26 Oct)
+- [x] The ribbon: coloured stage line on every shift (booked green, assigned yellow, open grey, cancelled pink); cancelled shifts stay visible.
+- [x] Left strip: people / equipment / items, hours and balance, drag to assign or book.
+- [ ] Still from the design: Draft / Live / History and Publish week; Template stage (grey with "Template"); offered/broadcast stage colour; day totals; needs attention and app requests panels; Cards / Detailed / Simple views; leave lines (Steve's "T" line).
