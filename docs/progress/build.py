@@ -22,8 +22,8 @@ prog={
  'NOTE':('active',.6,None,'Email working. Texts ready once the ClickSend number is set up. Push comes with the app'),
  'TPL':('active',.6,None,'Shift codes, shifts (single or blocks) and equipment booked to shifts (with a person, or on its own for dry hire) built; equipment dates in the daily office email; items and consumables (PPE, fuel, sundries) with stock per site, issued to people or used on shifts, cost per shift; roster screen first version built'),
  'GRID':('active',.5,None,'Roster screen first version on staging: week by area or person, open shifts, equipment rows, hours, add shifts, assign, bank fill and equipment booking. Day and month views and publishing next'),
- 'MATCH':('active',.6,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours, equipment operator licences) and rest warnings done; who-can-work list built. Leave comes with availability'),
- 'BCAST':('active',.65,None,'Bank fill: open shifts offered to several bank and casual staff by email and text, first to accept is booked, no double booking. Staff accept or decline from a one-off link in the message, no sign-in needed. Availability and the worker app to come'),
+ 'MATCH':('active',.75,None,'Hard blocks (role, credentials on the shift date, right to work, double booking, visa hours, equipment operator licences, approved leave) and warnings (rest, requested leave, not available) done; who-can-work list puts people who are free first. Screens for availability and leave to come'),
+ 'BCAST':('active',.65,None,'Bank fill: open shifts offered to several bank and casual staff by email and text, first to accept is booked, no double booking. Staff accept or decline from a one-off link in the message, no sign-in needed. Uses availability and leave. Worker app to come'),
  'PROTO':('done',1,'26 Oct','Ribbon roster concept endorsed by Steve; first version built'),
 }
 rows=[]

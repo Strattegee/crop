@@ -6,10 +6,12 @@
  * - a hard credential rule or right to work isn't met on the shift date (compliance.ts with onDate, CRD-8);
  * - they're already rostered at an overlapping time;
  * - the shift would take them over their visa's hours in a fortnight (any 14 days starting on a Monday).
+ * - approved leave on the shift date (availability.ts).
  * Warnings (shown, not blocking): warning-level credential rules, credentials expiring soon,
- * and less rest between shifts than the business's minimum.
+ * less rest between shifts than the business's minimum, requested leave, and not being available.
  */
 import { addDays, credentialStatus, type ComplianceIssue, type CredentialFacts } from '../workforce/compliance.js';
+import { availabilityReason, leaveReason, type AvailabilityFacts, type LeaveFacts } from './availability.js';
 
 export interface ShiftFacts {
   id?: string;
@@ -19,6 +21,8 @@ export interface ShiftFacts {
   /** Site-local date the shift starts on (YYYY-MM-DD). */
   localDate: string;
   hours: number;
+  /** Site-local start time (HH:MM), for availability (AM / PM / night). */
+  localStart?: string;
 }
 
 export interface OtherShift extends ShiftFacts {
@@ -43,12 +47,16 @@ export interface EligibilityInput {
   credentials?: CredentialFacts[];
   /** The business's expiring window in days, for operator credentials. */
   windowDays?: number;
+  /** Weekly pattern and date entries (backlog item 10). */
+  availability?: AvailabilityFacts;
+  /** Leave near the shift (backlog item 10). */
+  leave?: LeaveFacts[];
 }
 
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
 
 export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
-  | 'operator' | 'equipment_status' | 'equipment_check';
+  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 
@@ -98,6 +106,13 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
     const message = `${p.name}'s ${i.typeName} ${PROBLEM_TEXT[i.problem]}`;
     if (i.severity === 'hard' && i.problem !== 'expiring') blocks.push({ code, message });
     else warnings.push({ code, message });
+  }
+
+  const onLeave = leaveReason(p.name, shift.localDate, p.leave ?? []);
+  if (onLeave) (onLeave.hard ? blocks : warnings).push(onLeave.reason);
+  if (p.availability && shift.localStart) {
+    const r = availabilityReason(p.name, shift.localDate, shift.localStart, p.availability);
+    if (r) warnings.push(r);
   }
 
   const others = p.others.filter(o => o.id !== shift.id);
