@@ -133,3 +133,9 @@ Newest first. One entry per working session or scheduled run.
 - Also: Settings heading now says "Business settings" instead of "Agency settings".
 - Next: requesting and approving a change (so allocators can ask when only owners and admins can change a live week), then a screen for employment terms.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
+
+## 2026-10-27 night (scheduled run)
+
+- Shipped: asking for a change to a published roster, and approving it (backlog item 2, Steve's answer 5). When the business has set "only owners and admins can change a live week", anyone else who opens a shift on that week now sees "Ask for a change" instead of the buttons: put someone on, they've agreed, take them off, they pulled out, cancel the shift, or something else in their own words. The roster shows the changes waiting for approval; an owner or admin presses Approve (the change is made straight away, as theirs, with the usual checks, and shows in the change log) or Decline with a reason. The person who asked can withdraw it. If the change can't be made any more (for example someone else was put on the shift meanwhile), approving says why and nothing changes.
+- Next: a screen for employment terms (full-time, part-time, casual, bank and contracted hours), then emails about change requests, then carrying equipment over with a template.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

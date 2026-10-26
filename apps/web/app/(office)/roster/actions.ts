@@ -134,3 +134,22 @@ export async function archiveTemplate(f: FormData) {
   const id = str(f, 'templateId');
   await attempt(back(f), () => api(`/roster/templates/${id}/archive`, { method: 'POST' }), 'Template put away.');
 }
+
+/** After publishing (migration 0025): ask for a change the business's rule stops you making, and approve or decline it. */
+export async function requestChange(shiftId: string, f: FormData) {
+  const change = str(f, 'change');
+  await attempt(back(f), () => api(`/shifts/${shiftId}/change-requests`, {
+    method: 'POST', body: { change, workerId: change === 'assign' ? str(f, 'workerId') : undefined, reason: str(f, 'reason') },
+  }), 'Change requested. An owner or admin can approve it from the roster.');
+}
+
+export async function decideChange(requestId: string, decision: 'approve' | 'decline' | 'withdraw', f: FormData) {
+  let r: { applied?: boolean; warnings?: string[] } = {};
+  await attempt(back(f), async () => {
+    r = await api<{ applied?: boolean; warnings?: string[] }>(`/change-requests/${requestId}/${decision}`, {
+      method: 'POST', body: decision === 'withdraw' ? undefined : { note: str(f, 'note') },
+    });
+  }, () => decision === 'approve'
+    ? (r.applied === false ? 'Approved. Make the change on the shift now.' : `Approved and changed.${r.warnings?.length ? ` Note: ${r.warnings.join('. ')}` : ''}`)
+    : decision === 'decline' ? 'Declined.' : 'Request withdrawn.');
+}

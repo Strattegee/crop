@@ -234,6 +234,13 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .pill.live { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
 .pill.history { color: var(--muted); background: var(--border); border-color: transparent; }
 .pill.small { font-size: 10px; padding: 1px 6px; margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.roster-requests { border-left: 4px solid var(--warn); }
+.roster-requests ol { list-style: none; margin: 0; padding: 0; }
+.roster-requests li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+.roster-requests .req-actions, .roster-requests .decline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.roster-requests .decline input { width: 170px; }
+.request-change { display: grid; gap: 8px; }
+.request-change label { display: grid; gap: 4px; }
 .roster-log ol, .shift-history ol { list-style: none; margin: 0; padding: 0; }
 .roster-log li { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
 .shift-history li { padding: 4px 0; font-size: 13px; border-top: 1px solid var(--border); }

@@ -3,8 +3,8 @@ import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
-  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyWeek, createShifts, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, saveTemplate, unassign,
+  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  recordReply, removeEquipment, requestChange, saveTemplate, unassign,
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
@@ -31,7 +31,9 @@ type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
-type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' | 'history'; version: number | null; publishedAt: string | null; publishedByName: string | null; changesSincePublish: number; shifts: number };
+type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' | 'history'; version: number | null; publishedAt: string | null; publishedByName: string | null; changesSincePublish: number; shifts: number; changeRefusal?: string | null; pendingRequests?: number };
+/** A change asked for on a live week, waiting for an owner or admin (migration 0025). */
+type ChangeRequest = { id: string; shiftId: string; kind: string; status: string; summary: string; reason: string | null; requestedByName: string | null; createdAt: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string; canDecide: boolean; canWithdraw: boolean };
 type Change = { id: string; kind: string; summary: string; afterPublish: boolean; actorName: string | null; via: string; at: string; shiftId: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string };
 const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
 const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(t));
@@ -102,7 +104,7 @@ export default async function RosterPage({ searchParams }: {
 
   const showLog = sp.log === '1' && span !== 'month';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -112,6 +114,7 @@ export default async function RosterPage({ searchParams }: {
     Promise.all(monthWeeks.map(w => api<Week[]>(`/roster/weeks?weekStart=${w[0]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]))),
     span === 'month' ? Promise.resolve([] as Template[]) : api<Template[]>(`/roster/templates${site ? `?facilityId=${site}` : ''}`).catch(() => [] as Template[]),
     api<{ publishedChanges?: PublishedChanges }>('/settings').catch(() => ({} as { publishedChanges?: PublishedChanges })),
+    span === 'month' ? Promise.resolve([] as ChangeRequest[]) : api<ChangeRequest[]>(`/roster/change-requests?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as ChangeRequest[]),
   ]);
   const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
@@ -195,6 +198,9 @@ export default async function RosterPage({ searchParams }: {
   }
 
   // Selected shift panel data
+  // When the after-publishing rule stops this person changing the shift's week, the panel asks for a change instead.
+  const panelRefusal = selected ? weekStates.find(w => w.facilityId === selected.facilityId)?.changeRefusal ?? null : null;
+  const pendingForShift = selected ? changeRequests.find(r => r.shiftId === selected.id) ?? null : null;
   let candidates: Candidate[] = [];
   let offers: Offer[] = [];
   let equipCandidates: EquipCandidate[] = [];
@@ -328,6 +334,38 @@ export default async function RosterPage({ searchParams }: {
           )}
         </div>
       </section>}
+
+      {changeRequests.length > 0 && (
+        <section className="card roster-requests" aria-label="Changes waiting for approval">
+          <h2 style={{ marginTop: 0 }}>{changeRequests.length === 1 ? '1 change waiting for approval' : `${changeRequests.length} changes waiting for approval`}</h2>
+          <ol>
+            {changeRequests.map(r => (
+              <li key={r.id}>
+                <span>
+                  <Link href={url({ shift: r.shiftId })}>{longDate(r.localDate)} {r.localStart}–{r.localEnd} {r.role}</Link>
+                  {!site && <span className="muted"> · {r.facilityName}</span>}: <strong>{r.summary}</strong>
+                  {r.reason && r.kind !== 'other' && r.kind !== 'cancel' && <span className="muted"> ({r.reason})</span>}
+                  <span className="muted small"> asked by {r.requestedByName ?? 'someone'}, {when(r.createdAt)}</span>
+                </span>
+                <span className="req-actions">
+                  {r.canDecide && <>
+                    <form action={decideChange.bind(null, r.id, 'approve')}><input type="hidden" name="back" value={here} /><button className="btn small">Approve</button></form>
+                    <form action={decideChange.bind(null, r.id, 'decline')} className="decline">
+                      <input type="hidden" name="back" value={here} />
+                      <input name="note" maxLength={300} placeholder="Why not (optional)" aria-label="Why not (optional)" />
+                      <button className="btn small secondary">Decline</button>
+                    </form>
+                  </>}
+                  {r.canWithdraw && !r.canDecide && (
+                    <form action={decideChange.bind(null, r.id, 'withdraw')}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Withdraw</button></form>
+                  )}
+                  {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {showLog && (
         <section className="card roster-log" aria-label="Changes this week">
@@ -639,6 +677,40 @@ export default async function RosterPage({ searchParams }: {
             {panelError && <div className="notice error">{panelError}</div>}
             {selected.status === 'cancelled' ? (
               <section><h3>Cancelled</h3><p style={{ margin: 0 }}>{selected.cancelledReason || 'No reason recorded.'}</p></section>
+            ) : panelRefusal ? (
+              <section>
+                {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.status === 'booked' ? 'booked' : 'waiting to confirm'}</span></p>}
+                {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>Equipment: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
+                <p className="notice" style={{ margin: '0 0 8px' }}>{panelRefusal}</p>
+                {pendingForShift ? (
+                  <p style={{ margin: 0 }}>Waiting for approval: <strong>{pendingForShift.summary}</strong> <span className="muted small">(asked by {pendingForShift.requestedByName ?? 'someone'})</span></p>
+                ) : (
+                  <form action={requestChange.bind(null, selected.id)} className="request-change">
+                    <input type="hidden" name="back" value={here} />
+                    <h3 style={{ marginTop: 0 }}>Ask for a change</h3>
+                    <label>Change
+                      <select name="change" defaultValue={selected.status === 'assigned' ? 'confirm' : selected.workerId ? 'remove' : selected.equipmentOnly ? 'other' : 'assign'}>
+                        {!selected.workerId && !selected.equipmentOnly && <option value="assign">Put someone on it</option>}
+                        {selected.workerId && selected.status === 'assigned' && <option value="confirm">{selected.workerName} has agreed (confirm)</option>}
+                        {selected.workerId && <option value="remove">Take {selected.workerName} off</option>}
+                        {selected.workerId && <option value="pulled_out">{selected.workerName} pulled out</option>}
+                        <option value="cancel">Cancel the shift</option>
+                        <option value="other">Something else (say what)</option>
+                      </select>
+                    </label>
+                    {!selected.workerId && !selected.equipmentOnly && (
+                      <label>Person (if putting someone on)
+                        <select name="workerId" defaultValue="">
+                          <option value="">Choose…</option>
+                          {candidates.filter(c => c.eligible).map(c => <option key={c.workerId} value={c.workerId}>{c.name} · {fmtHours(c.weekHours)} h this week</option>)}
+                        </select>
+                      </label>
+                    )}
+                    <label>Reason<input name="reason" maxLength={300} placeholder="Needed to cancel or for something else" /></label>
+                    <button className="btn small">Send for approval</button>
+                  </form>
+                )}
+              </section>
             ) : (<>
 
             {!selected.equipmentOnly && (

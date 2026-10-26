@@ -9,7 +9,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
-import { closePendingOffers } from './offers-data.js';
+import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
 import { actorOf } from './publishing.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -388,25 +388,8 @@ export class ShiftsController {
   assign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const workerId = uuidField(body, 'workerId', 'person', true)!;
     return this.tx(t, auth, async db => {
-      const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
-      if (!shift) throw new NotFoundException('Shift not found');
-      if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
-      if (!shift.needs_person) throw new ConflictException('This shift is for equipment only, so nobody can be put on it');
-      if (shift.status !== 'open') throw new ConflictException('Someone is already on this shift. Remove them first.');
-      // Locking the worker serialises assignments for one person, so two shifts can't be given to them at once.
-      const worker = (await db.query<{ status: string; name: string }>(
-        `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`,
-        [workerId])).rows[0];
-      if (!worker) throw new BadRequestException('Choose a person');
-      if (worker.status !== 'active') throw new BadRequestException(`${worker.name} isn't active`);
-      const [check] = await eligibilityForShift(db, t.tenantId, id, [workerId]);
-      if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
-      await db.query(
-        `insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1,$2,$3,$4)`,
-        [t.tenantId, id, workerId, auth.userId]);
-      await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
-      await closePendingOffers(db, id, 'filled', auth.userId); // filled directly, so any bank-fill offers close
-      return { ...(await shiftById(db, id)), warnings: check.warnings.map(w => w.message) };
+      const warnings = await assignWorker(db, t.tenantId, auth.userId, id, workerId);
+      return { ...(await shiftById(db, id)), warnings };
     });
   }
 
@@ -416,10 +399,7 @@ export class ShiftsController {
   @HttpCode(200)
   confirm(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.tx(t, auth, async db => {
-      const r = await db.query(
-        `update shift_assignments set status = 'confirmed' where shift_id = $1 and resource_kind = 'worker' and status = 'assigned'`, [id]);
-      if (!r.rowCount) throw new ConflictException('There is nobody waiting to confirm on this shift');
-      await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [id]);
+      await confirmWorker(db, id);
       return shiftById(db, id);
     });
   }
@@ -431,11 +411,7 @@ export class ShiftsController {
     // pulledOut: the person withdrew (Steve's purple ribbon), rather than the office taking them off.
     const pulledOut = bool(body ?? {}, 'pulledOut') ?? false;
     return this.tx(t, auth, async db => {
-      const r = await db.query(
-        `update shift_assignments set status = 'removed', ended_at = now(), removed_reason = $2
-          where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [id, pulledOut ? 'pulled_out' : 'office']);
-      if (!r.rowCount) throw new ConflictException('Nobody is on this shift');
-      await db.query(`update shifts set status = 'open', updated_at = now() where id = $1 and status <> 'cancelled'`, [id]);
+      await removeWorker(db, id, pulledOut);
       return shiftById(db, id);
     });
   }
@@ -446,15 +422,7 @@ export class ShiftsController {
   cancel(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { required: true, max: 300 })!;
     return this.tx(t, auth, async db => {
-      const r = await db.query(
-        `update shifts set status = 'cancelled', cancelled_reason = $2, updated_at = now() where id = $1 and status <> 'cancelled'`, [id, reason]);
-      if (!r.rowCount) {
-        if (!(await db.query('select 1 from shifts where id = $1', [id])).rowCount) throw new NotFoundException('Shift not found');
-        throw new ConflictException('This shift is already cancelled');
-      }
-      await db.query(
-        `update shift_assignments set status = 'removed', ended_at = now() where shift_id = $1 and status in ('assigned', 'confirmed')`, [id]);
-      await closePendingOffers(db, id, 'withdrawn', auth.userId);
+      await cancelShift(db, auth.userId, id, reason);
       return shiftById(db, id);
     });
   }

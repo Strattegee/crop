@@ -182,13 +182,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <label>After a week&apos;s roster is published
             <select name="publishedChanges" defaultValue={settings.publishedChanges ?? 'open'} disabled={!canEdit}>
               <option value="open">Anyone in the office can change it</option>
-              <option value="managers">Only owners and admins can change it</option>
+              <option value="managers">Only owners and admins can change it (others ask for approval)</option>
               <option value="locked">Nobody can change it (turned off)</option>
             </select>
           </label>
           {canEdit && <button type="submit" className="btn">Save</button>}
         </form>
-        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off.</p>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off. When someone can't make a change themselves, they can ask for it on the roster, and an owner or admin approves or declines it.</p>
       </div>
     </>
   );
