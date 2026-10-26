@@ -71,7 +71,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 ## Ribbon roster (26 Oct)
 - [x] The ribbon: coloured stage line on every shift (booked green, assigned yellow, open grey, cancelled pink); cancelled shifts stay visible.
 - [x] Left strip: people / equipment / items, hours and balance, drag to assign or book.
-- [ ] Leave lines on the roster (Steve's "T" line): the data is on `GET /roster` (`leave`) since 26 Oct.
+- [x] Leave lines on the roster (26 Oct). A/P/N letters on cards and Day totals row also done (cost per day waits for pay rates, Release 2).
 - [ ] Still from the design: Draft / Live / History and Publish week; Template stage (grey with "Template"); offered/broadcast stage colour; day totals; needs attention and app requests panels; Cards / Detailed / Simple views; leave lines (Steve's "T" line).
 
 ## From 26 Oct (David testing staging as a café owner)
