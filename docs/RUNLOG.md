@@ -93,3 +93,4 @@ Newest first. One entry per working session or scheduled run.
 - Ribbon: David confirmed the ribbon is the coloured stage line (booked/assigned/cancelled). Built it plus the left people strip with drag to assign.
 - Platform screen (add businesses, give/change/remove access, audit log) and "Business" instead of "Agency" in the switcher. Standing principle written into WORKING-ALONE.md: finish, then take the next item. Questions for David and Steve listed in the backlog.
 - Roster: A/P/N letters on every shift, leave lines (on leave / leave requested), Day totals row. Café opening shift code renamed OPEN → EARLY (read like the Open stage).
+- Availability and leave screens: usual week, date changes and leave on the person's page; Leave page to approve, decline or cancel; tells the office how many shifts need cover.
