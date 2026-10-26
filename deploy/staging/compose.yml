@@ -48,7 +48,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       CLICKSEND_USERNAME: ${CLICKSEND_USERNAME:-}
       CLICKSEND_API_KEY: ${CLICKSEND_API_KEY:-}
-      CLICKSEND_FROM: ${CLICKSEND_FROM:-}
+      CLICKSEND_FROM: ${CLICKSEND_FROM:-+61429804977}   # dedicated CROP number (not secret); .env can override
     depends_on:
       migrate: { condition: service_completed_successfully }
 
