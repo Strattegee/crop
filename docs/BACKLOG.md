@@ -82,7 +82,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - Note: david@strattegee.com has access to Caring For You (since 22 Oct) and The Grand Cafe – Demo (26 Oct), so it shows both.
 
 ## From Steve and David's answers (26 Oct; docs/decisions/2026-10-26-steve-answers.md)
-- [ ] Ribbon colours to Steve's scheme: grey unfilled, pale yellow offered, darker yellow allocated, pink accepted (when approval is on), purple worker pulled out, green booked, red cancelled.
+- [x] (26 Oct) Ribbon colours to Steve's scheme: grey unfilled, pale yellow offered, darker yellow allocated, pink accepted (when approval is on), purple worker pulled out, green booked, red cancelled.
 - [ ] Welcome email when a business or person is added on the Platform screen.
 - [ ] Shift types per business: letter, name, standard hours (D / Day shift / 7:00–3:30; AM/PM/NS for nursing), replacing the fixed A/P/N. Leave room for shifts that cross pay rates (Release 2).
 - [ ] Roster templates: the ideal week as a template; apply a template or duplicate the previous week or month.

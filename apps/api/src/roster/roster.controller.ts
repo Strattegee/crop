@@ -60,6 +60,10 @@ const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName
   round((extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::numeric, 2)::float8 as hours,
   sa.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
   sa.status as "assignmentStatus",
+  (select count(*)::int from shift_offers o where o.shift_id = s.id and o.status = 'pending' and (o.expires_at is null or o.expires_at > now())) as "offersPending",
+  (select coalesce(pw.preferred_name, pw.first_name) || ' ' || pw.last_name from shift_assignments px join workers pw on pw.id = px.worker_id
+    where px.shift_id = s.id and px.resource_kind = 'worker' and px.status = 'removed' and px.removed_reason = 'pulled_out'
+    order by px.ended_at desc limit 1) as "pulledOutName",
   coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name) order by e.name)
               from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
              where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment`;
@@ -391,11 +395,13 @@ export class ShiftsController {
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/unassign')
   @HttpCode(200)
-  unassign(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+  unassign(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    // pulledOut: the person withdrew (Steve's purple ribbon), rather than the office taking them off.
+    const pulledOut = bool(body ?? {}, 'pulledOut') ?? false;
     return withTenant(this.pool, t.tenantId, async db => {
       const r = await db.query(
-        `update shift_assignments set status = 'removed', ended_at = now()
-          where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [id]);
+        `update shift_assignments set status = 'removed', ended_at = now(), removed_reason = $2
+          where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [id, pulledOut ? 'pulled_out' : 'office']);
       if (!r.rowCount) throw new ConflictException('Nobody is on this shift');
       await db.query(`update shifts set status = 'open', updated_at = now() where id = $1 and status <> 'cancelled'`, [id]);
       return shiftById(db, id);

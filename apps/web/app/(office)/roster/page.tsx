@@ -14,6 +14,7 @@ type Shift = {
   role: string; status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
+  offersPending?: number; pulledOutName?: string | null;
 };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
@@ -28,10 +29,20 @@ type Offer = { id: string; workerId: string; workerName?: string; name?: string;
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
-const STATUS: Record<string, { label: string; cls: string }> = {
-  open: { label: 'Open', cls: 'open' }, assigned: { label: 'Assigned', cls: 'assigned' }, booked: { label: 'Booked', cls: 'booked' },
-  cancelled: { label: 'Cancelled', cls: 'cancelled' },
-};
+/**
+ * The ribbon: Steve's colour for each stage of a shift (26 Oct). Grey unfilled, pale yellow offered,
+ * darker yellow allocated (waiting for them), pink accepted (when the business approves first; not used yet),
+ * purple the person pulled out, green booked, red cancelled.
+ */
+function stage(s: Shift): { cls: string; label: string } {
+  if (s.status === 'cancelled') return { cls: 'cancelled', label: 'Cancelled' };
+  if (s.equipmentOnly) return s.status === 'open' ? { cls: 'unfilled', label: 'Needs equipment' } : { cls: 'booked', label: 'Equipment booked' };
+  if (s.status === 'booked') return { cls: 'booked', label: 'Booked' };
+  if (s.status === 'assigned') return { cls: 'allocated', label: 'Allocated' };
+  if (s.pulledOutName) return { cls: 'pulled', label: 'Pulled out' };
+  if (s.offersPending) return { cls: 'offered', label: `Offered to ${s.offersPending}` };
+  return { cls: 'unfilled', label: 'Unfilled' };
+}
 const DAY = 86_400_000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (d: string, n: number) => iso(new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY));
@@ -334,9 +345,10 @@ export default async function RosterPage({ searchParams }: {
                         )}
                         {cell.map(s => (
                           <Link key={s.id} href={url({ shift: s.id })} data-shift={s.id}
-                            data-needs-person={!s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0'} data-takes-equipment={s.status !== 'cancelled' ? '1' : '0'} className={`rcard ${s.equipmentOnly ? (s.status === 'open' ? 'open' : 'booked') : STATUS[s.status]?.cls ?? ''} ${selected?.id === s.id ? 'sel' : ''}`}>
+                            data-needs-person={!s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0'} data-takes-equipment={s.status !== 'cancelled' ? '1' : '0'} className={`rcard ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}
+                            title={s.pulledOutName ? `${s.pulledOutName} pulled out` : undefined}>
                             <span className={`band ${band(s)}`}><b className="ltr" aria-label={band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-                            <span className="st">{s.equipmentOnly && s.status !== 'cancelled' ? (s.status === 'open' ? 'Needs equipment' : 'Equipment booked') : STATUS[s.status]?.label}</span>
+                            <span className="st">{stage(s).label}</span>
                             <span className="ln">{r.kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : r.kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
                             {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
                           </Link>
@@ -390,10 +402,12 @@ export default async function RosterPage({ searchParams }: {
                         <form action={confirm.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small">Confirm</button></form>
                       )}
                       <form action={unassign.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Remove</button></form>
+                      <form action={unassign.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><input type="hidden" name="pulledOut" value="1" /><button className="btn small secondary" title="They can't do it: the shift shows purple until it's filled again">They pulled out</button></form>
                     </span>
                   </div>
                 ) : (
                   <>
+                    {selected.pulledOutName && <p className="notice error" style={{ margin: '0 0 8px' }}>{selected.pulledOutName} pulled out. Fill it again below.</p>}
                     {pendingOffers.length > 0 && (
                       <div className="offers">
                         <p className="muted" style={{ margin: '0 0 6px' }}>Offered to {pendingOffers.length}; first to accept is booked.</p>
@@ -497,7 +511,7 @@ export default async function RosterPage({ searchParams }: {
 
       <div className="roster-legend">
         <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span><i className="leave-key" /> Leave</span>
-        <span><i className="rb booked" /> Booked</span><span><i className="rb assigned" /> Assigned, waiting to confirm</span><span><i className="rb open" /> Open</span><span><i className="rb cancelled" /> Cancelled</span>
+        <span><i className="rb unfilled" /> Unfilled</span><span><i className="rb offered" /> Offered</span><span><i className="rb allocated" /> Allocated, waiting for them</span><span><i className="rb accepted" /> Accepted (when approval is on)</span><span><i className="rb pulled" /> Pulled out</span><span><i className="rb booked" /> Booked</span><span><i className="rb cancelled" /> Cancelled</span>
       </div>
     </div>
   );

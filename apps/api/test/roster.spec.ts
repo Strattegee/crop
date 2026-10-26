@@ -117,7 +117,11 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     await http().post(`/shifts/${am}/confirm`).set(as('alloc')).expect(409);
 
     const u = await http().post(`/shifts/${nd}/unassign`).set(as('alloc')).expect(200);
-    expect(u.body).toMatchObject({ status: 'open', workerId: null });
+    expect(u.body).toMatchObject({ status: 'open', workerId: null, pulledOutName: null, offersPending: 0 });
+    // Someone pulling out is remembered on the open shift (Steve's purple ribbon).
+    await http().post(`/shifts/${nd}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
+    const p = await http().post(`/shifts/${nd}/unassign`).set(as('alloc')).send({ pulledOut: true }).expect(200);
+    expect(p.body).toMatchObject({ status: 'open', workerId: null, pulledOutName: 'Ana Example' });
 
     await http().post(`/shifts/${am}/cancel`).set(as('alloc')).send({}).expect(400);
     const x = await http().post(`/shifts/${am}/cancel`).set(as('alloc')).send({ reason: 'Function cancelled' }).expect(200);
