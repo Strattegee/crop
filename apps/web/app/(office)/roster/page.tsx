@@ -200,8 +200,8 @@ export default async function RosterPage({ searchParams }: {
         <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="hidden" name="back" value={here} />
           <input type="hidden" name="week" value={week} />
-          <span>This business is empty. Load an invented demo week (two sites, seven staff, equipment) to try the roster?</span>
-          <button className="btn small">Load demo week</button>
+          <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
+          <button className="btn small">Load café demo</button>
         </form>
       )}
 
@@ -224,7 +224,10 @@ export default async function RosterPage({ searchParams }: {
               </select>
             </label>
             <label>Role
-              <input name="role" placeholder="e.g. Chef, RN, Operator" maxLength={60} />
+              <input name="role" placeholder="e.g. Barista" maxLength={60} list="known-roles" />
+              <datalist id="known-roles">
+                {[...new Set(roster.people.flatMap(p => p.roles))].sort().map(r => <option key={r} value={r} />)}
+              </datalist>
             </label>
             <label>Shift code
               <select name="shiftCodeId" defaultValue="">
