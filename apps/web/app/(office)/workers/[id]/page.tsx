@@ -13,6 +13,7 @@ import { DocLink } from '../../../../lib/doc-link';
 import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
 import { AvailabilityCard } from './availability-card';
+import { EmploymentCard, type EmploymentTerms } from './employment-card';
 import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
@@ -45,10 +46,14 @@ export default async function WorkerPage({ params, searchParams }: {
 }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [w, types, agency, rtw, avail] = await Promise.all([
+  const [w, types, agency, rtw, avail, employment, settings] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
     api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),
+    api<EmploymentTerms[]>(`/workers/${id}/employment`).catch(() => null),
+    api<{ timezone?: string }>('/settings').catch(() => ({} as { timezone?: string })),
   ]);
+  // "Today" in the business's time zone, never the server's.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone || 'Australia/Melbourne' }).format(new Date());
   const r = rtw.current;
   const canVerify = agency?.role === 'owner' || agency?.role === 'admin';
   const activeTypes = types.filter(t => t.active);
@@ -76,6 +81,8 @@ export default async function WorkerPage({ params, searchParams }: {
         </div>
       )}
 
+
+      {employment && <EmploymentCard workerId={id} terms={employment} today={today} canEdit={canVerify} />}
 
       {avail && <AvailabilityCard workerId={id} a={avail} canApprove={canVerify} />}
 
