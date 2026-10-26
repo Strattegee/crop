@@ -12,6 +12,7 @@ import {
 import { DocLink } from '../../../../lib/doc-link';
 import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
+import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,7 @@ type Rtw = {
 export default async function WorkerPage({ params, searchParams }: {
   params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }>;
 }) {
+  const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [w, types, agency, rtw] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
@@ -131,7 +133,7 @@ export default async function WorkerPage({ params, searchParams }: {
         )}
       </div>
       <div className="card" style={{ overflowX: 'auto' }}>
-        <h2>Credentials</h2>
+        <h2>{tw.many(T.credential)}</h2>
         {w.credentials.length === 0 ? <p className="muted">No credentials recorded yet.</p> : (
           <table>
             <thead><tr><th>Credential</th><th>Number</th><th>Expires</th><th>Status</th><th>Evidence</th><th>Verification</th>{canVerify && <th />}</tr></thead>
@@ -190,7 +192,7 @@ export default async function WorkerPage({ params, searchParams }: {
       </div>
 
       <div className="card">
-        <h2>Add a credential</h2>
+        <h2>Add a {tw.lower(T.credential)}</h2>
         {activeTypes.length === 0 ? (
           <p className="muted">No credential types are set up yet. <Link href="/settings">Add them in Settings</Link>.</p>
         ) : (

@@ -4,6 +4,8 @@ import { CATEGORY_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
 import { addCredentialType, addRule, addStarterSet, removeRule, saveSettings, setTypeActive } from './actions';
 import { addDemoStaff, applyPack, completeDemo } from './industry-actions';
+import { T, words } from '../../../lib/terms';
+import { saveTerms } from './terms-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,7 @@ type PackSummary = { id: string; name: string; description: string; appliedAt: s
 type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
+  const tw = await words();
   const [packs, types, rules, settings, agency, sp] = await Promise.all([
     api<PackSummary[]>('/industry-packs'), api<CredentialType[]>('/credential-types'), api<Rule[]>('/credential-requirements'), api<Settings>('/settings'), currentAgency(), searchParams,
   ]);
@@ -54,7 +57,27 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
-        <h2>Credential types</h2>
+        <h2>Words we use</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Call things what your business calls them. Menus, page titles and the {tw.lower(T.roster)} use these words. Leave a word blank to go back to the standard one.</p>
+        <form action={saveTerms}>
+          <table>
+            <thead><tr><th>Standard word</th><th>Your word (one)</th><th>Your word (more than one)</th></tr></thead>
+            <tbody>
+              {tw.all.map(t => (
+                <tr key={t.code}>
+                  <td>{t.defaultSingular}<div className="muted small">{t.concept}</div></td>
+                  <td><input type="hidden" name="code" value={t.code} /><input name={`singular-${t.code}`} defaultValue={t.singular === t.defaultSingular ? '' : t.singular} placeholder={t.defaultSingular} maxLength={40} disabled={!canEdit} /></td>
+                  <td><input name={`plural-${t.code}`} defaultValue={t.plural === t.defaultPlural ? '' : t.plural} placeholder={t.defaultPlural} maxLength={40} disabled={!canEdit} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {canEdit && <button type="submit" className="btn" style={{ marginTop: 10 }}>Save words</button>}
+        </form>
+      </div>
+
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <h2>{tw.one(T.credential)} types</h2>
         {types.length === 0 && canEdit && (
           <form action={addStarterSet} style={{ marginBottom: 12 }}>
             <p className="muted">Start with the suggested list for a nursing agency (AHPRA, police check, WWCC, NDIS screening, CPR, vaccinations and more). You can change or switch off any of them.</p>

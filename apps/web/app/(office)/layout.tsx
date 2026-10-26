@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { currentAgency, currentUser, OFFICE_ROLES } from '../../lib/current-user';
 import { Nav } from './nav';
+import { FUNCTIONS } from '../../lib/functions';
+import { words } from '../../lib/terms';
 
 /** Everything under (office) needs a signed-in office user (owner, admin or allocator) in the chosen agency. */
 export default async function OfficeLayout({ children }: { children: ReactNode }) {
@@ -10,12 +12,14 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   const current = await currentAgency();
   if (!current) redirect('/');
   const memberships = user.me.memberships.filter(m => OFFICE_ROLES.includes(m.role));
+  const w = await words();
+  const links = FUNCTIONS.map(f => ({ href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label }));
 
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="logo">CROP</div>
-        <Nav />
+        <Nav links={links} />
         <div className="spacer" />
         <form action="/auth/logout" method="post">
           <button type="submit" className="btn small secondary" style={{ width: '100%' }}>Sign out</button>

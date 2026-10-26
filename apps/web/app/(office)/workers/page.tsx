@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { Badge, COMPLIANCE_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
 import { addWorker } from './actions';
+import { T, words } from '../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ type Worker = {
 };
 
 export default async function WorkersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const tw = await words();
   const p = await searchParams;
   const qs = new URLSearchParams();
   if (p.search) qs.set('search', p.search);
@@ -21,7 +23,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <h1>Workers</h1>
+      <h1>{tw.many(T.worker)}</h1>
       <p className="muted">Everyone who works shifts for your agency, and whether they are compliant to work.</p>
       <Notices error={p.error} done={p.done} />
 

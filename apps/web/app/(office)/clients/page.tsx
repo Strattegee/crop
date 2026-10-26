@@ -5,17 +5,19 @@ import { Badge } from '../../../lib/format';
 import { CLIENT_STATUS } from '../../../lib/places';
 import { Notices } from '../notices';
 import { addClient } from './actions';
+import { T, words } from '../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
 type ClientRow = { id: string; name: string; abn: string | null; status: string; billingEmail: string | null; facilityCount: number };
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
+  const tw = await words();
   const [clients, agency, sp] = await Promise.all([api<ClientRow[]>('/clients'), currentAgency(), searchParams]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   return (
     <>
-      <h1>Clients</h1>
+      <h1>{tw.many(T.client)}</h1>
       <p className="muted">Organisations you supply workers to, with their facilities and wards.</p>
       <Notices error={sp.error} done={sp.done} />
       {canEdit && (

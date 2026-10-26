@@ -1,6 +1,7 @@
 'use server';
 
 import { api } from '../../../lib/api';
+import { revalidatePath } from 'next/cache';
 import { attempt } from '../../../lib/actions';
 import { completeDemoCredentials } from '../demo-tools';
 
@@ -16,6 +17,7 @@ export async function applyPack(id: string) {
   let added: Added | undefined;
   await attempt('/settings', async () => {
     added = (await api<{ added: Added }>(`/industry-packs/${id}/apply`, { method: 'POST' })).added;
+    revalidatePath('/', 'layout');
   }, 'Template applied. Adjust roles, rules, shift codes, equipment and items to suit the business.');
   void added;
 }

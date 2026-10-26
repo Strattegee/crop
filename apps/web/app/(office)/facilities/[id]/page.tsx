@@ -4,6 +4,7 @@ import { currentAgency } from '../../../../lib/current-user';
 import { SPECIALTIES, STATES } from '../../../../lib/places';
 import { Notices } from '../../notices';
 import { addArea, setAreaActive, updateFacility } from '../../clients/actions';
+import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ type Facility = {
 };
 
 export default async function FacilityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
+  const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [f, agency] = await Promise.all([api<Facility>(`/facilities/${id}`), currentAgency()]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
@@ -26,7 +28,7 @@ export default async function FacilityPage({ params, searchParams }: { params: P
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>
-        <h2>Areas (wards and units)</h2>
+        <h2>{tw.many(T.area)}</h2>
         {f.areas.length === 0 ? <p className="muted">No areas yet. Shifts are booked into an area, so add at least one.</p> : (
           <table>
             <thead><tr><th>Name</th><th>Specialty</th><th /></tr></thead>
@@ -59,7 +61,7 @@ export default async function FacilityPage({ params, searchParams }: { params: P
 
       {(f.parkingNotes || f.entryNotes) && (
         <div className="card">
-          <h2>For workers</h2>
+          <h2>For {tw.lower(T.worker, true)}</h2>
           {f.parkingNotes && <p><strong>Parking:</strong> {f.parkingNotes}</p>}
           {f.entryNotes && <p style={{ marginBottom: 0 }}><strong>Entry and security:</strong> {f.entryNotes}</p>}
         </div>

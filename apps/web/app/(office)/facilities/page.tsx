@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
+import { T, words } from '../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,10 +8,11 @@ type Facility = { id: string; name: string; clientId: string | null; clientName:
 
 /** All facilities across clients. New facilities are added from a client's page. */
 export default async function FacilitiesPage() {
+  const tw = await words();
   const facilities = await api<Facility[]>('/facilities');
   return (
     <>
-      <h1>Facilities</h1>
+      <h1>{tw.many(T.site)}</h1>
       <p className="muted">Every site across your clients. To add one, open the <Link href="/clients">client</Link> it belongs to.</p>
       <div className="card" style={{ overflowX: 'auto' }}>
         {facilities.length === 0 ? <p className="muted" style={{ margin: 0 }}>No facilities yet.</p> : (

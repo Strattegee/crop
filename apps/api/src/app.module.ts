@@ -7,6 +7,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { FacilitiesController } from './facilities/facilities.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { IndustryController } from './industry/industry.controller.js';
+import { TermsController } from './terms/terms.controller.js';
 import { ItemsController, ShiftItemsController, StockController, WorkerItemsController } from './items/items.controller.js';
 import { BankFillController } from './roster/bank-fill.controller.js';
 import { OfferLinksController } from './roster/offer-links.controller.js';
@@ -19,7 +20,7 @@ import { WorkersController } from './workforce/workers.controller.js';
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, ClientsController, FacilitiesController, WorkersController,
+    HealthController, IndustryController, TermsController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController,

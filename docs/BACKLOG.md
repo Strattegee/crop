@@ -62,3 +62,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - ClickSend dedicated number (David, Mon 26 Oct) → set `CLICKSEND_FROM`.
 - Apple developer verification.
 - CFY: credential list and rules; which Entire statuses and reports they use.
+
+
+## Words and codes (26 Oct, Steve and David)
+- [x] Term codes and function codes; one set of words per business; Settings → Words we use; menu and page titles use them (docs/CODES.md).
+- [ ] Use the words in roster labels, forms, API errors, notifications and the worker app.
