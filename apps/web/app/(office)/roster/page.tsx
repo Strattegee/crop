@@ -17,7 +17,8 @@ type Shift = {
 };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
-type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; equipment?: Equip[] };
+type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
+type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; equipment?: Equip[]; leave?: Leave[] };
 type Facility = { id: string; name: string; active: boolean };
 type FacilityDetail = Facility & { areas: { id: string; name: string; active: boolean }[] };
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; startTime: string; endTime: string; active: boolean };
@@ -46,9 +47,10 @@ const longDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'sho
 /** AM, PM or night, from the local start time, for the colour band on a card. */
 function band(s: Shift) {
   const h = Number(s.localStart.slice(0, 2));
-  if (h >= 19 || h < 4) return 'nd';
+  if (h >= 19 || h < 5) return 'nd';
   return h < 12 ? 'am' : 'pm';
 }
+const LETTER: Record<string, string> = { am: 'A', pm: 'P', nd: 'N' };
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
@@ -91,12 +93,13 @@ export default async function RosterPage({ searchParams }: {
   const equipHours = equipment.reduce((a, e) => a + e.bookedHours, 0);
 
   // Rows
-  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled'; cells: Shift[][]; balance?: { text: string; cls: string } };
+  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled'; cells: Shift[][]; leave?: (Leave | null)[]; balance?: { text: string; cls: string } };
   const cellsFor = (pred: (s: Shift) => boolean, list: Shift[]) => days.map(d => list.filter(s => s.localDate === d && pred(s)));
   const personRow = (p: Person, list: Shift[]): Row => {
     const bal = p.contractedHours == null ? null : p.contractedHours - p.rosteredHours;
     return {
       key: p.id, label: p.name, kind: 'person',
+      leave: days.map(d => (roster.leave ?? []).find(l => l.workerId === p.id && l.startsOn <= d && l.endsOn >= d) ?? null),
       sub: [p.employmentType ? TYPE_SHORT[p.employmentType] : null, p.roles.join(', ') || null].filter(Boolean).join(' · '),
       cells: cellsFor(s => s.workerId === p.id, list),
       balance: { text: `${fmtHours(p.rosteredHours)}${p.contractedHours != null ? ` / ${fmtHours(p.contractedHours)}` : ''} h`, cls: bal == null ? '' : bal < 0 ? 'over' : bal === 0 ? 'even' : 'under' },
@@ -326,10 +329,13 @@ export default async function RosterPage({ searchParams }: {
                     </th>
                     {r.cells.map((cell, i) => (
                       <td key={i} className={days[i] === today ? 'today' : ''}>
+                        {r.leave?.[i] && (
+                          <span className={`leave-line ${r.leave[i]!.status}`}>{r.leave[i]!.status === 'approved' ? 'On leave' : 'Leave requested'}</span>
+                        )}
                         {cell.map(s => (
                           <Link key={s.id} href={url({ shift: s.id })} data-shift={s.id}
                             data-needs-person={!s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0'} data-takes-equipment={s.status !== 'cancelled' ? '1' : '0'} className={`rcard ${s.equipmentOnly ? (s.status === 'open' ? 'open' : 'booked') : STATUS[s.status]?.cls ?? ''} ${selected?.id === s.id ? 'sel' : ''}`}>
-                            <span className={`band ${band(s)}`}>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
+                            <span className={`band ${band(s)}`}><b className="ltr" aria-label={band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
                             <span className="st">{s.equipmentOnly && s.status !== 'cancelled' ? (s.status === 'open' ? 'Needs equipment' : 'Equipment booked') : STATUS[s.status]?.label}</span>
                             <span className="ln">{r.kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : r.kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
                             {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
@@ -342,6 +348,19 @@ export default async function RosterPage({ searchParams }: {
                 ))}
               </tbody>
             ))}
+            {shifts.length > 0 && (
+              <tfoot>
+                <tr className="totals">
+                  <th className="who" scope="row">Day totals</th>
+                  {days.map(d => {
+                    const ds = peopleShifts.filter(s => s.localDate === d);
+                    const h = ds.filter(s => s.status !== 'open').reduce((a, s) => a + s.hours, 0);
+                    return <td key={d} className={d === today ? 'today' : ''}><strong>{fmtHours(h)} h</strong><small>{ds.filter(s => s.status !== 'open').length} of {ds.length} filled</small></td>;
+                  })}
+                  <td className="bal"><strong>{fmtHours(hours)} h</strong></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </DropZone>
 
@@ -477,7 +496,7 @@ export default async function RosterPage({ searchParams }: {
       </div>
 
       <div className="roster-legend">
-        <span><i className="band am" /> AM</span><span><i className="band pm" /> PM</span><span><i className="band nd" /> Night</span>
+        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span><i className="leave-key" /> Leave</span>
         <span><i className="rb booked" /> Booked</span><span><i className="rb assigned" /> Assigned, waiting to confirm</span><span><i className="rb open" /> Open</span><span><i className="rb cancelled" /> Cancelled</span>
       </div>
     </div>

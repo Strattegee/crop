@@ -109,7 +109,7 @@ export const PACKS: IndustryPack[] = [
       { name: 'Administration Officer', area: 'Back Office' },
     ],
     shiftCodes: [
-      { code: 'OPEN', name: 'Breakfast', start: '06:30', end: '14:30', breakMinutes: 30 },
+      { code: 'EARLY', name: 'Breakfast', start: '06:30', end: '14:30', breakMinutes: 30 },
       { code: 'MID', name: 'Lunch', start: '10:00', end: '16:00', breakMinutes: 30 },
       { code: 'CLOSE', name: 'Dinner', start: '15:30', end: '22:30', breakMinutes: 30 },
       { code: 'K-AM', name: 'Kitchen early', start: '06:00', end: '14:00', breakMinutes: 30 },

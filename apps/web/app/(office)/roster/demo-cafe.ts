@@ -104,7 +104,7 @@ export async function loadCafeDemo(week: string, today: string) {
 
   const codes: Record<string, string> = {};
   for (const [code, name, s, e, brk] of [
-    ['OPEN', 'Breakfast', '06:30', '14:30', 30], ['MID', 'Lunch', '10:00', '16:00', 30], ['CLOSE', 'Dinner', '15:30', '22:30', 30],
+    ['EARLY', 'Breakfast', '06:30', '14:30', 30], ['MID', 'Lunch', '10:00', '16:00', 30], ['CLOSE', 'Dinner', '15:30', '22:30', 30],
     ['K-AM', 'Kitchen early', '06:00', '14:00', 30], ['K-PM', 'Kitchen late', '14:00', '22:00', 30], ['OFFICE', 'Office day', '09:00', '17:00', 30],
   ] as const) codes[code] = (await post('/shift-codes', { code, name, startTime: s, endTime: e, breakMinutes: brk, facilityId: site })).id;
 
@@ -175,13 +175,13 @@ export async function loadCafeDemo(week: string, today: string) {
   const all = [0, 1, 2, 3, 4, 5, 6], wk = [0, 1, 2, 3, 4], weekend = [5, 6], late = [3, 4, 5];
   const plan: ShiftSpec[] = [
     { area: 'Back Office', code: 'OFFICE', role: 'General Manager', days: wk },
-    { area: 'Front of House', code: 'OPEN', role: 'Duty Manager', days: all },
+    { area: 'Front of House', code: 'EARLY', role: 'Duty Manager', days: all },
     { area: 'Front of House', code: 'CLOSE', role: 'Duty Manager', days: late },
     { area: 'Front of House', code: 'MID', role: 'FOH Supervisor', days: all },
-    { area: 'Coffee Bar', code: 'OPEN', role: 'Head Barista', days: wk },
-    { area: 'Coffee Bar', code: 'OPEN', role: 'Barista', days: all, qty: 2, leaveOpen: [6] },
+    { area: 'Coffee Bar', code: 'EARLY', role: 'Head Barista', days: wk },
+    { area: 'Coffee Bar', code: 'EARLY', role: 'Barista', days: all, qty: 2, leaveOpen: [6] },
     { area: 'Coffee Bar', code: 'MID', role: 'Barista', days: weekend },
-    { area: 'Front of House', code: 'OPEN', role: 'Waitstaff', days: all, qty: 2 },
+    { area: 'Front of House', code: 'EARLY', role: 'Waitstaff', days: all, qty: 2 },
     { area: 'Front of House', code: 'MID', role: 'Waitstaff', days: all, qty: 2, leaveOpen: [5] },
     { area: 'Front of House', code: 'CLOSE', role: 'Waitstaff', days: late, qty: 2, leaveOpen: [4] },
     { area: 'Front of House', code: 'MID', role: 'Food Runner', days: all },
