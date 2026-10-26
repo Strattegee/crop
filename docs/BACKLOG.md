@@ -81,6 +81,19 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Zitadel verification codes don't arrive at strattegee.com (checked junk and archive). Check the Microsoft 365 quarantine and Zitadel's SMTP sender before real staff sign up. Workaround: mark the email verified in the Zitadel console (Users → user → Email).
 - Note: david@strattegee.com has access to Caring For You (since 22 Oct) and The Grand Cafe – Demo (26 Oct), so it shows both.
 
-## Questions for David and Steve (sent 26 Oct; answers go in docs/decisions/)
+## From Steve and David's answers (26 Oct; docs/decisions/2026-10-26-steve-answers.md)
+- [ ] Ribbon colours to Steve's scheme: grey unfilled, pale yellow offered, darker yellow allocated, pink accepted (when approval is on), purple worker pulled out, green booked, red cancelled.
+- [ ] Welcome email when a business or person is added on the Platform screen.
+- [ ] Shift types per business: letter, name, standard hours (D / Day shift / 7:00–3:30; AM/PM/NS for nursing), replacing the fixed A/P/N. Leave room for shifts that cross pay rates (Release 2).
+- [ ] Roster templates: the ideal week as a template; apply a template or duplicate the previous week or month.
+- [ ] After publishing: changes only as logged, requested and approved changes by authorised people; option to lock the roster; optional worker-to-worker shift swaps in the app. All as client settings.
+- [ ] Cover line ("T"): the person being covered, set when a shift covers someone's leave.
+- [ ] Document visibility: every document type with who can see it (agency roles, client roles); clients see everything except contracts and agreements.
+- [ ] Agency fill timing by urgency, client-set, with defaults (within 2 hours: 10 minutes per agency; next day or later: 2 hours; same day: confirm with David).
+- [ ] Agency nominations: client setting, book automatically or approve first (pink "accepted" stage).
+- [ ] Light client accounts for clients not on CROP (order shifts).
+- [ ] Priority in the people list: later, with Steve.
+
+## Questions for David and Steve (sent 26 Oct; answered the same evening, see docs/decisions/2026-10-26-steve-answers.md; still open: same-day agency timing)
 - Steve: colour for an offered shift; what Template (grey) shifts are; what the "T" line holds; A/P/N from start time or shift code; does Publish week notify staff and are later changes logged; what sets "Pri" (priority).
 - David: employer and agency in one business (assumed yes); who sets agency escalation times (assumed employer, per request override); what employers see of agency workers (assumed name, role, compliant yes/no); agency nominations booked straight away (assumed yes); light accounts for CFY clients not on CROP (assumed yes); hide Clients for small employers; welcome emails from the Platform screen; Zitadel codes in M365 quarantine; ClickSend number; 26 Oct transcript.
