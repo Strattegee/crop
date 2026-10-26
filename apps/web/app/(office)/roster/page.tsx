@@ -6,6 +6,9 @@ import {
   assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, publishWeek, recordReply, removeEquipment, unassign,
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
+import {
+  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+} from './view';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,17 +52,12 @@ function stage(s: Shift): { cls: string; label: string } {
   if (s.offersPending) return { cls: 'offered', label: `Offered to ${s.offersPending}` };
   return { cls: 'unfilled', label: 'Unfilled' };
 }
-const DAY = 86_400_000;
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (d: string, n: number) => iso(new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY));
-function mondayOf(d: string) {
-  const wd = (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7;
-  return addDays(d, -wd);
-}
 function todayMelbourne() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
 }
 const dayLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
+const fullDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
+const monthLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
 const longDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
 /** AM, PM or night, from the local start time, for the colour band on a card. */
 function band(s: Shift) {
@@ -68,34 +66,43 @@ function band(s: Shift) {
   return h < 12 ? 'am' : 'pm';
 }
 const LETTER: Record<string, string> = { am: 'A', pm: 'P', nd: 'N' };
+/** Height of one lane of bars in the day timeline. */
+const LANE_PX = 60;
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; site?: string; view?: string; shift?: string; log?: string; error?: string; done?: string }>;
+  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; shift?: string; log?: string; error?: string; done?: string }>;
 }) {
   const tw = await words();
   const sp = await searchParams;
   const today = todayMelbourne();
-  const week = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? '') ? sp.week! : today);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
+  // Day, week or month (state in the URL: span = day|month, date = the day or any date in the month; week view keeps `week`).
+  const span = parseSpan(sp.span);
+  const range = rangeFor(span, anchorOf(sp, today), today);
+  const { week, days } = range;
   const view = sp.view === 'person' ? 'person' : 'area';
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
+  const at = (s: Span, anchor: string) => s === 'week' ? { span: undefined, date: undefined, week: anchor } : { span: s, date: anchor, week: undefined };
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { week, site, view, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
+    const merged = { ...at(span, range.anchor), site, view, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
   const here = url({});
+  const go = (anchor: string) => url({ ...at(span, anchor), shift: undefined });
+  const switchTo = (s: Span) => url({ ...at(s, anchorForSwitch(range, s, today)), shift: s === 'month' ? undefined : sp.shift });
 
-  const showLog = sp.log === '1';
-  const [roster, facilities, codes, itemList, weekStates, changes] = await Promise.all([
-    api<Roster>(`/roster?from=${days[0]}&to=${days[6]}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
+  const showLog = sp.log === '1' && span !== 'month';
+  const monthWeeks = span === 'month' ? weeksOf(days) : [];
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates] = await Promise.all([
+    api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
     api<{ id: string; name: string; category: string; unit: string; tracksStock: boolean; reorderLevel: number | null; onHand: number }[]>('/items').catch(() => []),
     api<Week[]>(`/roster/weeks?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]),
     showLog ? api<Change[]>(`/roster/changes?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
+    Promise.all(monthWeeks.map(w => api<Week[]>(`/roster/weeks?weekStart=${w[0]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]))),
   ]);
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
   const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
@@ -106,17 +113,22 @@ export default async function RosterPage({ searchParams }: {
   const activeFacilities = facilities.filter(f => f.active);
   const details = await Promise.all(activeFacilities.slice(0, 30).map(f => api<FacilityDetail>(`/facilities/${f.id}`)));
   const allShifts = roster.shifts;
-  const cancelled = allShifts.filter(s => s.status === 'cancelled');
-  const shifts = allShifts.filter(s => s.status !== 'cancelled');
+  // Day view fetches the whole week (hours against weekly contracts); month view fetches whole weeks around the month.
+  const inMonth = (d: string) => d.slice(0, 7) === range.anchor.slice(0, 7);
+  const inView = (s: Shift) => span === 'month' ? inMonth(s.localDate) : days.includes(s.localDate);
+  const cancelled = allShifts.filter(s => s.status === 'cancelled' && inView(s));
+  const shifts = allShifts.filter(s => s.status !== 'cancelled' && inView(s));
   const equipment = roster.equipment ?? [];
-  const selected = sp.shift ? allShifts.find(s => s.id === sp.shift) : undefined;
+  const selected = span !== 'month' && sp.shift ? allShifts.find(s => s.id === sp.shift) : undefined;
 
   // Summary
   const peopleShifts = shifts.filter(s => !s.equipmentOnly);
   const filled = peopleShifts.filter(s => s.status !== 'open').length;
   const open = peopleShifts.length - filled;
   const hours = peopleShifts.filter(s => s.status !== 'open').reduce((a, s) => a + s.hours, 0);
-  const equipHours = equipment.reduce((a, e) => a + e.bookedHours, 0);
+  const equipHours = span === 'week' ? equipment.reduce((a, e) => a + e.bookedHours, 0)
+    : shifts.reduce((a, s) => a + s.hours * (s.equipment?.length ?? 0), 0);
+  const periodWord = span === 'day' ? 'day' : span === 'month' ? 'month' : 'week';
 
   // Rows
   type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled'; cells: Shift[][]; leave?: (Leave | null)[]; balance?: { text: string; cls: string } };
@@ -154,16 +166,16 @@ export default async function RosterPage({ searchParams }: {
       const eq = equipOnlyRow(k, list);
       if (eq) rows.push(eq);
       const gone = cancelled.filter(c => `${c.facilityName}|||${c.areaName ?? ''}` === k);
-      if (gone.length) rows.push({ key: `x-${k}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this week`, cells: cellsFor(() => true, gone) });
+      if (gone.length) rows.push({ key: `x-${k}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this ${periodWord}`, cells: cellsFor(() => true, gone) });
       groups.push({ key: k, title: fac, sub: area || 'No area', rows });
     }
   } else {
     groups.push({ key: 'people', title: 'People', rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
-      ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this week`, cells: cellsFor(() => true, cancelled) }] : [])] });
+      ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this ${periodWord}`, cells: cellsFor(() => true, cancelled) }] : [])] });
   }
   if (equipment.length) {
     groups.push({
-      key: 'equipment', title: 'Equipment', sub: `${fmtHours(equipHours)} hours booked`,
+      key: 'equipment', title: 'Equipment', sub: `${fmtHours(equipHours)} hours booked this ${periodWord}`,
       rows: equipment.map(e => ({
         key: e.id, label: e.name, sub: `${e.typeName}${e.status !== 'active' ? ' · out of service' : ''}`, kind: 'equipment' as const,
         cells: cellsFor(s => !!s.equipment?.some(x => x.id === e.id), shifts),
@@ -213,6 +225,21 @@ export default async function RosterPage({ searchParams }: {
     low: i.tracksStock && i.reorderLevel != null && i.onHand <= i.reorderLevel,
   }));
 
+  // Shift cards, shared by the week grid and the day timeline (bars).
+  const win = dayWindow(span === 'day' ? [...shifts, ...cancelled] : []);
+  const cardAttrs = (s: Shift) => ({
+    href: url({ shift: s.id }), 'data-shift': s.id,
+    'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
+    'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}`,
+  });
+  const cardBody = (s: Shift, kind: Row['kind']) => (<>
+    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
+    <span className="st">{stage(s).label}</span>
+    <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
+    {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
+  </>);
+
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
   const pendingOffers = offers.filter(o => o.status === 'pending');
   const declinedOffers = offers.filter(o => o.status === 'declined');
@@ -222,14 +249,21 @@ export default async function RosterPage({ searchParams }: {
       <div className="roster-head">
         <div>
           <h1>{tw.one(T.roster)}</h1>
-          <p className="muted" style={{ margin: 0 }}>Week of {longDate(days[0])} – {longDate(days[6])}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {span === 'day' ? fullDate(range.anchor) : span === 'month' ? monthLabel(range.anchor) : <>Week of {longDate(days[0])} – {longDate(days[6])}</>}
+          </p>
         </div>
         <div className="roster-tools">
-          <Link className="btn small secondary" href={url({ week: addDays(week, -7), shift: undefined })} aria-label="Previous week">‹</Link>
-          <Link className="btn small secondary" href={url({ week: mondayOf(today), shift: undefined })}>This week</Link>
-          <Link className="btn small secondary" href={url({ week: addDays(week, 7), shift: undefined })} aria-label="Next week">›</Link>
+          <div className="seg" role="group" aria-label="Show">
+            {(['day', 'week', 'month'] as const).map(s => (
+              <Link key={s} href={switchTo(s)} aria-current={span === s ? 'true' : undefined}>{s === 'day' ? 'Day' : s === 'week' ? 'Week' : 'Month'}</Link>
+            ))}
+          </div>
+          <Link className="btn small secondary" href={go(range.prev)} aria-label={`Previous ${periodWord}`}>‹</Link>
+          <Link className="btn small secondary" href={go(range.current)}>{range.currentLabel}</Link>
+          <Link className="btn small secondary" href={go(range.next)} aria-label={`Next ${periodWord}`}>›</Link>
           <form method="get" action="/roster" className="roster-tools">
-            <input type="hidden" name="week" value={week} />
+            {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <input type="hidden" name="view" value={view} />
             <label className="inline">Site
               <select name="site" defaultValue={site}>
@@ -239,16 +273,17 @@ export default async function RosterPage({ searchParams }: {
             </label>
             <button type="submit" className="btn small secondary">Show</button>
           </form>
-          <div className="seg" role="group" aria-label="View">
+          {span !== 'month' && <div className="seg" role="group" aria-label="View">
             <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By area</Link>
             <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By person</Link>
-          </div>
+          </div>}
         </div>
       </div>
 
       <Notices error={sp.error} done={sp.done} />
 
-      <section className="roster-state card" aria-label="Roster status">
+      {span !== 'month' && <section className="roster-state card" aria-label="Roster status">
+        {span === 'day' && <span className="muted small">Week of {longDate(week)}:</span>}
         <div className="states">
           {isHistory ? (
             <span><b className="pill history">History</b> <span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
@@ -279,7 +314,7 @@ export default async function RosterPage({ searchParams }: {
             </form>
           )}
         </div>
-      </section>
+      </section>}
 
       {showLog && (
         <section className="card roster-log" aria-label="Changes this week">
@@ -302,7 +337,7 @@ export default async function RosterPage({ searchParams }: {
         </section>
       )}
 
-      <section className="roster-kpis" aria-label="Week summary">
+      <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
         <div><span>Shifts</span><strong>{peopleShifts.length}</strong></div>
         <div><span>Filled</span><strong className="ok">{filled}</strong></div>
         <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
@@ -319,7 +354,7 @@ export default async function RosterPage({ searchParams }: {
         </form>
       )}
 
-      {process.env.DEMO_TOOLS === 'on' && open > 0 && (
+      {process.env.DEMO_TOOLS === 'on' && open > 0 && span !== 'month' && (
         <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
           <input type="hidden" name="back" value={here} />
           <input type="hidden" name="week" value={week} />
@@ -360,7 +395,7 @@ export default async function RosterPage({ searchParams }: {
             </label>
             <label>Start<input name="startTime" type="time" /></label>
             <label>End<input name="endTime" type="time" /></label>
-            <label>From<input name="startDate" type="date" required defaultValue={days[0]} /></label>
+            <label>From<input name="startDate" type="date" required defaultValue={span === 'month' ? range.anchor : days[0]} /></label>
             <label>Until <span className="muted">(for a block)</span><input name="endDate" type="date" /></label>
             <fieldset className="weekdays">
               <legend>Days (for a block)</legend>
@@ -375,56 +410,123 @@ export default async function RosterPage({ searchParams }: {
         )}
       </details>
 
+      {span === 'month' && (
+        <section className="card roster-month" aria-label={monthLabel(range.anchor)}>
+          <table className="month-grid">
+            <thead>
+              <tr><th className="wk">Week</th>{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <th key={d}>{d}</th>)}</tr>
+            </thead>
+            <tbody>
+              {monthWeeks.map((w, i) => {
+                const st = weekStateLabel(monthStates[i] ?? []);
+                return (
+                  <tr key={w[0]}>
+                    <th className="wk" scope="row">
+                      <Link href={url({ ...at('week', w[0]), shift: undefined })}>{longDate(w[0])}</Link>
+                      {st && <b className={`pill ${st.cls} small`}>{st.text}</b>}
+                    </th>
+                    {w.map(d => {
+                      const sum = daySummary(d, allShifts, roster.leave ?? []);
+                      return (
+                        <td key={d} className={[inMonth(d) ? '' : 'other', d === today ? 'today' : '', sum.open ? 'has-open' : ''].join(' ').trim() || undefined}>
+                          <Link href={url({ ...at('day', d), shift: undefined })} className="mday" aria-label={`${fullDate(d)}: ${sum.shifts ? `${sum.filled} of ${sum.shifts} shifts filled` : 'no shifts'}`}>
+                            <span className="dnum">{Number(d.slice(8))}</span>
+                            {sum.shifts ? (<>
+                              <span className={sum.open ? 'warn' : 'ok'}>{sum.filled} of {sum.shifts} filled</span>
+                              <span>{fmtHours(sum.hours)} h</span>
+                              {sum.open > 0 && <strong className="warn">{sum.open} open</strong>}
+                            </>) : <span className="muted">No shifts</span>}
+                            {sum.onLeave > 0 && <span className="muted">{sum.onLeave} on leave</span>}
+                            {sum.cancelled > 0 && <span className="muted">{sum.cancelled} cancelled</span>}
+                          </Link>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="muted small" style={{ margin: '8px 0 0' }}>Choose a day to see it hour by hour, or a week to change it.</p>
+        </section>
+      )}
+
+      {span !== 'month' && (
       <div className="roster-layout">
         <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag
           labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role) }} />
         <DropZone back={here}>
-          <table className="ribbon">
+          <table className={`ribbon ${span === 'day' ? 'day' : ''}`}>
             <thead>
               <tr>
                 <th className="who">{view === 'area' ? 'Site · area · person' : 'Person'}</th>
                 {days.map(d => {
                   const ds = peopleShifts.filter(s => s.localDate === d);
                   const f = ds.filter(s => s.status !== 'open').length;
-                  return (
+                  const count = <small className={ds.length && f < ds.length ? 'warn' : 'ok'}>{ds.length ? `${f} of ${ds.length}` : '—'}</small>;
+                  return span === 'day' ? (
+                    <th key={d} className="tl-head">
+                      <div className="tl-ticks" aria-hidden="true">
+                        {win.ticks.map(t => <span key={t} style={{ left: `${((t - win.from) / (win.to - win.from)) * 100}%` }}>{tickLabel(t)}</span>)}
+                      </div>
+                    </th>
+                  ) : (
                     <th key={d} className={d === today ? 'today' : ''}>
-                      <span>{dayLabel(d)}</span>
-                      <small className={ds.length && f < ds.length ? 'warn' : 'ok'}>{ds.length ? `${f} of ${ds.length}` : '—'}</small>
+                      <Link href={url({ ...at('day', d), shift: undefined })} className="daylink" title="See this day hour by hour"><span>{dayLabel(d)}</span></Link>
+                      {count}
                     </th>
                   );
                 })}
-                <th className="bal">Hours</th>
+                <th className="bal">{span === 'day' ? 'Week hours' : 'Hours'}</th>
               </tr>
             </thead>
             {groups.length === 0 && (
-              <tbody><tr><td colSpan={9} className="muted" style={{ padding: 24 }}>No shifts this week. Use <strong>Add shifts</strong> above.</td></tr></tbody>
+              <tbody><tr><td colSpan={days.length + 2} className="muted" style={{ padding: 24 }}>No shifts this {periodWord}. Use <strong>Add shifts</strong> above.</td></tr></tbody>
             )}
             {groups.map(g => (
               <tbody key={g.key}>
-                <tr className="group"><th colSpan={9}>{g.title}{g.sub && <span className="muted"> · {g.sub}</span>}</th></tr>
+                <tr className="group"><th colSpan={days.length + 2}>{g.title}{g.sub && <span className="muted"> · {g.sub}</span>}</th></tr>
                 {g.rows.map(r => (
                   <tr key={r.key} className={`row-${r.kind}`}>
                     <th className="who" scope="row">
                       <span className="name">{r.label}</span>
                       {r.sub && <span className="sub">{r.sub}</span>}
                     </th>
-                    {r.cells.map((cell, i) => (
-                      <td key={i} className={days[i] === today ? 'today' : ''}>
-                        {r.leave?.[i] && (
-                          <span className={`leave-line ${r.leave[i]!.status}`}>{r.leave[i]!.status === 'approved' ? 'On leave' : 'Leave requested'}</span>
-                        )}
-                        {cell.map(s => (
-                          <Link key={s.id} href={url({ shift: s.id })} data-shift={s.id}
-                            data-needs-person={!s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0'} data-takes-equipment={s.status !== 'cancelled' ? '1' : '0'} className={`rcard ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}
-                            title={s.pulledOutName ? `${s.pulledOutName} pulled out` : undefined}>
-                            <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-                            <span className="st">{stage(s).label}</span>
-                            <span className="ln">{r.kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : r.kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
-                            {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
-                          </Link>
-                        ))}
-                      </td>
-                    ))}
+                    {r.cells.map((cell, i) => {
+                      const leaveLine = r.leave?.[i] && (
+                        <span className={`leave-line ${r.leave[i]!.status}`}>{r.leave[i]!.status === 'approved' ? 'On leave' : 'Leave requested'}</span>
+                      );
+                      if (span === 'day') {
+                        const ln = lanes(cell);
+                        return (
+                          <td key={i} className="tl">
+                            {leaveLine}
+                            <div className="tl-track" style={{ height: ln.count * LANE_PX }}>
+                              {win.ticks.map(t => <i key={t} className="tl-tick" style={{ left: `${((t - win.from) / (win.to - win.from)) * 100}%` }} />)}
+                              {cell.map(s => {
+                                const pos = barPosition(s, win);
+                                return (
+                                  <Link key={s.id} {...cardAttrs(s)} className={`rcard bar ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}
+                                    style={{ left: `${pos.left}%`, width: `${pos.width}%`, top: (ln.lane.get(s.id) ?? 0) * LANE_PX }}>
+                                    {cardBody(s, r.kind)}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={i} className={days[i] === today ? 'today' : ''}>
+                          {leaveLine}
+                          {cell.map(s => (
+                            <Link key={s.id} {...cardAttrs(s)} className={`rcard ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}>
+                              {cardBody(s, r.kind)}
+                            </Link>
+                          ))}
+                        </td>
+                      );
+                    })}
                     <td className={`bal ${r.balance?.cls ?? ''}`}>{r.balance?.text ?? ''}</td>
                   </tr>
                 ))}
@@ -433,11 +535,11 @@ export default async function RosterPage({ searchParams }: {
             {shifts.length > 0 && (
               <tfoot>
                 <tr className="totals">
-                  <th className="who" scope="row">Day totals</th>
+                  <th className="who" scope="row">{span === 'day' ? 'Day total' : 'Day totals'}</th>
                   {days.map(d => {
                     const ds = peopleShifts.filter(s => s.localDate === d);
                     const h = ds.filter(s => s.status !== 'open').reduce((a, s) => a + s.hours, 0);
-                    return <td key={d} className={d === today ? 'today' : ''}><strong>{fmtHours(h)} h</strong><small>{ds.filter(s => s.status !== 'open').length} of {ds.length} filled</small></td>;
+                    return <td key={d} className={d === today && span === 'week' ? 'today' : ''}><strong>{fmtHours(h)} h</strong><small>{ds.filter(s => s.status !== 'open').length} of {ds.length} filled</small></td>;
                   })}
                   <td className="bal"><strong>{fmtHours(hours)} h</strong></td>
                 </tr>
@@ -588,6 +690,7 @@ export default async function RosterPage({ searchParams }: {
           </aside>
         )}
       </div>
+      )}
 
       <div className="roster-legend">
         <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><i className="leave-key" /> Leave</span>

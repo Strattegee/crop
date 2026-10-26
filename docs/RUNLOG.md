@@ -113,3 +113,9 @@ Newest first. One entry per working session or scheduled run.
 - Next: the rest of item 2: day and month views, then roster templates (Steve's "ideal week"), then the after-publishing settings (approved changes, lock).
 - Question added for David and Steve: should publishing a week message staff their shifts, and should they hear about later changes?
 - Waiting on David: nothing new.
+
+## 2026-10-27 early morning (scheduled run)
+
+- Shipped: Day and month views of the roster (backlog item 2). A Day / Week / Month switch sits next to the arrows. Day shows one day hour by hour: each shift is a bar from its start to its finish (night shifts run past midnight, overlapping shifts stack), with the same side panel and drag and drop as the week. Month is a calendar: each day shows how many shifts are filled, the hours, how many are still open and who's on leave, and each week shows whether it's draft, live or history. Clicking a day opens it; clicking a week opens the week. Day headings in the week view now open that day too.
+- Next: roster templates (Steve's "ideal week": save a week as a template, apply it, or copy the previous week), then the after-publishing settings.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

@@ -1,0 +1,195 @@
+/**
+ * Day, week and month views of the roster: date ranges, navigation and the day timeline.
+ * Pure functions (no React, no API) so they can be unit-tested.
+ */
+
+export type Span = 'day' | 'week' | 'month';
+
+const DAY = 86_400_000;
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+export const iso = (d: Date) => d.toISOString().slice(0, 10);
+export const addDays = (d: string, n: number) => iso(new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY));
+export function mondayOf(d: string) {
+  const wd = (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7;
+  return addDays(d, -wd);
+}
+export const isDate = (s: string | undefined): s is string => !!s && ISO.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`))
+  && iso(new Date(`${s}T00:00:00Z`)) === s;
+export const monthStart = (d: string) => `${d.slice(0, 7)}-01`;
+export function addMonths(d: string, n: number) {
+  const y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)) - 1 + n;
+  return iso(new Date(Date.UTC(y, m, 1)));
+}
+function monthEnd(d: string) {
+  return addDays(addMonths(monthStart(d), 1), -1);
+}
+
+export function parseSpan(s: string | undefined): Span {
+  return s === 'day' || s === 'month' ? s : 'week';
+}
+
+/**
+ * The date the view is anchored on: `date` if valid, else `week` (older links), else today.
+ */
+export function anchorOf(sp: { date?: string; week?: string }, today: string) {
+  if (isDate(sp.date)) return sp.date;
+  if (isDate(sp.week)) return sp.week;
+  return today;
+}
+
+export type RangeInfo = {
+  span: Span;
+  anchor: string;
+  /** Monday of the anchor's week (publishing works by week). */
+  week: string;
+  /** Dates shown as columns (week), the one day (day), or every date in the calendar grid (month, Monday to Sunday). */
+  days: string[];
+  /** What to ask the API for. Day view asks for the whole week so hours compare with weekly contracts. */
+  fetchFrom: string;
+  fetchTo: string;
+  prev: string;
+  next: string;
+  /** The anchor for "Today" / "This week" / "This month". */
+  current: string;
+  currentLabel: string;
+};
+
+export function rangeFor(span: Span, anchor: string, today: string): RangeInfo {
+  const week = mondayOf(anchor);
+  if (span === 'day') {
+    return {
+      span, anchor, week, days: [anchor], fetchFrom: week, fetchTo: addDays(week, 6),
+      prev: addDays(anchor, -1), next: addDays(anchor, 1), current: today, currentLabel: 'Today',
+    };
+  }
+  if (span === 'month') {
+    const first = monthStart(anchor);
+    const gridFrom = mondayOf(first);
+    const gridTo = addDays(mondayOf(monthEnd(anchor)), 6);
+    const n = Math.round((Date.parse(`${gridTo}T00:00:00Z`) - Date.parse(`${gridFrom}T00:00:00Z`)) / DAY) + 1;
+    return {
+      span, anchor: first, week, days: Array.from({ length: n }, (_, i) => addDays(gridFrom, i)), fetchFrom: gridFrom, fetchTo: gridTo,
+      prev: addMonths(first, -1), next: addMonths(first, 1), current: monthStart(today), currentLabel: 'This month',
+    };
+  }
+  const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
+  return {
+    span, anchor: week, week, days, fetchFrom: days[0], fetchTo: days[6],
+    prev: addDays(week, -7), next: addDays(week, 7), current: mondayOf(today), currentLabel: 'This week',
+  };
+}
+
+/** Where to land when switching view: keep today if it's in what's on screen, else the first day shown. */
+export function anchorForSwitch(from: RangeInfo, to: Span, today: string) {
+  const shown = from.span === 'month' ? from.days.filter(d => d.slice(0, 7) === from.anchor.slice(0, 7)) : from.days;
+  const pick = shown.includes(today) ? today : from.span === 'day' ? from.anchor : shown[0];
+  return to === 'week' ? mondayOf(pick) : to === 'month' ? monthStart(pick) : pick;
+}
+
+/** Monday-to-Sunday rows of the month grid. */
+export function weeksOf(days: string[]) {
+  const out: string[][] = [];
+  for (let i = 0; i < days.length; i += 7) out.push(days.slice(i, i + 7));
+  return out;
+}
+
+const mins = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** Start and end in minutes from the start of the shift's local day; overnight shifts end after 1440. */
+export function shiftMinutes(s: { localStart: string; localEnd: string }) {
+  const start = mins(s.localStart);
+  let end = mins(s.localEnd);
+  if (end <= start) end += 1440;
+  return { start, end };
+}
+
+export type Window = { from: number; to: number; ticks: number[] };
+
+/**
+ * The hours the day timeline shows: from the earliest start to the latest end (whole hours),
+ * at least 8 hours wide, 06:00 to 22:00 when the day is empty.
+ */
+export function dayWindow(shifts: { localStart: string; localEnd: string }[]): Window {
+  let from = 6 * 60, to = 22 * 60;
+  if (shifts.length) {
+    from = Math.min(...shifts.map(s => shiftMinutes(s).start));
+    to = Math.max(...shifts.map(s => shiftMinutes(s).end));
+    from = Math.floor(from / 60) * 60;
+    to = Math.ceil(to / 60) * 60;
+    if (to - from < 8 * 60) {
+      const extra = 8 * 60 - (to - from);
+      from = Math.max(0, from - Math.floor(extra / 120) * 60);
+      to = Math.max(to, from + 8 * 60);
+    }
+  }
+  const step = to - from > 16 * 60 ? 180 : to - from > 10 * 60 ? 120 : 60;
+  const ticks: number[] = [];
+  for (let t = Math.ceil(from / step) * step; t <= to; t += step) ticks.push(t);
+  return { from, to, ticks };
+}
+
+/** Left and width of a shift on the timeline, in percent. */
+export function barPosition(s: { localStart: string; localEnd: string }, w: Window) {
+  const { start, end } = shiftMinutes(s);
+  const span = w.to - w.from;
+  const left = Math.max(0, (start - w.from) / span) * 100;
+  const right = Math.min(1, (end - w.from) / span) * 100;
+  return { left: Math.round(left * 100) / 100, width: Math.max(2, Math.round((right - left) * 100) / 100) };
+}
+
+/** 13:00 → "1pm", 24:00 / 0:00 → "12am", 30:00 → "6am". */
+export function tickLabel(m: number) {
+  const h = Math.floor(m / 60) % 24;
+  const suffix = h < 12 ? 'am' : 'pm';
+  return `${h % 12 === 0 ? 12 : h % 12}${suffix}`;
+}
+
+/**
+ * Day summary for the month calendar: people shifts on the day (not cancelled), filled, open hours and leave.
+ */
+export function daySummary(
+  day: string,
+  shifts: { localDate: string; status: string; equipmentOnly?: boolean; hours: number }[],
+  leave: { workerId: string; status: string; startsOn: string; endsOn: string }[],
+) {
+  const people = shifts.filter(s => s.localDate === day && s.status !== 'cancelled' && !s.equipmentOnly);
+  const filled = people.filter(s => s.status !== 'open');
+  const onLeave = new Set(leave.filter(l => l.status === 'approved' && l.startsOn <= day && l.endsOn >= day).map(l => l.workerId));
+  return {
+    shifts: people.length,
+    filled: filled.length,
+    open: people.length - filled.length,
+    hours: Math.round(filled.reduce((a, s) => a + s.hours, 0) * 10) / 10,
+    cancelled: shifts.filter(s => s.localDate === day && s.status === 'cancelled').length,
+    onLeave: onLeave.size,
+  };
+}
+
+/**
+ * Stacks overlapping shifts in a row of the day timeline: each shift goes in the first lane that is free
+ * when it starts. Returns the lane for each shift id and how many lanes the row needs.
+ */
+export function lanes<T extends { id: string; localStart: string; localEnd: string }>(shifts: T[]) {
+  const sorted = [...shifts].sort((a, b) => shiftMinutes(a).start - shiftMinutes(b).start || shiftMinutes(a).end - shiftMinutes(b).end);
+  const ends: number[] = [];
+  const lane = new Map<string, number>();
+  for (const s of sorted) {
+    const { start, end } = shiftMinutes(s);
+    let i = ends.findIndex(e => e <= start);
+    if (i === -1) { i = ends.length; ends.push(end); } else ends[i] = end;
+    lane.set(s.id, i);
+  }
+  return { lane, count: Math.max(1, ends.length) };
+}
+
+/** One line for a week in the month calendar from its sites' states (Draft / Live / History). */
+export function weekStateLabel(rows: { state: 'draft' | 'live' | 'history'; shifts: number; version: number | null; changesSincePublish: number }[]) {
+  const shown = rows.filter(r => r.shifts > 0 || r.version !== null);
+  if (rows.length && rows.every(r => r.state === 'history')) return { cls: 'history', text: 'History' };
+  if (!shown.length) return null;
+  const drafts = shown.filter(r => r.state === 'draft').length;
+  const changes = shown.filter(r => r.state === 'live').reduce((a, r) => a + r.changesSincePublish, 0);
+  if (drafts === shown.length) return { cls: 'draft', text: 'Draft' };
+  if (drafts) return { cls: 'draft', text: `${drafts} of ${shown.length} sites in draft` };
+  return { cls: 'live', text: changes ? `Live · ${changes} ${changes === 1 ? 'change' : 'changes'} since` : 'Live' };
+}
