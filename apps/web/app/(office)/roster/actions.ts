@@ -36,7 +36,9 @@ export async function confirm(shiftId: string, f: FormData) {
 }
 
 export async function unassign(shiftId: string, f: FormData) {
-  await attempt(back(f), () => api(`/shifts/${shiftId}/unassign`, { method: 'POST' }), 'Removed from the shift. It is open again.');
+  const pulledOut = f.get('pulledOut') === '1';
+  await attempt(back(f), () => api(`/shifts/${shiftId}/unassign`, { method: 'POST', body: { pulledOut } }),
+    pulledOut ? 'Marked as pulled out. The shift shows purple until it is filled again.' : 'Removed from the shift. It is open again.');
 }
 
 export async function cancelShift(shiftId: string, f: FormData) {

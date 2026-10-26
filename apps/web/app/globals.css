@@ -211,3 +211,15 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .item-forms { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-width: 520px; }
 .item-forms .form-row { align-items: center; gap: 6px; }
 .bad-text { color: var(--bad); font-weight: 600; }
+
+/* Steve's ribbon colours (26 Oct) */
+.rcard.unfilled, .rcard.offered, .rcard.pulled { border-style: dashed; border-width: 1.5px; }
+.rcard.unfilled { border-color: #9aa5b1; border-bottom-color: #9aa5b1 !important; } .rcard.unfilled .st { color: #5b6770; }
+.rcard.offered { border-color: #e3c84f; border-bottom-color: #f3df7a !important; background: #fffbea; } .rcard.offered .st { color: #8a6d00; }
+.rcard.allocated { border-color: #d9b100; border-bottom-color: #d9a400 !important; } .rcard.allocated .st { color: #8a6400; }
+.rcard.accepted { border-color: #e98bbd; border-bottom-color: #e05ea3 !important; } .rcard.accepted .st { color: #a8236c; }
+.rcard.pulled { border-color: #9b59b6; border-bottom-color: #7d3c98 !important; background: #f7f0fb; } .rcard.pulled .st { color: #6c2d8a; }
+.rcard.booked { border-bottom-color: #2e9d57 !important; }
+.rcard.cancelled { border-bottom-color: #d93025 !important; } .rcard.cancelled .st { color: #b3261e; }
+.rb.unfilled { background: #9aa5b1; } .rb.offered { background: #f3df7a; } .rb.allocated { background: #d9a400; }
+.rb.accepted { background: #e05ea3; } .rb.pulled { background: #7d3c98; } .rb.booked { background: #2e9d57; } .rb.cancelled { background: #d93025; }
