@@ -73,6 +73,10 @@ describe('platform administration', () => {
     expect(detail.body.people).toEqual([expect.objectContaining({ status: 'invited', email: 'new@x.test', role: 'owner' })]);
     const me = await http().get('/me').set(as('newbie')).expect(200);
     expect(me.body.memberships.map((m: { tenantSlug: string }) => m.tenantSlug)).toEqual(['the-grand-cafe']);
+    // The new owner gets a welcome email in the business's own message log.
+    const sent = await owner.query(`select to_address, subject, body from notifications where template = 'welcome' and tenant_id = $1`, [b.body.id]);
+    expect(sent.rows).toEqual([expect.objectContaining({ to_address: 'new@x.test', subject: "You've been given access to The Grand Café on CROP" })]);
+    expect(sent.rows[0].body).toMatch(/as an owner/);
   });
 
   it('someone who already belongs to a business picks up a new one without signing out', async () => {

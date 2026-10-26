@@ -27,7 +27,7 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
           <label>Owner&apos;s email <span className="muted">(optional)</span><input name="ownerEmail" type="email" maxLength={200} placeholder="owner@their-business.com.au" /></label>
           <button type="submit" className="btn">Add business</button>
         </form>
-        <p className="muted small" style={{ marginBottom: 0 }}>The owner gets access the first time they sign in to CROP with that email address, once it&apos;s verified. No email is sent yet: tell them to go to the CROP sign-in page.</p>
+        <p className="muted small" style={{ marginBottom: 0 }}>The owner gets a welcome email with the sign-in link. Access starts the first time they sign in with that email address, once it&apos;s verified.</p>
       </details>
       <div className="card" style={{ overflowX: 'auto' }}>
         <table>

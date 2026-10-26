@@ -83,7 +83,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## From Steve and David's answers (26 Oct; docs/decisions/2026-10-26-steve-answers.md)
 - [x] (26 Oct) Ribbon colours to Steve's scheme: grey unfilled, pale yellow offered, darker yellow allocated, pink accepted (when approval is on), purple worker pulled out, green booked, red cancelled.
-- [ ] Welcome email when a business or person is added on the Platform screen.
+- [x] (26 Oct) Welcome email when a business or person is added on the Platform screen.
 - [ ] Shift types per business: letter, name, standard hours (D / Day shift / 7:00–3:30; AM/PM/NS for nursing), replacing the fixed A/P/N. Leave room for shifts that cross pay rates (Release 2).
 - [ ] Roster templates: the ideal week as a template; apply a template or duplicate the previous week or month.
 - [ ] After publishing: changes only as logged, requested and approved changes by authorised people; option to lock the roster; optional worker-to-worker shift swaps in the app. All as client settings.
