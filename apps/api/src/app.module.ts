@@ -17,6 +17,7 @@ import { BankFillController } from './roster/bank-fill.controller.js';
 import { OfferLinksController } from './roster/offer-links.controller.js';
 import { EquipmentController, EquipmentTypesController, ShiftEquipmentController } from './roster/equipment.controller.js';
 import { EmploymentController, ShiftCodesController, ShiftsController } from './roster/roster.controller.js';
+import { ChangeRequestsController } from './roster/change-requests.controller.js';
 import { PublishingController } from './roster/publishing.controller.js';
 import { RosterTemplatesController } from './roster/templates.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
@@ -29,7 +30,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
-    EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, RosterTemplatesController,
+    EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }],

@@ -22,7 +22,7 @@ const facilityOf = (v: unknown) => (typeof v === 'string' && UUID.test(v) ? v : 
 
 interface WeekRow {
   facilityId: string; facilityName: string; timezone: string; version: number | null; publishedAt: string | null;
-  publishedByName: string | null; changesSincePublish: number; shifts: number;
+  publishedByName: string | null; changesSincePublish: number; shifts: number; changeRefusal: string | null; pendingRequests: number;
 }
 
 /** Each site's week: draft, live or history, when it was last published and what changed since. */
@@ -33,7 +33,10 @@ async function weeks(db: PoolClient, weekStart: string, facilityId: string | nul
             (select count(*)::int from shift_changes c where c.facility_id = f.id and c.week_start = $1
                 and p.published_at is not null and c.at > p.published_at) as "changesSincePublish",
             (select count(*)::int from shifts s where s.facility_id = f.id and s.status <> 'cancelled'
-                and (s.starts_at at time zone f.timezone)::date between $1 and $1::date + 6) as shifts
+                and (s.starts_at at time zone f.timezone)::date between $1 and $1::date + 6) as shifts,
+            -- Why the person asking couldn't change this week now (migration 0024), and requests waiting (0025).
+            app_roster_change_refusal(f.id, $1) as "changeRefusal",
+            (select count(*)::int from roster_change_requests r where r.facility_id = f.id and r.week_start = $1 and r.status = 'pending') as "pendingRequests"
        from facilities f
        left join lateral (select version, published_at, published_by_name from roster_publications rp
                            where rp.facility_id = f.id and rp.week_start = $1 order by version desc limit 1) p on true
@@ -49,6 +52,8 @@ async function weeks(db: PoolClient, weekStart: string, facilityId: string | nul
     publishedByName: r.publishedByName,
     changesSincePublish: r.changesSincePublish,
     shifts: r.shifts,
+    changeRefusal: r.changeRefusal,
+    pendingRequests: r.pendingRequests,
   }));
 }
 
@@ -82,9 +87,10 @@ export class PublishingController {
   /** Each site's state for the week starting `weekStart` (any date in the week works). */
   @Roles(...OFFICE_ROLES)
   @Get('roster/weeks')
-  list(@Tenant() t: Membership, @Query() q: Record<string, string>) {
+  list(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query() q: Record<string, string>) {
     const weekStart = weekStartOf(q);
-    return withTenant(this.pool, t.tenantId, db => weeks(db, weekStart, facilityOf(q.facilityId)));
+    // With the person as actor, so changeRefusal says whether they could change the week themselves.
+    return withTenant(this.pool, t.tenantId, db => weeks(db, weekStart, facilityOf(q.facilityId)), actorOf(auth));
   }
 
   /**
@@ -115,7 +121,7 @@ export class PublishingController {
           [t.tenantId, w.facilityId, weekStart, (w.version ?? 0) + 1, auth.userId, actor.name]);
       }
       return { published: toPublish.length, weeks: await weeks(db, weekStart, facilityId) };
-    });
+    }, actor);
   }
 
   /** Everything that happened to the week's shifts, newest first. `sincePublish=true` for changes since it went live. */
