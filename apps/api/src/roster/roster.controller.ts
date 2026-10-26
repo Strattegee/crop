@@ -10,6 +10,7 @@ import { bool, date, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { closePendingOffers } from './offers-data.js';
+import { actorOf } from './publishing.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'bank'] as const;
@@ -219,6 +220,11 @@ export class EmploymentController {
 export class ShiftsController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
+  /** A transaction whose shift changes are logged as this person's (migration 0022). */
+  private tx<T>(t: Membership, auth: AuthContext, fn: (db: PoolClient) => Promise<T>) {
+    return withTenant(this.pool, t.tenantId, fn, actorOf(auth));
+  }
+
   /** Creates one shift, or a block across dates and weekdays; `quantity` shifts per day (one position each). */
   @Roles(...OFFICE_ROLES)
   @Post('shifts')
@@ -249,7 +255,7 @@ export class ShiftsController {
     if (!dates.length) throw new BadRequestException('No dates match the days chosen');
     if (dates.length * quantity > MAX_SHIFTS_PER_REQUEST) throw new BadRequestException(`That would create more than ${MAX_SHIFTS_PER_REQUEST} shifts`);
 
-    return withTenant(this.pool, t.tenantId, async db => {
+    return this.tx(t, auth, async db => {
       const facility = (await db.query<{ timezone: string }>('select timezone from facilities where id = $1', [facilityId])).rows[0];
       if (!facility) throw new BadRequestException('Choose a site');
       if (areaId && !(await db.query('select 1 from areas where id = $1 and facility_id = $2', [areaId, facilityId])).rowCount) {
@@ -353,9 +359,9 @@ export class ShiftsController {
 
   @Roles(...OFFICE_ROLES)
   @Patch('shifts/:id')
-  update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+  update(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const notes = text(body, 'notes', { max: 1000 });
-    return withTenant(this.pool, t.tenantId, async db => {
+    return this.tx(t, auth, async db => {
       if (!(await db.query('update shifts set notes = $2, updated_at = now() where id = $1', [id, notes])).rowCount) throw new NotFoundException('Shift not found');
       return shiftById(db, id);
     });
@@ -381,7 +387,7 @@ export class ShiftsController {
   @HttpCode(200)
   assign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const workerId = uuidField(body, 'workerId', 'person', true)!;
-    return withTenant(this.pool, t.tenantId, async db => {
+    return this.tx(t, auth, async db => {
       const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
       if (!shift) throw new NotFoundException('Shift not found');
       if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
@@ -408,8 +414,8 @@ export class ShiftsController {
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/confirm')
   @HttpCode(200)
-  confirm(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
-    return withTenant(this.pool, t.tenantId, async db => {
+  confirm(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.tx(t, auth, async db => {
       const r = await db.query(
         `update shift_assignments set status = 'confirmed' where shift_id = $1 and resource_kind = 'worker' and status = 'assigned'`, [id]);
       if (!r.rowCount) throw new ConflictException('There is nobody waiting to confirm on this shift');
@@ -421,10 +427,10 @@ export class ShiftsController {
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/unassign')
   @HttpCode(200)
-  unassign(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+  unassign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     // pulledOut: the person withdrew (Steve's purple ribbon), rather than the office taking them off.
     const pulledOut = bool(body ?? {}, 'pulledOut') ?? false;
-    return withTenant(this.pool, t.tenantId, async db => {
+    return this.tx(t, auth, async db => {
       const r = await db.query(
         `update shift_assignments set status = 'removed', ended_at = now(), removed_reason = $2
           where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [id, pulledOut ? 'pulled_out' : 'office']);
@@ -439,7 +445,7 @@ export class ShiftsController {
   @HttpCode(200)
   cancel(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { required: true, max: 300 })!;
-    return withTenant(this.pool, t.tenantId, async db => {
+    return this.tx(t, auth, async db => {
       const r = await db.query(
         `update shifts set status = 'cancelled', cancelled_reason = $2, updated_at = now() where id = $1 and status <> 'cancelled'`, [id, reason]);
       if (!r.rowCount) {

@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
-  assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, recordReply, removeEquipment, unassign,
+  assign, bookEquipment, cancelShift, confirm, createShifts, fillWeekDemo, loadDemoWeek, offer, publishWeek, recordReply, removeEquipment, unassign,
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 
@@ -26,6 +26,12 @@ type ShiftCode = { id: string; facilityId: string | null; facilityName: string |
 type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
+/** Draft → Live → History per site and week (migration 0022). */
+type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' | 'history'; version: number | null; publishedAt: string | null; publishedByName: string | null; changesSincePublish: number; shifts: number };
+type Change = { id: string; kind: string; summary: string; afterPublish: boolean; actorName: string | null; via: string; at: string; shiftId: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string };
+const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
+const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(t));
+const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -65,7 +71,7 @@ const LETTER: Record<string, string> = { am: 'A', pm: 'P', nd: 'N' };
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; site?: string; view?: string; shift?: string; error?: string; done?: string }>;
+  searchParams: Promise<{ week?: string; site?: string; view?: string; shift?: string; log?: string; error?: string; done?: string }>;
 }) {
   const tw = await words();
   const sp = await searchParams;
@@ -76,18 +82,27 @@ export default async function RosterPage({ searchParams }: {
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { week, site, view, shift: sp.shift, ...over };
+    const merged = { week, site, view, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
   const here = url({});
 
-  const [roster, facilities, codes, itemList] = await Promise.all([
+  const showLog = sp.log === '1';
+  const [roster, facilities, codes, itemList, weekStates, changes] = await Promise.all([
     api<Roster>(`/roster?from=${days[0]}&to=${days[6]}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
     api<{ id: string; name: string; category: string; unit: string; tracksStock: boolean; reorderLevel: number | null; onHand: number }[]>('/items').catch(() => []),
+    api<Week[]>(`/roster/weeks?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]),
+    showLog ? api<Change[]>(`/roster/changes?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
   ]);
+  // Sites with shifts this week, or already published, are the ones worth showing a state for.
+  const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
+  const isHistory = weekStates.length > 0 && weekStates.every(w => w.state === 'history');
+  const drafts = weekRows.filter(w => w.state === 'draft');
+  const pendingChanges = weekRows.filter(w => w.state === 'live').reduce((a, w) => a + w.changesSincePublish, 0);
+  const canPublish = !isHistory && (drafts.length > 0 || pendingChanges > 0);
   const activeFacilities = facilities.filter(f => f.active);
   const details = await Promise.all(activeFacilities.slice(0, 30).map(f => api<FacilityDetail>(`/facilities/${f.id}`)));
   const allShifts = roster.shifts;
@@ -162,6 +177,7 @@ export default async function RosterPage({ searchParams }: {
   let offers: Offer[] = [];
   let equipCandidates: EquipCandidate[] = [];
   let panelError: string | null = null;
+  const shiftHistory = selected ? await api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : [];
   if (selected && selected.status !== 'cancelled') {
     try {
       const [bank, all, eq] = await Promise.all([
@@ -231,6 +247,60 @@ export default async function RosterPage({ searchParams }: {
       </div>
 
       <Notices error={sp.error} done={sp.done} />
+
+      <section className="roster-state card" aria-label="Roster status">
+        <div className="states">
+          {isHistory ? (
+            <span><b className="pill history">History</b> <span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
+          ) : weekRows.length === 0 ? (
+            <span><b className="pill draft">Draft</b> <span className="muted">Nothing on this week yet.</span></span>
+          ) : weekRows.map(w => (
+            <span key={w.facilityId}>
+              <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>
+              {weekRows.length > 1 || !site ? <> {w.facilityName}</> : null}
+              <span className="muted">
+                {w.state === 'draft' && ' · not published yet'}
+                {w.state === 'live' && ` · published ${w.publishedAt ? when(w.publishedAt) : ''}${w.publishedByName ? ` by ${w.publishedByName}` : ''}`}
+                {w.state === 'live' && w.changesSincePublish > 0 && <> · <strong className="warn">{w.changesSincePublish} {w.changesSincePublish === 1 ? 'change' : 'changes'} since</strong></>}
+              </span>
+            </span>
+          ))}
+        </div>
+        <div className="roster-tools">
+          <Link className="btn small secondary" href={url({ log: showLog ? undefined : '1' })}>{showLog ? 'Hide changes' : 'Changes'}</Link>
+          {canPublish && (
+            <form action={publishWeek}>
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="week" value={week} />
+              <input type="hidden" name="site" value={site} />
+              <button className="btn small" title="Marks the week as live. Changes after this are logged. No messages are sent yet.">
+                {drafts.length ? 'Publish week' : `Publish ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'}`}
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {showLog && (
+        <section className="card roster-log" aria-label="Changes this week">
+          <h2 style={{ marginTop: 0 }}>Changes this week</h2>
+          {changes.length === 0 ? <p className="muted">Nothing recorded yet.</p> : (
+            <ol>
+              {changes.slice(0, 200).map(c => (
+                <li key={c.id}>
+                  <span className="muted small">{when(c.at)}</span>
+                  <span>
+                    <Link href={url({ shift: c.shiftId })}>{longDate(c.localDate)} {c.localStart}–{c.localEnd} {c.role}</Link>
+                    {!site && <span className="muted"> · {c.facilityName}</span>}: {c.summary}
+                    <span className="muted"> {byWhom(c)}</span>
+                    {c.afterPublish && <b className="pill live small">after publishing</b>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
 
       <section className="roster-kpis" aria-label="Week summary">
         <div><span>Shifts</span><strong>{peopleShifts.length}</strong></div>
@@ -505,6 +575,16 @@ export default async function RosterPage({ searchParams }: {
               </form>
             </section>
             </>)}
+            {shiftHistory.length > 0 && (
+              <details className="shift-history">
+                <summary className="muted" style={{ cursor: 'pointer' }}>History ({shiftHistory.length})</summary>
+                <ol>
+                  {shiftHistory.map(c => (
+                    <li key={c.id}><span className="muted small">{when(c.at)}</span> {c.summary} <span className="muted small">{byWhom(c)}</span>{c.afterPublish && <b className="pill live small">after publishing</b>}</li>
+                  ))}
+                </ol>
+              </details>
+            )}
           </aside>
         )}
       </div>

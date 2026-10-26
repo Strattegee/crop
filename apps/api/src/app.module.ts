@@ -15,6 +15,7 @@ import { BankFillController } from './roster/bank-fill.controller.js';
 import { OfferLinksController } from './roster/offer-links.controller.js';
 import { EquipmentController, EquipmentTypesController, ShiftEquipmentController } from './roster/equipment.controller.js';
 import { EmploymentController, ShiftCodesController, ShiftsController } from './roster/roster.controller.js';
+import { PublishingController } from './roster/publishing.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
 import { CredentialRequirementsController, CredentialTypesController } from './workforce/credential-types.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
@@ -25,7 +26,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
-    EquipmentTypesController, EquipmentController, ShiftEquipmentController,
+    EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController,
   ],
 })

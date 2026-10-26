@@ -12,6 +12,7 @@ import { todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
 import { currentChecks, equipmentForShift, rankEquipment } from './equipment-data.js';
 import { checkState, overallCheckState } from './equipment.js';
+import { actorOf } from './publishing.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -274,13 +275,13 @@ export class ShiftEquipmentController {
       // On an equipment-only shift, status follows the equipment.
       if (!shift.needs_person) await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [id]);
       return { ...(await shiftById(db, id)), warnings: check.warnings.map(w => w.message) };
-    });
+    }, actorOf(auth));
   }
 
   @Roles(...OFFICE_ROLES)
   @Post('equipment/:equipmentId/remove')
   @HttpCode(200)
-  remove(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Param('equipmentId', ParseUUIDPipe) equipmentId: string) {
+  remove(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('equipmentId', ParseUUIDPipe) equipmentId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query('select 1 from shifts where id = $1 for update', [id])).rowCount) throw new NotFoundException('Shift not found');
       const r = await db.query(
@@ -293,6 +294,6 @@ export class ShiftEquipmentController {
           where id = $1 and not needs_person and status = 'booked'
             and not exists (select 1 from shift_assignments where shift_id = $1 and status in ('assigned', 'confirmed'))`, [id]);
       return shiftById(db, id);
-    });
+    }, actorOf(auth));
   }
 }

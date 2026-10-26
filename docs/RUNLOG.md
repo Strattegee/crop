@@ -106,3 +106,10 @@ Newest first. One entry per working session or scheduled run.
 - Next: the rest of the roster screen (item 2): Draft / Live / History with a change log, then day and month views, then roster templates.
 - Waiting on David: nothing new.
 
+
+## 2026-10-26 night (scheduled run)
+
+- Shipped: Draft / Live / History on the roster (backlog item 2, Steve's answer 5). Each site's week starts as a draft; pressing Publish week makes it live, and once the week is over it becomes history. Every change to a shift (added, someone put on, confirmed, taken off, pulled out, cancelled, equipment booked or removed, notes) is now recorded with who did it and when, and changes made after publishing are marked. The roster shows "3 changes since" with a Publish changes button, a Changes list for the week, and a History list on each shift. Publishing doesn't send staff any messages yet.
+- Next: the rest of item 2: day and month views, then roster templates (Steve's "ideal week"), then the after-publishing settings (approved changes, lock).
+- Question added for David and Steve: should publishing a week message staff their shifts, and should they hear about later changes?
+- Waiting on David: nothing new.

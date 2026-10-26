@@ -11,6 +11,7 @@ import { BANK_FILL_TYPES, newOfferLink, offerLinkUrl, offerMessage, offerState, 
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { acceptOffer, contacts, declineOffer } from './offer-replies.js';
 import { closePendingOffers } from './offers-data.js';
+import { actorOf } from './publishing.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,7 +156,7 @@ export class BankFillController {
     return withTenant(this.pool, t.tenantId, async db => {
       const r = await acceptOffer(db, t, offerId, auth.userId, 'office');
       return { ...r.shift, warnings: r.warnings, offers: await offersFor(db, r.shiftId) };
-    });
+    }, actorOf(auth));
   }
 
   /** Records that the person said no. */

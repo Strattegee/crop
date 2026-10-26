@@ -224,3 +224,17 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .rcard.cancelled { border-bottom-color: #d93025 !important; } .rcard.cancelled .st { color: #b3261e; }
 .rb.unfilled { background: #9aa5b1; } .rb.offered { background: #f3df7a; } .rb.allocated { background: #d9a400; }
 .rb.accepted { background: #e05ea3; } .rb.pulled { background: #7d3c98; } .rb.booked { background: #2e9d57; } .rb.cancelled { background: #d93025; }
+
+/* Draft → Live → History (roster publishing) */
+.roster-state { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 16px; }
+.roster-state .states { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.roster-state .warn { color: var(--warn); }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+.pill.draft { color: var(--muted); background: var(--surface); }
+.pill.live { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.pill.history { color: var(--muted); background: var(--border); border-color: transparent; }
+.pill.small { font-size: 10px; padding: 1px 6px; margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.roster-log ol, .shift-history ol { list-style: none; margin: 0; padding: 0; }
+.roster-log li { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+.shift-history li { padding: 4px 0; font-size: 13px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) { .roster-log li { grid-template-columns: 1fr; gap: 2px; } }
