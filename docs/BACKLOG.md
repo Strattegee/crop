@@ -59,7 +59,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 
 - Open questions from the 25 Oct meeting (see `docs/decisions/2026-10-25-roster-meeting.md`).
-- ClickSend dedicated number (David, Mon 26 Oct) → set `CLICKSEND_FROM`.
+- ~~ClickSend~~ Done 27 Oct: number, username and API key set; test text received.
 - Apple developer verification.
 - CFY: credential list and rules; which Entire statuses and reports they use.
 
