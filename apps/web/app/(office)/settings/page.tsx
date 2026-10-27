@@ -70,6 +70,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Link href="/settings/shift-duties" className="btn small secondary">Shift duties</Link>
       </div>
 
+      <div className="card">
+        <h2>Cover rules</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Credentials someone on {tw.lower(T.shift)} must hold whenever anyone is working, such as a food safety supervisor. The {tw.lower(T.roster)} shows any gaps.</p>
+        <Link href="/settings/cover-rules" className="btn small secondary">Cover rules</Link>
+      </div>
+
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Words we use</h2>
         <p className="muted" style={{ marginTop: 0 }}>Call things what your business calls them. Menus, page titles and the {tw.lower(T.roster)} use these words. Leave a word blank to go back to the standard one.</p>

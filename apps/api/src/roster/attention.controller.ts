@@ -6,6 +6,7 @@ import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 import { attentionCounts, attentionItems, type AttentionShift } from './attention.js';
+import { coverGapsBetween } from './cover-data.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { equipmentForShift } from './equipment-data.js';
 import { SHIFT_COLS, SHIFT_FROM } from './roster.controller.js';
@@ -33,8 +34,9 @@ export class AttentionController {
 
   /**
    * Shifts starting in the next `days` (default 7, up to 14) at one site or all: nobody on them (and what's
-   * been offered), people who haven't confirmed, and people or equipment booked on them who can no longer
-   * work them (a credential or a date run out, leave approved, out of service…). Most pressing first.
+   * been offered), people who haven't confirmed, people or equipment booked on them who can no longer
+   * work them (a credential or a date run out, leave approved, out of service…), and gaps in cover rules
+   * (`cover_gap`: someone working but nobody holding the credential the site needs). Most pressing first.
    */
   @Roles(...OFFICE_ROLES)
   @Get('roster/attention')
@@ -74,8 +76,15 @@ export class AttentionController {
           personBlocks, equipmentBlocks, equipmentMissing: r.equipmentOnly && !r.equipment.length,
         });
       }
+      // Gaps in cover rules (migration 0030) over the same window, including one already under way.
+      const until = new Date(now.getTime() + days * 86_400_000);
+      const gaps = (await coverGapsBetween(db, now, until, facilityId)).filter(g => g.to > now && g.from < until);
       const byId = new Map(list.map(r => [r.id, r]));
-      const items = attentionItems(facts, now).map(i => {
+      const missing = [...new Set(gaps.map(g => g.shiftId).filter(id => !byId.has(id)))];
+      if (missing.length) {
+        for (const r of (await db.query<Row>(`select ${SHIFT_COLS}, 0 as "offersExpired" from ${SHIFT_FROM} where s.id = any($1)`, [missing])).rows) byId.set(r.id, r);
+      }
+      const items = attentionItems(facts, now, undefined, gaps).map(i => {
         const r = byId.get(i.shiftId)!;
         return {
           ...i,

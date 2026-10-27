@@ -48,6 +48,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 9000 | Settings | Settings |
 | 9100 | Shift types (under Settings, not in the menu) | Shift types |
 | 9110 | Shift duties (under Settings, not in the menu) | Shift duties |
+| 9120 | Cover rules (under Settings, not in the menu) | Cover rules |
 
 ## Still to do
 - Use the words in more places: roster labels and panels, form labels, API error messages, notification text, the worker app.

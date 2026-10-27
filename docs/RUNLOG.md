@@ -186,3 +186,9 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: shift duties in the industry templates and when adding shifts (next slice of shift duties). Each industry template now brings the duties that business usually needs, with the credentials each one requires: for example a café gets "Serves alcohol" (needs an RSA), "Food safety supervisor", "Handles food" and "First aid officer"; construction gets "Works at heights", "Confined space work" and "Asbestos area". A duty the business already has under the same name is left as it is. On the roster, the Add shifts form now has a Duties tick list, so a block of bar shifts can be made with "Serves alcohol" on every one in one go.
 - Next: the "at least one food safety supervisor on every shift" site rule, then a Needs attention count on the Dashboard.
 - Waiting on David: nothing new.
+
+## 2026-10-28 early morning, 3:15am Melbourne (scheduled run)
+
+- Shipped: cover rules (the last planned piece of shift duties). Settings now has "Cover rules": a business can say that someone on shift must hold a credential whenever anyone is working, at one site or every site (for example a food safety supervisor). Because the rule is met by everyone on shift together, it never stops the office putting someone on a shift; instead the roster's day and week views list the cover gaps ("Nobody with a Food safety supervisor working 15:30–20:00") and Needs attention shows those coming up in the next week. Only checked credentials that haven't run out count.
+- Next: a Needs attention count on the Dashboard, then transfers of items between sites.
+- Waiting on David: nothing new.
