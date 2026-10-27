@@ -209,3 +209,45 @@ export function monthCopyWeeks(anyDayInMonth: string): { mondays: string[]; next
 
 /** Remembers whether the office opened or closed the Needs attention panel (per browser, a year). */
 export const ATTENTION_COOKIE = 'crop_attention';
+
+/**
+ * How much each shift card shows (Steve's design: Cards / Detailed / Simple, week view).
+ * Cards is the usual card; Detailed adds the role, area, hours, notes and who pulled out;
+ * Simple is one line (letter and who, or the role while unfilled), coloured by stage.
+ */
+export type Look = 'cards' | 'detailed' | 'simple';
+export const LOOKS: { id: Look; label: string }[] = [
+  { id: 'cards', label: 'Cards' }, { id: 'detailed', label: 'Detailed' }, { id: 'simple', label: 'Simple' },
+];
+export function parseLook(s: string | undefined): Look {
+  return s === 'detailed' || s === 'simple' ? s : 'cards';
+}
+
+type CardShift = {
+  role: string; areaName: string | null; facilityName: string; hours: number; workerName: string | null;
+  status: string; notes: string | null; cancelledReason?: string | null; pulledOutName?: string | null; equipmentOnly?: boolean;
+};
+const hoursText = (h: number) => `${Math.round(h * 100) / 100} ${h === 1 ? 'hour' : 'hours'}`;
+
+/**
+ * The extra lines a Detailed card shows, below the usual card. `kind` is the row the card sits in
+ * ('person' rows already say who; open rows already say the role), `view` the roster's grouping.
+ */
+export function detailLines(s: CardShift, kind: string, view: 'area' | 'person'): string[] {
+  const out: string[] = [];
+  // The usual card names the person (or the role while nobody is on it); say the other one too.
+  if (kind !== 'person' && kind !== 'cancelled' && s.workerName && !s.equipmentOnly) out.push(s.role);
+  if (s.areaName && (view === 'person' || kind === 'person')) out.push(s.areaName);
+  out.push(hoursText(s.hours));
+  if (s.pulledOutName) out.push(`${s.pulledOutName} pulled out`);
+  if (s.status === 'cancelled' && s.cancelledReason) out.push(`Cancelled: ${s.cancelledReason}`);
+  if (s.notes?.trim()) out.push(s.notes.trim());
+  return out;
+}
+
+/** The one line on a Simple card: who is on it, else the role (or the equipment-only label). */
+export function simpleLine(s: CardShift & { equipment?: unknown[] }, kind: string): string {
+  const who = kind === 'person' || s.status === 'cancelled' ? s.role : s.workerName ?? s.role;
+  const extra = s.equipment?.length ? ` +${s.equipment.length}` : '';
+  return `${who}${extra}`;
+}

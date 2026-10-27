@@ -10,7 +10,7 @@ import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  ATTENTION_COOKIE, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, mondayOf, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -91,7 +91,7 @@ const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; shift?: string; log?: string; error?: string; done?: string }>;
+  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; error?: string; done?: string }>;
 }) {
   const tw = await words();
   const sp = await searchParams;
@@ -101,11 +101,14 @@ export default async function RosterPage({ searchParams }: {
   const range = rangeFor(span, anchorOf(sp, today), today);
   const { week, days } = range;
   const view = sp.view === 'person' ? 'person' : 'area';
+  // Cards / Detailed / Simple (Steve's design), week view only: the day timeline's bars have a fixed height.
+  const look = parseLook(sp.look);
+  const cardLook = span === 'week' ? look : 'cards';
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
   const at = (s: Span, anchor: string) => s === 'week' ? { span: undefined, date: undefined, week: anchor } : { span: s, date: anchor, week: undefined };
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { ...at(span, range.anchor), site, view, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
+    const merged = { ...at(span, range.anchor), site, view, look: look === 'cards' ? undefined : look, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
@@ -264,11 +267,14 @@ export default async function RosterPage({ searchParams }: {
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
     title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}`,
   });
-  const cardBody = (s: Shift, kind: Row['kind']) => (<>
+  const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
+    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s).label}</span></span>
+  ) : (<>
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
     <span className="st">{stage(s).label}</span>
     <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
     {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
+    {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
   </>);
 
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
@@ -296,6 +302,7 @@ export default async function RosterPage({ searchParams }: {
           <form method="get" action="/roster" className="roster-tools">
             {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <input type="hidden" name="view" value={view} />
+            {look !== 'cards' && <input type="hidden" name="look" value={look} />}
             <label className="inline">Site
               <select name="site" defaultValue={site}>
                 <option value="">All sites</option>
@@ -307,6 +314,9 @@ export default async function RosterPage({ searchParams }: {
           {span !== 'month' && <div className="seg" role="group" aria-label="View">
             <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By area</Link>
             <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By person</Link>
+          </div>}
+          {span === 'week' && <div className="seg" role="group" aria-label="Cards show">
+            {LOOKS.map(l => <Link key={l.id} href={url({ look: l.id === 'cards' ? undefined : l.id })} aria-current={look === l.id ? 'true' : undefined}>{l.label}</Link>)}
           </div>}
         </div>
       </div>
@@ -657,7 +667,7 @@ export default async function RosterPage({ searchParams }: {
         <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag
           labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role) }} />
         <DropZone back={here}>
-          <table className={`ribbon ${span === 'day' ? 'day' : ''}`}>
+          <table className={`ribbon ${span === 'day' ? 'day' : ''} look-${cardLook}`}>
             <thead>
               <tr>
                 <th className="who">{view === 'area' ? 'Site · area · person' : 'Person'}</th>

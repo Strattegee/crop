@@ -173,3 +173,9 @@ Newest first. One entry per working session or scheduled run.
 
 ## 27 Oct, evening (with David)
 - David added the "Merge Claude's pull requests" workflow: pull requests labelled `claude-automerge` are merged by GitHub once CI passes, then staging is deployed. Runs add the label only to work they may ship without asking (docs/WORKING-ALONE.md, step 4), so they no longer wait for David to merge.
+
+## 2026-10-27 night, 10pm Melbourne (scheduled run)
+
+- Shipped: Cards / Detailed / Simple on the roster's week view (backlog item 2, from Steve's design). A new switch next to By area / By person. Detailed adds to each card the role (or the area when viewing by person), the paid hours, who pulled out, why a shift was cancelled, and the shift's notes. Simple shows each shift on one line (the shift letter and who's on it, or the role while it's unfilled, and +1 for equipment), still coloured by stage, so a busy week fits on one screen. The choice stays as you move between weeks and sites. Day and month views stay as they were.
+- Next: shift duties (a duty such as serving alcohol adds its own credential needs), then the rest of the Needs attention list (count on the Dashboard).
+- Waiting on David: nothing new.
