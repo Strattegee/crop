@@ -3,12 +3,12 @@ import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
-  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, saveTemplate, unassign,
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -569,6 +569,37 @@ export default async function RosterPage({ searchParams }: {
           <p className="muted small" style={{ margin: '8px 0 0' }}>Choose a day to see it hour by hour, or a week to change it.</p>
         </section>
       )}
+
+      {span === 'month' && activeFacilities.length > 0 && (() => {
+        const { mondays, nextWeek } = monthCopyWeeks(range.anchor);
+        const last = mondays[mondays.length - 1];
+        return (
+          <details className="card roster-templates">
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Copy this month</summary>
+            <p className="muted small">
+              Copies the {mondays.length} weeks starting in {monthLabel(range.anchor)} ({longDate(mondays[0])} to {longDate(last)}) into the {mondays.length} weeks
+              from the date you choose, on the same weekdays and times. As with copying a week, each shift gets the same person where they can work it
+              (waiting for them to confirm) and the same equipment where it can be booked; anything that can&apos;t is left off and you&apos;re told why.
+              Nothing is copied if any of those weeks is over or already has shifts, unless you tick &quot;Add to the shifts already there&quot;.
+            </p>
+            <form action={copyMonth} className="form-row">
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="fromWeek" value={mondays[0]} />
+              <input type="hidden" name="weeks" value={mondays.length} />
+              <label>Site
+                <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+                  {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </label>
+              <label>Into the weeks starting<input name="toWeek" type="date" required defaultValue={nextWeek} /></label>
+              <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same equipment</label>
+              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+              <button className="btn small">Copy {mondays.length} weeks</button>
+            </form>
+          </details>
+        );
+      })()}
 
       {span !== 'month' && (
       <div className="roster-layout">

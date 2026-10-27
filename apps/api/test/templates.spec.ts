@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { applySummary, planWeek, type Slot } from '../src/roster/templates.js';
+import { applySummary, copyWeeksSummary, planWeek, weekPairs, type Slot } from '../src/roster/templates.js';
 import { startFakeIdp } from './fake-idp.js';
 
 const slot = (over: Partial<Slot>): Slot => ({
@@ -35,6 +35,25 @@ describe('roster templates: rules', () => {
       created: 5, assigned: 3, ...none,
       leftOpen: [{ date: '2026-11-11', startTime: '07:00', role: 'Chef', workerName: 'Ana Example', reason: 'Ana Example is on leave on Wed 11 Nov' }],
     })).toBe('5 shifts added, 3 with their usual person (waiting for them to confirm). 1 left open because the usual person can\'t work it: Ana Example is on leave on Wed 11 Nov.');
+  });
+});
+
+describe('copying several weeks: rules', () => {
+  it('pairs each week with the one it goes into, and refuses overlaps', () => {
+    expect(weekPairs('2026-11-02', 2, '2026-11-30')).toEqual({ pairs: [{ from: '2026-11-02', to: '2026-11-30' }, { from: '2026-11-09', to: '2026-12-07' }] });
+    expect(weekPairs('2026-11-02', 4, '2026-11-23')).toHaveProperty('error');
+    expect(weekPairs('2026-11-23', 4, '2026-11-02')).toHaveProperty('error');
+    expect(weekPairs('2026-11-02', 4, '2026-11-30')).toHaveProperty('pairs');
+    expect(weekPairs('2026-11-02', 7, '2026-12-28')).toEqual({ error: 'Choose from 1 to 6 weeks to copy' });
+  });
+
+  it('sums up the weeks copied', () => {
+    const base = { created: 3, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
+    expect(copyWeeksSummary({ ...base, created: 0, weeks: [{ from: '2026-11-02', to: '2026-11-30', created: 0 }], emptyWeeks: ['2026-11-02'] })).toBe('There were no shifts to add.');
+    expect(copyWeeksSummary({
+      ...base, emptyWeeks: ['2026-11-16'],
+      weeks: [{ from: '2026-11-02', to: '2026-11-30', created: 2 }, { from: '2026-11-09', to: '2026-12-07', created: 1 }, { from: '2026-11-16', to: '2026-12-14', created: 0 }],
+    })).toBe('Copied into 2 weeks, from the week of 30 Nov to the week of 7 Dec. 3 shifts added. The week of 16 Nov had no shifts, so nothing was copied from it.');
   });
 });
 
@@ -204,6 +223,33 @@ describe('roster templates and copying a week', () => {
     expect(week3.map(x => x.status)).toEqual(['assigned', 'booked']);
     const plain = (await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: depot, toWeek: '2027-05-24', fromWeek: W1, equipment: false }).expect(200)).body;
     expect(plain).toMatchObject({ created: 2, equipmentBooked: 0, equipmentLeftOff: [] });
+  });
+
+  it('copies several weeks at once (a month), all or nothing', async () => {
+    const empty = await http().post('/roster/copy-weeks').set(as('alloc')).send({ facilityId: site, fromWeek: '2027-05-31', weeks: 2, toWeek: '2027-07-05' }).expect(400);
+    expect(empty.body.message).toBe('There are no shifts at Harbour Kitchen in those weeks to copy');
+    const overlap = await http().post('/roster/copy-weeks').set(as('alloc')).send({ facilityId: site, fromWeek: SOURCE, weeks: 4, toWeek: '2027-04-12' }).expect(400);
+    expect(overlap.body.message).toMatch(/overlap/);
+    await http().post('/roster/copy-weeks').set(as('worker')).send({ facilityId: site, fromWeek: SOURCE, weeks: 1, toWeek: '2027-07-05' }).expect(403);
+    // The first week copied into already has shifts: refused, and the second week stays empty.
+    const busy = await http().post('/roster/copy-weeks').set(as('alloc')).send({ facilityId: site, fromWeek: SOURCE, weeks: 2, toWeek: '2027-04-19' }).expect(409);
+    expect(busy.body.message).toMatch(/^The week of 2027-04-19 already has 8 shifts/);
+    expect(await weekShifts('2027-04-26')).toEqual([]);
+
+    // Three weeks from 12 April (the third has no shifts) into the three weeks from 14 June.
+    const r = (await http().post('/roster/copy-weeks').set(as('alloc')).send({ facilityId: site, fromWeek: '2027-04-14', weeks: 3, toWeek: '2027-06-14', people: false }).expect(200)).body;
+    expect(r).toMatchObject({ fromWeek: '2027-04-12', toWeek: '2027-06-14', created: 16, assigned: 0, emptyWeeks: ['2027-04-26'] });
+    expect(r.weeks.map((w: { from: string; to: string; created: number }) => [w.from, w.to, w.created])).toEqual([
+      ['2027-04-12', '2027-06-14', 8], ['2027-04-19', '2027-06-21', 8], ['2027-04-26', '2027-06-28', 0],
+    ]);
+    expect(r.summary).toBe('Copied into 2 weeks, from the week of 14 Jun to the week of 21 Jun. 16 shifts added. The week of 26 Apr had no shifts, so nothing was copied from it.');
+    expect(await weekShifts('2027-06-21')).toHaveLength(8);
+
+    // By default the copy goes straight after the weeks copied, with the same people where they can work.
+    const next = (await http().post('/roster/copy-weeks').set(as('alloc')).send({ facilityId: site, fromWeek: '2027-06-14', weeks: 2 }).expect(200)).body;
+    expect(next).toMatchObject({ toWeek: '2027-06-28', created: 16 });
+    const log = (await http().get(`/roster/changes?weekStart=2027-07-05&facilityId=${site}`).set(as('alloc')).expect(200)).body;
+    expect(log.filter((c: { kind: string }) => c.kind === 'created')).toHaveLength(8);
   });
 
   it('puts templates away without deleting them, and keeps businesses apart', async () => {

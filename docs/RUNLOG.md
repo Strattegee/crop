@@ -147,3 +147,9 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: equipment in roster templates and copied weeks. Saving a template now remembers the equipment on each shift, and filling a week from a template or copying a week books the same equipment again where it can be (in service, its dates current, not booked elsewhere, an operator who holds the licence). Anything that can't be booked is left off, and the office is told which and why. Each of the three forms has a tick box to leave equipment out.
 - Next: duplicating a whole month, then the needs-attention list or shift duties.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
+
+## 2026-10-27 afternoon (scheduled run)
+
+- Shipped: copying a whole month (backlog item 2, the last piece of templates and copying). The month view now has "Copy this month": it copies the four or five weeks starting in that month into the same number of weeks from a date the office picks (straight after by default), on the same weekdays and times, with the same people and equipment wherever they can still work or be booked; anything that can't is left off and the office is told why. It's all or nothing: if any week being copied into is over or already has shifts, nothing is copied (unless "Add to the shifts already there" is ticked). Empty weeks are skipped and named.
+- Next: the needs-attention list (open shifts starting soon, offers with no reply, compliance problems on booked shifts), then shift duties.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

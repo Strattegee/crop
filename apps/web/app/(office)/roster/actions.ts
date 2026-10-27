@@ -130,6 +130,20 @@ export async function copyWeek(f: FormData) {
   }, () => r.summary);
 }
 
+/** Copies the weeks of a month (the Mondays in it) into the same number of weeks starting `toWeek`. */
+export async function copyMonth(f: FormData) {
+  let r: ApplyResult = { summary: '' };
+  await attempt(back(f), async () => {
+    r = await api<ApplyResult>('/roster/copy-weeks', {
+      method: 'POST',
+      body: {
+        facilityId: str(f, 'facilityId'), fromWeek: str(f, 'fromWeek'), weeks: Number(str(f, 'weeks')), toWeek: str(f, 'toWeek'),
+        people: f.get('people') === 'on', equipment: f.get('equipment') === 'on', addToExisting: f.get('addToExisting') === 'on',
+      },
+    });
+  }, () => r.summary);
+}
+
 export async function archiveTemplate(f: FormData) {
   const id = str(f, 'templateId');
   await attempt(back(f), () => api(`/roster/templates/${id}/archive`, { method: 'POST' }), 'Template put away.');
