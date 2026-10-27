@@ -301,3 +301,10 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .mday .dnum { font-weight: 700; font-size: 14px; }
 .mday .ok { color: var(--ok); }
 .mday .warn { color: var(--warn); }
+
+/* Cards / Detailed / Simple (week view). */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.rcard .dl { padding: 0 6px 3px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.rcard .dl:last-child { padding-bottom: 4px; }
+.ribbon.look-simple .rcard { margin-bottom: 2px; border-bottom-width: 3px !important; }
+.ribbon.look-simple .rcard .band { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
