@@ -251,7 +251,9 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-attention li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); }
 .roster-attention .att-kind { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
 .roster-attention .att-kind.person_blocked, .roster-attention .att-kind.equipment_blocked { background: var(--bad); }
-.roster-attention .att-kind.open { background: var(--warn); }
+.roster-attention .att-kind.open, .roster-attention .att-kind.cover_gap { background: var(--warn); }
+.roster-cover ol { margin: 0; padding-left: 1.2em; }
+.roster-cover li { margin: 2px 0; }
 .roster-attention .bad { color: var(--bad); }
 .roster-requests ol { list-style: none; margin: 0; padding: 0; }
 .roster-requests li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }

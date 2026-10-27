@@ -18,11 +18,13 @@ export const dynamic = 'force-dynamic';
 type Attention = {
   days: number; total: number; urgent: number; truncated: boolean;
   items: {
-    shiftId: string; kind: 'person_blocked' | 'equipment_blocked' | 'open' | 'unconfirmed'; urgent: boolean; title: string; detail: string; startsIn: string;
+    shiftId: string; kind: 'person_blocked' | 'equipment_blocked' | 'cover_gap' | 'open' | 'unconfirmed'; urgent: boolean; title: string; detail: string; startsIn: string;
     shift: { id: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string };
   }[];
 };
 const ATTENTION_SHOWN = 15;
+/** A gap in a cover rule (Settings → Cover rules): someone working but nobody holding the credential. */
+type CoverGap = { facilityId: string; facilityName: string; typeName: string; localDate: string; localFrom: string; localTo: string; shiftId: string; title: string };
 
 type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null; shiftLetter?: string | null;
@@ -122,7 +124,7 @@ export default async function RosterPage({ searchParams }: {
   // Needs attention opens when something starts within a day, unless the office closed it (David, 27 Oct).
   const attentionPref = (await cookies()).get(ATTENTION_COOKIE)?.value;
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, coverGaps] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -135,6 +137,8 @@ export default async function RosterPage({ searchParams }: {
     span === 'month' ? Promise.resolve([] as ChangeRequest[]) : api<ChangeRequest[]>(`/roster/change-requests?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as ChangeRequest[]),
     // Needs attention (backlog item 12): the next seven days from now, whatever period is on screen.
     api<Attention>(`/roster/attention${site ? `?facilityId=${site}` : ''}`).catch(() => null),
+    span === 'month' ? Promise.resolve([] as CoverGap[])
+      : api<CoverGap[]>(`/roster/cover-gaps?from=${days[0]}&to=${days[days.length - 1]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as CoverGap[]),
   ]);
   const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
@@ -429,6 +433,24 @@ export default async function RosterPage({ searchParams }: {
                   )}
                   {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
                 </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {coverGaps.length > 0 && (
+        <section className="card roster-cover" aria-label="Cover gaps">
+          <h2 style={{ marginTop: 0 }}>
+            {coverGaps.length === 1 ? '1 cover gap' : `${coverGaps.length} cover gaps`} this {periodWord}
+            {' '}<Link href="/settings/cover-rules" className="muted small">(cover rules)</Link>
+          </h2>
+          <ol>
+            {coverGaps.map(g => (
+              <li key={`${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`}>
+                <Link href={url({ shift: g.shiftId })}>{longDate(g.localDate)}</Link>{' '}
+                <strong>{g.title}</strong>
+                {!site && <span className="muted"> · {g.facilityName}</span>}
               </li>
             ))}
           </ol>

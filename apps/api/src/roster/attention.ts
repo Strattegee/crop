@@ -4,7 +4,17 @@
  * the eligibility reasons already say (those are office-facing).
  */
 
-export type AttentionKind = 'person_blocked' | 'equipment_blocked' | 'open' | 'unconfirmed';
+export type AttentionKind = 'person_blocked' | 'equipment_blocked' | 'cover_gap' | 'open' | 'unconfirmed';
+
+/** A gap in a cover rule (`cover.ts`): someone working but nobody holding the credential. Already worded. */
+export interface AttentionGap {
+  /** The shift the line opens on the roster. */
+  shiftId: string;
+  from: Date;
+  to: Date;
+  title: string;
+  detail: string;
+}
 
 /** One shift starting soon, with what the controller found about it. */
 export interface AttentionShift {
@@ -63,16 +73,25 @@ export function offerNote(s: Pick<AttentionShift, 'offersPending' | 'offersExpir
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-const RANK: Record<AttentionKind, number> = { person_blocked: 0, equipment_blocked: 1, open: 2, unconfirmed: 3 };
+const RANK: Record<AttentionKind, number> = { person_blocked: 0, equipment_blocked: 1, cover_gap: 2, open: 3, unconfirmed: 4 };
 
 /**
  * Everything that needs attention, most pressing first: urgent items (starting within a day) before the
  * rest; within each, people or equipment that can no longer work a booked shift, then shifts nobody is on,
- * then people who haven't confirmed; then by start time.
- * A shift can appear more than once (for example a blocked person and blocked equipment).
+ * then gaps in cover rules, then shifts nobody is on, then people who haven't confirmed; then by start time.
+ * A shift can appear more than once (for example a blocked person and blocked equipment). A cover gap that has
+ * already begun stays on the list until it ends.
  */
-export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours = URGENT_HOURS): AttentionItem[] {
+export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours = URGENT_HOURS, gaps: AttentionGap[] = []): AttentionItem[] {
   const out: Array<AttentionItem & { at: number }> = [];
+  for (const g of gaps) {
+    if (g.to.getTime() <= now.getTime()) continue;
+    const at = g.from.getTime();
+    out.push({
+      shiftId: g.shiftId, kind: 'cover_gap', urgent: at - now.getTime() < urgentHours * 3_600_000, at, title: g.title, detail: g.detail,
+      startsIn: at <= now.getTime() ? 'happening now' : startsIn(g.from, now),
+    });
+  }
   for (const s of shifts) {
     const at = s.startsAt.getTime();
     if (at <= now.getTime()) continue;
