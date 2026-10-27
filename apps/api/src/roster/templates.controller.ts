@@ -7,9 +7,11 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
+import { randomUUID } from 'node:crypto';
+import { equipmentForShift } from './equipment-data.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
-import { applySummary, firstReason, planWeek, type ApplyResult, type LeftOpen, type Slot } from './templates.js';
+import { applySummary, firstReason, planWeek, type ApplyResult, type LeftOpen, type PlannedShift, type Slot } from './templates.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SHIFTS = 400;
@@ -39,7 +41,9 @@ async function slotsFromWeek(db: PoolClient, facilityId: string, weekStart: stri
             to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "startTime",
             to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "endTime",
             s.break_minutes as "breakMinutes", s.area_id as "areaId", s.shift_code_id as "shiftCodeId", s.role,
-            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes
+            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes,
+            coalesce((select json_agg(se.equipment_id order by se.created_at) from shift_assignments se
+                       where se.shift_id = s.id and se.resource_kind = 'equipment' and se.status in ('assigned', 'confirmed')), '[]'::json) as "equipmentIds"
        from shifts s join facilities f on f.id = s.facility_id
        left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
       where s.facility_id = $1 and s.status <> 'cancelled'
@@ -63,12 +67,14 @@ async function checkTarget(db: PoolClient, f: { id: string; name: string; timezo
 /**
  * Creates the week's shifts from slots and, when `people` is on, puts each slot's usual person on it
  * (assigned, waiting for them to confirm) wherever eligibility allows; otherwise the shift stays open.
+ * When `equipment` is on, books each slot's usual equipment again (after the person, so the operator rule
+ * sees them) wherever the equipment checks allow; otherwise it is left off with the reason.
  */
 async function createFromSlots(
-  db: PoolClient, tenantId: string, auth: AuthContext, f: { id: string; timezone: string }, weekStart: string, slots: Slot[], people: boolean,
+  db: PoolClient, tenantId: string, auth: AuthContext, f: { id: string; timezone: string }, weekStart: string, slots: Slot[], people: boolean, equipment: boolean,
 ): Promise<ApplyResult> {
   if (slots.length > MAX_SHIFTS) throw new BadRequestException(`That would add more than ${MAX_SHIFTS} shifts`);
-  const result: ApplyResult = { created: 0, assigned: 0, leftOpen: [] };
+  const result: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
   for (const p of planWeek(slots, weekStart)) {
     const id = (await db.query<{ id: string }>(
       `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person)
@@ -77,26 +83,51 @@ async function createFromSlots(
       [tenantId, f.id, p.areaId, p.shiftCodeId, p.role, p.date, p.startTime, f.timezone, p.overnight ? 1 : 0, p.endTime,
         p.breakMinutes, p.notes, auth.userId, p.needsPerson])).rows[0].id;
     result.created++;
-    if (!people || !p.workerId || !p.needsPerson) continue;
-    // Lock the person (as assigning does) so nothing else rosters them at the same time.
-    const w = (await db.query<{ status: string; name: string }>(
-      `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [p.workerId])).rows[0];
-    if (!w) continue;
-    const open = (reason: string): LeftOpen => ({ date: p.date, startTime: p.startTime, role: p.role, workerName: w.name, reason });
-    if (w.status !== 'active') { result.leftOpen.push(open(`${w.name} isn't active`)); continue; }
-    const [check] = await eligibilityForShift(db, tenantId, id, [p.workerId]);
-    if (!check?.eligible) { result.leftOpen.push(open(firstReason(check?.blocks ?? []))); continue; }
-    await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1, $2, $3, $4)`, [tenantId, id, p.workerId, auth.userId]);
-    await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
-    result.assigned++;
+    if (people) await putUsualPerson(db, tenantId, auth, id, p, result);
+    if (equipment) await bookUsualEquipment(db, tenantId, auth, id, p, result);
   }
   return result;
+}
+
+async function putUsualPerson(db: PoolClient, tenantId: string, auth: AuthContext, id: string, p: PlannedShift, result: ApplyResult) {
+  if (!p.workerId || !p.needsPerson) return;
+  // Lock the person (as assigning does) so nothing else rosters them at the same time.
+  const w = (await db.query<{ status: string; name: string }>(
+    `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [p.workerId])).rows[0];
+  if (!w) return;
+  const open = (reason: string): LeftOpen => ({ date: p.date, startTime: p.startTime, role: p.role, workerName: w.name, reason });
+  if (w.status !== 'active') { result.leftOpen.push(open(`${w.name} isn't active`)); return; }
+  const [check] = await eligibilityForShift(db, tenantId, id, [p.workerId]);
+  if (!check?.eligible) { result.leftOpen.push(open(firstReason(check?.blocks ?? []))); return; }
+  await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1, $2, $3, $4)`, [tenantId, id, p.workerId, auth.userId]);
+  await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
+  result.assigned++;
+}
+
+async function bookUsualEquipment(db: PoolClient, tenantId: string, auth: AuthContext, id: string, p: PlannedShift, result: ApplyResult) {
+  for (const equipmentId of p.equipmentIds ?? []) {
+    // Lock the equipment (as booking does) so it can't be booked twice at once.
+    const e = (await db.query<{ name: string }>('select name from equipment where id = $1 for update', [equipmentId])).rows[0];
+    if (!e) continue;
+    const [check] = await equipmentForShift(db, tenantId, id, [equipmentId]);
+    if (!check?.eligible) {
+      result.equipmentLeftOff.push({ date: p.date, startTime: p.startTime, role: p.role, equipmentName: e.name, reason: firstReason(check?.blocks ?? []) });
+      continue;
+    }
+    await db.query(
+      `insert into shift_assignments(tenant_id, shift_id, resource_kind, equipment_id, status, assigned_by) values ($1, $2, 'equipment', $3, 'confirmed', $4)`,
+      [tenantId, id, equipmentId, auth.userId]);
+    // On an equipment-only shift, status follows the equipment.
+    if (!p.needsPerson) await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [id]);
+    result.equipmentBooked++;
+  }
 }
 
 const TEMPLATE_COLS = `t.id, t.facility_id as "facilityId", f.name as "facilityName", t.name, t.created_at as "createdAt",
   t.created_by_name as "createdByName",
   (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id) as shifts,
-  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id and ts.worker_id is not null) as "withPeople"`;
+  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id and ts.worker_id is not null) as "withPeople",
+  (select count(*)::int from roster_template_shifts ts join roster_template_equipment te on te.template_shift_id = ts.id where ts.template_id = t.id) as "equipmentBookings"`;
 
 /** Roster templates (the "ideal week") and copying a week (backlog item 2). */
 @ApiBearerAuth()
@@ -127,7 +158,9 @@ export class RosterTemplatesController {
       const shifts = (await db.query(
         `select ts.weekday, to_char(ts.start_time, 'HH24:MI') as "startTime", to_char(ts.end_time, 'HH24:MI') as "endTime",
                 ts.break_minutes as "breakMinutes", ts.role, a.name as "areaName", sc.letter as "shiftLetter", not ts.needs_person as "equipmentOnly",
-                case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName"
+                case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
+                coalesce((select json_agg(e.name order by e.name) from roster_template_equipment te join equipment e on e.id = te.equipment_id
+                           where te.template_shift_id = ts.id), '[]'::json) as equipment
            from roster_template_shifts ts left join areas a on a.id = ts.area_id left join shift_codes sc on sc.id = ts.shift_code_id
            left join workers w on w.id = ts.worker_id
           where ts.template_id = $1 order by ts.weekday, ts.start_time, ts.role`, [id])).rows;
@@ -135,7 +168,7 @@ export class RosterTemplatesController {
     });
   }
 
-  /** Saves a site's week as a template. `people: false` leaves out who works each shift. */
+  /** Saves a site's week as a template. `people: false` leaves out who works each shift; `equipment: false` leaves out the equipment. */
   @Roles(...OFFICE_ROLES)
   @Post('roster/templates')
   create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
@@ -143,6 +176,7 @@ export class RosterTemplatesController {
     const weekStart = weekField(body, 'weekStart')!;
     const name = text(body, 'name', { required: true, max: 80 })!;
     const people = bool(body, 'people') ?? true;
+    const equipment = bool(body, 'equipment') ?? true;
     return withTenant(this.pool, t.tenantId, async db => {
       await site(db, facilityId);
       const slots = await slotsFromWeek(db, facilityId, weekStart);
@@ -157,13 +191,22 @@ export class RosterTemplatesController {
         if ((e as { code?: string }).code === '23505') throw new ConflictException(`There is already a template called ${name} for this site`);
         throw e;
       }
+      const rows = slots.map(s => ({ ...s, id: randomUUID() }));
       await db.query(
-        `insert into roster_template_shifts(tenant_id, template_id, weekday, start_time, end_time, break_minutes, area_id, shift_code_id, role, needs_person, worker_id, notes)
-         select $1, $2, x.weekday, x."startTime"::time, x."endTime"::time, x."breakMinutes", x."areaId", x."shiftCodeId", x.role, x."needsPerson",
+        `insert into roster_template_shifts(id, tenant_id, template_id, weekday, start_time, end_time, break_minutes, area_id, shift_code_id, role, needs_person, worker_id, notes)
+         select x.id, $1, $2, x.weekday, x."startTime"::time, x."endTime"::time, x."breakMinutes", x."areaId", x."shiftCodeId", x.role, x."needsPerson",
                 case when $4 and x."needsPerson" then x."workerId" end, x.notes
-           from json_to_recordset($3::json) as x(weekday int, "startTime" text, "endTime" text, "breakMinutes" int, "areaId" uuid,
+           from json_to_recordset($3::json) as x(id uuid, weekday int, "startTime" text, "endTime" text, "breakMinutes" int, "areaId" uuid,
                 "shiftCodeId" uuid, role text, "needsPerson" boolean, "workerId" uuid, notes text)`,
-        [t.tenantId, id, JSON.stringify(slots), people]);
+        [t.tenantId, id, JSON.stringify(rows), people]);
+      if (equipment) {
+        const pairs = rows.flatMap(r => r.equipmentIds.map(e => ({ s: r.id, e })));
+        if (pairs.length) {
+          await db.query(
+            `insert into roster_template_equipment(tenant_id, template_shift_id, equipment_id)
+             select $1, x.s, x.e from json_to_recordset($2::json) as x(s uuid, e uuid) on conflict do nothing`, [t.tenantId, JSON.stringify(pairs)]);
+        }
+      }
       return (await db.query(`select ${TEMPLATE_COLS} from roster_templates t join facilities f on f.id = t.facility_id where t.id = $1`, [id])).rows[0];
     });
   }
@@ -182,7 +225,8 @@ export class RosterTemplatesController {
 
   /**
    * Adds a template's shifts to a week at the template's site. `people` (default on) puts each shift's
-   * usual person on it where they're eligible that day; the rest stay open with the reason.
+   * usual person on it where they're eligible that day; the rest stay open with the reason. `equipment`
+   * (default on) books the usual equipment again where it can be.
    */
   @Roles(...OFFICE_ROLES)
   @Post('roster/templates/:id/apply')
@@ -190,6 +234,7 @@ export class RosterTemplatesController {
   apply(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const weekStart = weekField(body, 'weekStart')!;
     const people = bool(body, 'people') ?? true;
+    const equipment = bool(body, 'equipment') ?? true;
     const addToExisting = bool(body, 'addToExisting') ?? false;
     return this.tx(t, auth, async db => {
       const tpl = (await db.query<{ facility_id: string }>(`select facility_id from roster_templates where id = $1 and archived_at is null`, [id])).rows[0];
@@ -198,9 +243,10 @@ export class RosterTemplatesController {
       await checkTarget(db, f, weekStart, addToExisting);
       const slots = (await db.query<Slot>(
         `select weekday, to_char(start_time, 'HH24:MI') as "startTime", to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes",
-                area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId", notes
-           from roster_template_shifts where template_id = $1`, [id])).rows;
-      const r = await createFromSlots(db, t.tenantId, auth, f, weekStart, slots, people);
+                area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId", notes,
+                coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds"
+           from roster_template_shifts ts where template_id = $1`, [id])).rows;
+      const r = await createFromSlots(db, t.tenantId, auth, f, weekStart, slots, people, equipment);
       return { ...r, weekStart, facilityId: f.id, summary: applySummary(r) };
     });
   }
@@ -215,13 +261,14 @@ export class RosterTemplatesController {
     const fromWeek = weekField(body, 'fromWeek', false) ?? addDays(toWeek, -7);
     if (fromWeek === toWeek) throw new BadRequestException('Choose a different week to copy from');
     const people = bool(body, 'people') ?? true;
+    const equipment = bool(body, 'equipment') ?? true;
     const addToExisting = bool(body, 'addToExisting') ?? false;
     return this.tx(t, auth, async db => {
       const f = await site(db, facilityId);
       await checkTarget(db, f, toWeek, addToExisting);
       const slots = await slotsFromWeek(db, facilityId, fromWeek);
       if (!slots.length) throw new BadRequestException(`There are no shifts at ${f.name} in the week of ${fromWeek} to copy`);
-      const r = await createFromSlots(db, t.tenantId, auth, f, toWeek, slots, people);
+      const r = await createFromSlots(db, t.tenantId, auth, f, toWeek, slots, people, equipment);
       return { ...r, fromWeek, weekStart: toWeek, facilityId: f.id, summary: applySummary(r) };
     });
   }

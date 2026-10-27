@@ -39,7 +39,7 @@ const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live
 const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(t));
 const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
 /** A saved usual week for one site (migration 0023). */
-type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; createdByName: string | null };
+type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -464,7 +464,7 @@ export default async function RosterPage({ searchParams }: {
       {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
         <details className="card roster-templates" open={shifts.length === 0 && templates.length > 0}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
-          <p className="muted small">Save a site&apos;s usual week as a template, then fill any week from it, or copy last week. Each shift gets its usual person where they can work it (waiting for them to confirm); the rest stay open and you&apos;re told why.</p>
+          <p className="muted small">Save a site&apos;s usual week as a template, then fill any week from it, or copy last week. Each shift gets its usual person where they can work it (waiting for them to confirm) and its usual equipment where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
           <div className="template-forms">
             <form action={copyWeek} className="form-row">
               <input type="hidden" name="back" value={here} />
@@ -477,6 +477,7 @@ export default async function RosterPage({ searchParams }: {
               </label>
               <label>Copy from the week of<input name="fromWeek" type="date" defaultValue={addDaysIso(week, -7)} /></label>
               <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same equipment</label>
               <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
               <button className="btn small">Copy week</button>
             </form>
@@ -491,6 +492,7 @@ export default async function RosterPage({ searchParams }: {
                   </select>
                 </label>
                 <label className="inline"><input type="checkbox" name="people" defaultChecked />With the usual people</label>
+                <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the usual equipment</label>
                 <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
                 <button className="btn small">Fill week</button>
               </>}
@@ -506,6 +508,7 @@ export default async function RosterPage({ searchParams }: {
               </label>
               <label>Name<input name="name" required maxLength={80} placeholder="e.g. Usual week" /></label>
               <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each shift</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />Remember the equipment on each shift</label>
               <button className="btn small secondary">Save template</button>
             </form>
           </div>
@@ -513,7 +516,7 @@ export default async function RosterPage({ searchParams }: {
             <ul className="template-list">
               {templates.map(t => (
                 <li key={t.id}>
-                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
+                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.equipmentBookings ? `, ${t.equipmentBookings} equipment ${t.equipmentBookings === 1 ? 'booking' : 'bookings'}` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
                   <form action={archiveTemplate}>
                     <input type="hidden" name="back" value={here} />
                     <input type="hidden" name="templateId" value={t.id} />
