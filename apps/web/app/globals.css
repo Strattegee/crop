@@ -315,3 +315,14 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .duty-needs label.inline { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
 .duty-list label.inline { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 .rcard .dt { padding: 0 6px 3px; font-size: 10px; font-weight: 600; color: #6a4c93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Dashboard: Needs attention (same marks as the roster's panel). */
+.dash-attention h2 { margin-top: 0; font-size: 1.1rem; }
+.dash-attention .bad { color: var(--bad); }
+.dash-attention .dash-kinds { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.dash-attention .dash-kinds li { display: flex; gap: 6px; align-items: center; }
+.dash-attention .dash-kinds .att-kind { margin-top: 0; }
+.dash-attention ol { list-style: none; margin: 8px 0; padding: 0; }
+.dash-attention ol li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); }
+.dash-attention .att-kind { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+.dash-attention .att-kind.person_blocked, .dash-attention .att-kind.equipment_blocked { background: var(--bad); }
+.dash-attention .att-kind.open, .dash-attention .att-kind.cover_gap { background: var(--warn); }

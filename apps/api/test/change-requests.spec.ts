@@ -162,6 +162,9 @@ describe('change requests on a published roster', () => {
     const list = (await http().get(`/roster/change-requests?weekStart=2031-03-05`).set(as('owner')).expect(200)).body;
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ canDecide: true, localDate: WEEK, localStart: '07:00' });
+    // Without a week: every pending request (the Dashboard's count); other statuses still need a week.
+    expect((await http().get('/roster/change-requests').set(as('owner')).expect(200)).body.map((x: { id: string }) => x.id)).toEqual([r.id]);
+    await http().get('/roster/change-requests?status=all').set(as('owner')).expect(400);
 
     await http().post(`/change-requests/${r.id}/approve`).set(as('alloc')).send({}).expect(403);
     const ok = (await http().post(`/change-requests/${r.id}/approve`).set(as('owner')).send({}).expect(200)).body;

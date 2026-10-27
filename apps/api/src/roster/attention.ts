@@ -117,7 +117,9 @@ export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours 
     .map(({ at: _at, ...i }) => i);
 }
 
-/** Counts for the roster's heading: how many items, and how many are urgent. */
+/** Counts for the roster's heading and the Dashboard: how many items, how many are urgent, and of each kind. */
 export function attentionCounts(items: AttentionItem[]) {
-  return { total: items.length, urgent: items.filter(i => i.urgent).length };
+  const byKind: Record<AttentionKind, number> = { person_blocked: 0, equipment_blocked: 0, cover_gap: 0, open: 0, unconfirmed: 0 };
+  for (const i of items) byKind[i.kind]++;
+  return { total: items.length, urgent: items.filter(i => i.urgent).length, byKind };
 }

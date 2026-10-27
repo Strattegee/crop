@@ -192,3 +192,9 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: cover rules (the last planned piece of shift duties). Settings now has "Cover rules": a business can say that someone on shift must hold a credential whenever anyone is working, at one site or every site (for example a food safety supervisor). Because the rule is met by everyone on shift together, it never stops the office putting someone on a shift; instead the roster's day and week views list the cover gaps ("Nobody with a Food safety supervisor working 15:30–20:00") and Needs attention shows those coming up in the next week. Only checked credentials that haven't run out count.
 - Next: a Needs attention count on the Dashboard, then transfers of items between sites.
 - Waiting on David: nothing new.
+
+## 2026-10-28 morning, 6:10am Melbourne (scheduled run)
+
+- Shipped: the Dashboard is now roster-first (Needs attention, last planned piece for the employer). It opens with Needs attention for the coming week: how many things, how many start within a day, a count of each kind ("3 shifts with nobody on them", "1 person yet to confirm", cover gaps…) and the five most pressing, each opening its shift on the roster. Below that, what's waiting on a decision (leave requests, roster change requests, credentials to check), then people and sites. It uses each business's own words and no longer talks about "your agency".
+- Next: transfers of items between sites, then correcting a mistaken employment entry.
+- Waiting on David: nothing new.
