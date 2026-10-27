@@ -140,3 +140,9 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: an Employment card on each person's page. It shows whether they're full-time, part-time, casual or bank and their hours a week, any change starting later, and the history. Owners and admins set new terms from a date (earlier weeks keep what applied then). Adding a worker can now set their employment straight away. The roster's hours-against-contract column uses it.
 - Next: emails to owners and admins when a change request arrives, then carrying equipment over with a template or copied week.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
+
+## 2026-10-27 midday (scheduled run)
+
+- Shipped: emails about change requests (backlog item 2). When someone asks for a change to a published roster, every owner and admin now gets an email saying who asked, which shift and what change, with a link that opens the shift on the roster. When an owner or admin approves or declines it (or withdraws it for them), the person who asked gets an email with the outcome and any note. Nobody is emailed about something they did themselves. Demo people with example addresses are logged, not emailed, as before.
+- Next: carrying equipment bookings over with a template or copied week, then duplicating a month.
+- Waiting on David: nothing new (still the question about messaging staff when a week is published).

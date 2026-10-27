@@ -140,7 +140,7 @@ export async function requestChange(shiftId: string, f: FormData) {
   const change = str(f, 'change');
   await attempt(back(f), () => api(`/shifts/${shiftId}/change-requests`, {
     method: 'POST', body: { change, workerId: change === 'assign' ? str(f, 'workerId') : undefined, reason: str(f, 'reason') },
-  }), 'Change requested. An owner or admin can approve it from the roster.');
+  }), 'Change requested. The owners and admins have been emailed, and you will get an email when it is decided.');
 }
 
 export async function decideChange(requestId: string, decision: 'approve' | 'decline' | 'withdraw', f: FormData) {
