@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { changeSummary, mondayOf, weekState } from '../src/roster/publishing.js';
+import { changeSummary, mondayOf, rosterMessage, weekState } from '../src/roster/publishing.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('roster publishing rules', () => {
@@ -23,6 +23,17 @@ describe('roster publishing rules', () => {
     expect(mondayOf('2026-11-02')).toBe('2026-11-02');
     expect(mondayOf('2026-11-08')).toBe('2026-11-02');
     expect(mondayOf('2026-11-04')).toBe('2026-11-02');
+  });
+
+  it('words the message staff get when a week is published', () => {
+    const m = rosterMessage({ first: 'Ana', business: 'Demo Cafe', site: 'Harbour Kitchen', weekStart: '2026-11-09', updated: false,
+      shifts: [{ localDate: '2026-11-09', localStart: '07:00', localEnd: '15:00', role: 'Chef', areaName: 'Kitchen', confirmed: true }] });
+    expect(m.subject).toBe('Your shifts at Harbour Kitchen for the week of Mon 9 Nov');
+    expect(m.email).toContain('- Mon 9 Nov, 7:00–15:00: Chef (Kitchen)');
+    expect(m.sms).toBe('Demo Cafe: your shifts at Harbour Kitchen, wk of Mon 9 Nov: Mon 9 7:00-15:00.');
+    const gone = rosterMessage({ first: 'Ana', business: 'Demo Cafe', site: 'Harbour Kitchen', weekStart: '2026-11-09', updated: true, shifts: [] });
+    expect(gone.subject).toMatch(/have changed$/);
+    expect(gone.email).toContain('You no longer have any shifts at Harbour Kitchen that week.');
   });
 
   it('describes changes in plain words', () => {
@@ -169,6 +180,42 @@ describe('roster: draft, live and history with a change log', () => {
       await c.query('rollback');
     } finally {
       await c.end();
+    }
+  });
+
+  it('tells staff their shifts when a week is published, and only the people affected after changes', async () => {
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    try {
+      const mk = async (firstName: string, email: string, phone: string) => {
+        const id = (await http().post('/workers').set(as('admin')).send({ firstName, lastName: 'Sample', roles: ['Chef'], email, phone }).expect(201)).body.id;
+        await http().put(`/workers/${id}/right-to-work`).set(as('admin')).send({ status: 'citizen', citizenProofType: 'au_passport' }).expect(200);
+        await http().post(`/workers/${id}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
+        return id as string;
+      };
+      const ben = await mk('Ben', 'ben@crop.test', '0412 345 678');
+      const cat = await mk('Cat', 'cat@crop.test', '0412 345 679');
+      const ids = (await http().post('/shifts').set(as('alloc'))
+        .send({ facilityId: site, role: 'Chef', startDate: '2026-11-09', endDate: '2026-11-10', startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids;
+      await http().post(`/shifts/${ids[0]}/assign`).set(as('alloc')).send({ workerId: ben }).expect(200);
+      await http().post(`/shifts/${ids[1]}/assign`).set(as('alloc')).send({ workerId: cat }).expect(200);
+      const first = await http().post('/roster/publish').set(as('alloc')).send({ weekStart: '2026-11-09', facilityId: site }).expect(201);
+      expect(first.body.messages).toBe(4); // Ben and Cat, email and SMS each
+      const sent = async () => (await owner.query(`select to_address, channel, subject, body from notifications where template = 'roster_published' order by created_at, channel`)).rows;
+      expect((await sent()).filter(r => r.channel === 'email').map(r => r.to_address).sort()).toEqual(['ben@crop.test', 'cat@crop.test']);
+
+      // Ben is taken off; only Ben hears about it. Publishing without telling staff sends nothing.
+      await http().post(`/shifts/${ids[0]}/unassign`).set(as('alloc')).send({}).expect(200);
+      const second = await http().post('/roster/publish').set(as('alloc')).send({ weekStart: '2026-11-09', facilityId: site }).expect(201);
+      expect(second.body.messages).toBe(2);
+      const latest = (await sent()).slice(-2);
+      expect(latest.map(r => r.to_address).sort()).toEqual(['+61412345678', 'ben@crop.test']);
+      expect(latest.find(r => r.channel === 'email')!.body).toContain('You no longer have any shifts at Harbour Kitchen that week.');
+      await http().post(`/shifts/${ids[1]}/confirm`).set(as('alloc')).expect(200);
+      const quiet = await http().post('/roster/publish').set(as('alloc')).send({ weekStart: '2026-11-09', facilityId: site, notify: false }).expect(201);
+      expect(quiet.body.messages).toBe(0);
+    } finally {
+      await owner.end();
     }
   });
 });

@@ -7,7 +7,9 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
-import { actorOf, changeSummary, mondayOf, weekState, type ChangeKind } from './publishing.js';
+import { actorOf, changeSummary, mondayOf, rosterMessage, weekState, type ChangeKind, type MyShift } from './publishing.js';
+import { contacts } from './offer-replies.js';
+import { queueNotification } from '../notifications/notify.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +28,49 @@ interface WeekRow {
 }
 
 /** Each site's week: draft, live or history, when it was last published and what changed since. */
+/**
+ * Tells staff about a published week (David and Steve, 27 Oct). First publication: everyone on the site's week.
+ * Published again: only people whose shifts changed since the last publication (including anyone taken off).
+ * Returns the number of messages queued.
+ */
+async function tellStaff(db: PoolClient, t: Membership, userId: string, w: { facilityId: string; facilityName: string; version: number | null; publishedAt: string | null }, weekStart: string) {
+  const version = (w.version ?? 0) + 1;
+  const affected = w.version === null
+    ? (await db.query<{ id: string }>(
+      `select distinct sa.worker_id as id from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
+        where s.facility_id = $1 and s.status <> 'cancelled' and s.needs_person and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
+          and date_trunc('week', s.starts_at at time zone f.timezone)::date = $2`, [w.facilityId, weekStart])).rows
+    : (await db.query<{ id: string }>(
+      `select distinct coalesce(c.worker_id, sa.worker_id) as id from shift_changes c
+         left join shift_assignments sa on c.worker_id is null and sa.shift_id = c.shift_id and sa.resource_kind = 'worker'
+              and (sa.status in ('assigned', 'confirmed') or sa.ended_at >= $3)
+        where c.facility_id = $1 and c.week_start = $2 and c.at > $3
+          and c.kind in ('assigned', 'booked', 'confirmed', 'unassigned', 'pulled_out', 'cancelled', 'times_changed')`,
+      [w.facilityId, weekStart, w.publishedAt])).rows;
+  const ids = affected.map(r => r.id).filter(Boolean);
+  if (!ids.length) return 0;
+  const shifts = (await db.query<MyShift & { workerId: string }>(
+    `select sa.worker_id as "workerId", to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
+            to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart", to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "localEnd",
+            s.role, a.name as "areaName", sa.status = 'confirmed' as confirmed
+       from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id left join areas a on a.id = s.area_id
+      where s.facility_id = $1 and s.status <> 'cancelled' and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
+        and sa.worker_id = any($3) and date_trunc('week', s.starts_at at time zone f.timezone)::date = $2
+      order by s.starts_at`, [w.facilityId, weekStart, ids])).rows;
+  const who = await contacts(db, ids);
+  let n = 0;
+  for (const id of ids) {
+    const c = who.get(id);
+    if (!c) continue;
+    const m = rosterMessage({ first: c.first, business: t.tenantName, site: w.facilityName, weekStart, updated: w.version !== null,
+      shifts: shifts.filter(s => s.workerId === id) });
+    const key = `publish:${w.facilityId}:${weekStart}:v${version}:${id}`;
+    if (c.email) { await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'roster_published', subject: m.subject, body: m.email, workerId: id, dedupeKey: `${key}:email`, createdBy: userId }); n++; }
+    if (c.phone) { await queueNotification(db, t.tenantId, { channel: 'sms', to: c.phone, template: 'roster_published', body: m.sms, workerId: id, dedupeKey: `${key}:sms`, createdBy: userId }); n++; }
+  }
+  return n;
+}
+
 async function weeks(db: PoolClient, weekStart: string, facilityId: string | null) {
   const rows = (await db.query<WeekRow>(
     `select f.id as "facilityId", f.name as "facilityName", f.timezone, p.version, p.published_at as "publishedAt",
@@ -114,13 +159,16 @@ export class PublishingController {
       if (before.every(w => w.state === 'history')) throw new ConflictException('This week is over, so it can no longer be published');
       const toPublish = before.filter(w => w.state === 'draft' || (w.state === 'live' && w.changesSincePublish > 0));
       if (!toPublish.length) throw new ConflictException('Nothing has changed since this week was published');
+      const notify = body?.notify !== false;
+      let messages = 0;
       for (const w of toPublish) {
+        if (notify) messages += await tellStaff(db, t, auth.userId, w, weekStart);
         await db.query(
           `insert into roster_publications(tenant_id, facility_id, week_start, version, published_by, published_by_name)
            values ($1, $2, $3, $4, $5, $6)`,
           [t.tenantId, w.facilityId, weekStart, (w.version ?? 0) + 1, auth.userId, actor.name]);
       }
-      return { published: toPublish.length, weeks: await weeks(db, weekStart, facilityId) };
+      return { published: toPublish.length, messages, weeks: await weeks(db, weekStart, facilityId) };
     }, actor);
   }
 

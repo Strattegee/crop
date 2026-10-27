@@ -323,11 +323,12 @@ export default async function RosterPage({ searchParams }: {
         <div className="roster-tools">
           <Link className="btn small secondary" href={url({ log: showLog ? undefined : '1' })}>{showLog ? 'Hide changes' : 'Changes'}</Link>
           {canPublish && (
-            <form action={publishWeek}>
+            <form action={publishWeek} style={{ display: "flex", gap: 8, alignItems: "center", margin: 0 }}>
               <input type="hidden" name="back" value={here} />
               <input type="hidden" name="week" value={week} />
               <input type="hidden" name="site" value={site} />
-              <button className="btn small" title="Marks the week as live. Changes after this are logged. No messages are sent yet.">
+              <label className="inline small" title="Email and text each person their shifts for the week (after changes: only the people affected)"><input type="checkbox" name="notify" defaultChecked />Tell staff</label>
+              <button className="btn small" title="Marks the week as live. Changes after this are logged.">
                 {drafts.length ? 'Publish week' : `Publish ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'}`}
               </button>
             </form>
