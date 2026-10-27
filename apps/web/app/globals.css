@@ -88,10 +88,13 @@ label.inline input[type='checkbox'] { margin: 0; }
 .weekdays { border: 0; padding: 0; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; }
 .weekdays legend { font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 4px; }
 .roster-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
-.roster-scroll { flex: 999 1 640px; min-width: 0; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.roster-scroll { flex: 999 1 640px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+/* The grid scrolls inside its own box (as tall as the window), so the day headings stay at the top while
+   scrolling through shifts (David, 27 Oct). A box that only scrolls sideways would stop them sticking. */
+.roster-scroll { overflow: auto; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
 .ribbon { min-width: 980px; table-layout: fixed; font-size: 13px; }
 .ribbon th, .ribbon td { padding: 5px; border-bottom: 1px solid var(--border); vertical-align: top; }
-.ribbon thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; font-size: 13px; color: var(--text); }
+.ribbon thead th { position: sticky; top: 0; background: var(--surface); z-index: 3; box-shadow: inset 0 -1px 0 var(--border); font-size: 13px; color: var(--text); }
 .ribbon thead th span { display: block; font-weight: 700; }
 .ribbon thead th small { font-weight: 600; }
 .ribbon th.who { width: 180px; }
