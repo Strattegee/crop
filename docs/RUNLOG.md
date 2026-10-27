@@ -166,3 +166,6 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: a Needs attention panel at the top of the roster (backlog item 12, first slice). It looks at the next seven days, whatever week is on screen, and lists: shifts nobody is on (and whether they've been offered, are waiting on replies, or the offers ran out), people who haven't confirmed their shift, and people or equipment booked on a shift who can no longer work it (a licence or right to work runs out by then, leave approved since they were booked, a machine out of service or overdue for a check). Anything starting within a day comes first and opens the panel; each line opens that shift on the roster.
 - Next: Cards / Detailed / Simple roster views, or shift duties.
 - Waiting on David: nothing new.
+
+## 27 Oct, evening (David's request)
+- Roster: the day headings now stay at the top while scrolling through shifts. The grid scrolls inside its own box, as tall as the window (a box that only scrolled sideways stopped the headings sticking).
