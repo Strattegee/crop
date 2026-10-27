@@ -11,10 +11,13 @@ export interface PackCredential { name: string; category: Category; number: bool
 export interface PackRole { name: string; area: string; must?: string[]; should?: string[] }
 export interface PackShiftCode { code: string; letter?: string; name: string; start: string; end: string; breakMinutes: number }
 export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string }
+/** A shift duty (migration 0029): something a shift may involve, with the credentials it needs (must = blocks, should = warning). */
+export interface PackDuty { name: string; description: string; must?: string[]; should?: string[] }
 export interface PackItem { name: string; category: ItemCategory; unit: string; costCents: number; reorderLevel?: number }
 export interface IndustryPack {
   id: string; name: string; description: string; areas: string[];
   credentials: PackCredential[]; roles: PackRole[]; shiftCodes: PackShiftCode[]; equipmentTypes: PackEquipmentType[]; items: PackItem[];
+  duties: PackDuty[];
 }
 
 const c = (name: string, category: Category, number: boolean, expiry: boolean, method: string): PackCredential => ({ name, category, number, expiry, method });
@@ -75,6 +78,12 @@ export const PACKS: IndustryPack[] = [
       { name: 'Hand sanitiser 500 ml', category: 'sundries', unit: 'bottle', costCents: 650, reorderLevel: 12 },
       { name: 'Disposable aprons (roll)', category: 'ppe', unit: 'roll', costCents: 1800, reorderLevel: 5 },
     ],
+    duties: [
+      { name: 'Drives clients', description: 'Driving clients or patients in a car', must: ['Driver Licence (C, car)'] },
+      { name: 'Works with children', description: 'Paediatric ward, school or family visits', must: ['Working with Children Check'] },
+      { name: 'Gives medication', description: 'Administers or assists with medication on this shift', must: ['Medication Administration Competency'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
+    ],
   },
   {
     id: 'hospitality',
@@ -127,6 +136,12 @@ export const PACKS: IndustryPack[] = [
       { name: 'Coffee beans', category: 'sundries', unit: 'kg', costCents: 3800, reorderLevel: 10 },
       { name: 'Takeaway cups (sleeve of 50)', category: 'sundries', unit: 'sleeve', costCents: 900, reorderLevel: 20 },
       { name: 'Sanitiser (5 L)', category: 'sundries', unit: 'drum', costCents: 2800, reorderLevel: 2 },
+    ],
+    duties: [
+      { name: 'Serves alcohol', description: 'Pours or serves alcohol on this shift', must: ['Responsible Service of Alcohol (RSA)'] },
+      { name: 'Food safety supervisor', description: 'The food safety supervisor on site for this shift', must: ['Food Safety Supervisor Certificate'] },
+      { name: 'Handles food', description: 'Prepares or serves unpackaged food', must: ['Food Handler Training'], should: ['Allergen Awareness Training'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
     ],
   },
   {
@@ -193,6 +208,12 @@ export const PACKS: IndustryPack[] = [
       { name: 'Star pickets', category: 'sundries', unit: 'each', costCents: 450, reorderLevel: 50 },
       { name: 'Silt fence (roll)', category: 'sundries', unit: 'roll', costCents: 6500, reorderLevel: 4 },
     ],
+    duties: [
+      { name: 'Works at heights', description: 'Work at height on this shift (roofs, scaffolds, ladders)', must: ['Working at Heights'] },
+      { name: 'Confined space work', description: 'Enters a confined space on this shift', must: ['Confined Space Entry'] },
+      { name: 'Asbestos area', description: 'Works where asbestos may be present', must: ['Asbestos Awareness'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
+    ],
   },
   {
     id: 'labour-hire',
@@ -245,6 +266,11 @@ export const PACKS: IndustryPack[] = [
       { name: 'LPG cylinder (forklift)', category: 'fuel', unit: 'cylinder', costCents: 6500, reorderLevel: 4 },
       { name: 'Diesel', category: 'fuel', unit: 'litre', costCents: 200 },
     ],
+    duties: [
+      { name: 'Drives a forklift', description: 'Operates a forklift on this shift', must: ['High Risk Work Licence: Forklift (LF)'] },
+      { name: 'Drives a medium truck', description: 'Drives a medium rigid truck on this shift', must: ['Driver Licence (MR, medium rigid)'], should: ['Chain of Responsibility Awareness'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
+    ],
   },
   {
     id: 'traffic-management',
@@ -284,6 +310,11 @@ export const PACKS: IndustryPack[] = [
       { name: 'Sandbags', category: 'sundries', unit: 'each', costCents: 300, reorderLevel: 50 },
       { name: 'Diesel', category: 'fuel', unit: 'litre', costCents: 200 },
     ],
+    duties: [
+      { name: 'Drives the TMA truck', description: 'Drives the truck mounted attenuator on this shift', must: ['Truck Mounted Attenuator (TMA) Training', 'Driver Licence (MR, medium rigid)'] },
+      { name: 'Sets out the traffic plan', description: 'Implements the traffic management plan on site', must: ['Traffic Management Implementer Accreditation'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
+    ],
   },
   {
     id: 'cleaning',
@@ -313,6 +344,11 @@ export const PACKS: IndustryPack[] = [
       { name: 'Microfibre cloths (pack of 10)', category: 'sundries', unit: 'pack', costCents: 1500, reorderLevel: 6 },
       { name: 'Nitrile gloves (box of 100)', category: 'ppe', unit: 'box', costCents: 1100, reorderLevel: 10 },
     ],
+    duties: [
+      { name: 'School or childcare site', description: 'Cleaning where children may be present', must: ['Working with Children Check'] },
+      { name: 'Works at heights', description: 'Work at height on this shift (roofs, scaffolds, ladders)', must: ['Working at Heights'] },
+      { name: 'Drives the company car', description: 'Drives between sites on this shift', must: ['Driver Licence (C, car)'] },
+    ],
   },
   {
     id: 'security',
@@ -337,6 +373,11 @@ export const PACKS: IndustryPack[] = [
     ],
     equipmentTypes: [{ name: 'Patrol car', operatorCredential: 'Driver Licence (C, car)' }, { name: 'Two-way radio', note: 'Issue per shift' }],
     items: [{ name: 'Body-worn camera batteries', category: 'tools', unit: 'each', costCents: 4500, reorderLevel: 4 }, { name: 'Security uniform shirt', category: 'ppe', unit: 'each', costCents: 4200, reorderLevel: 6 }],
+    duties: [
+      { name: 'Licensed venue', description: 'Crowd control where alcohol is served', must: ['Security Licence: Crowd Controller'], should: ['Responsible Service of Alcohol (RSA)'] },
+      { name: 'Mobile patrol', description: 'Drives the patrol car on this shift', must: ['Driver Licence (C, car)'] },
+      { name: 'First aid officer', description: 'The nominated first aider on this shift', must: ['First Aid (HLTAID011)'] },
+    ],
   },
 ];
 

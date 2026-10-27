@@ -256,6 +256,13 @@ export class ShiftsController {
     for (let d = startDate; d <= endDate; d = addDays(d, 1)) if (!weekdays || weekdays.includes(isoWeekday(d))) dates.push(d);
     if (!dates.length) throw new BadRequestException('No dates match the days chosen');
     if (dates.length * quantity > MAX_SHIFTS_PER_REQUEST) throw new BadRequestException(`That would create more than ${MAX_SHIFTS_PER_REQUEST} shifts`);
+    // Shift duties (migration 0029) to put on every shift created, e.g. "Serves alcohol".
+    const dutiesRaw = body?.dutyIds;
+    if (dutiesRaw !== undefined && dutiesRaw !== null && (!Array.isArray(dutiesRaw) || dutiesRaw.some(x => typeof x !== 'string' || !UUID.test(x)))) {
+      throw new BadRequestException('Choose the duties for these shifts');
+    }
+    const dutyIds = [...new Set((dutiesRaw as string[] | null | undefined) ?? [])];
+    if (dutyIds.length > 20) throw new BadRequestException('Choose 20 duties or fewer');
 
     return this.tx(t, auth, async db => {
       const facility = (await db.query<{ timezone: string }>('select timezone from facilities where id = $1', [facilityId])).rows[0];
@@ -287,6 +294,13 @@ export class ShiftsController {
         [t.tenantId, facilityId, areaId, shiftCodeId, role, facility.timezone, startTime, endTime, overnight ? 1 : 0,
           breakMinutes ?? 0, notes, auth.userId, dates, quantity, !equipmentOnly],
       )).rows.map(r => r.id);
+      if (dutyIds.length) {
+        const ok = (await db.query<{ n: number }>('select count(*)::int as n from shift_duties where id = any($1) and active', [dutyIds])).rows[0].n;
+        if (ok !== dutyIds.length) throw new BadRequestException('One of those duties is switched off or no longer exists');
+        await db.query(
+          `insert into shift_duty_links(tenant_id, shift_id, duty_id) select $1, s, d from unnest($2::uuid[]) s, unnest($3::uuid[]) d`,
+          [t.tenantId, ids, dutyIds]);
+      }
       return { created: ids.length, ids };
     });
   }

@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
-type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number } };
+type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
 type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
@@ -32,13 +32,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="card">
         <h2>Industry templates</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Pick the industries this business works in. Each adds starter roles, the credentials each role needs, shift types, equipment types and stock items. Apply as many as you like; nothing is duplicated, and you can change or switch off anything afterwards. Templates are a starting point, not legal advice: check your state&apos;s requirements.</p>
+        <p className="muted" style={{ marginTop: 0 }}>Pick the industries this business works in. Each adds starter roles, the credentials each role needs, shift types, shift duties (such as serving alcohol), equipment types and stock items. Apply as many as you like; nothing is duplicated, and you can change or switch off anything afterwards. Templates are a starting point, not legal advice: check your state&apos;s requirements.</p>
         <div className="grid">
           {packs.map(p => (
             <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <strong>{p.name}{p.appliedAt && <span className="badge ok" style={{ marginLeft: 6 }}>Applied</span>}</strong>
               <span className="muted" style={{ fontSize: 13 }}>{p.description}</span>
-              <span className="muted" style={{ fontSize: 12 }}>{p.counts.roles} roles · {p.counts.credentials} credentials · {p.counts.shiftCodes} shift types · {p.counts.equipmentTypes} equipment types · {p.counts.items} items</span>
+              <span className="muted" style={{ fontSize: 12 }}>{p.counts.roles} roles · {p.counts.credentials} credentials · {p.counts.shiftCodes} shift types · {p.counts.equipmentTypes} equipment types · {p.counts.items} items{p.counts.duties ? ` · ${p.counts.duties} shift duties` : ''}</span>
               {canEdit && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
                   <form action={applyPack.bind(null, p.id)}><button type="submit" className={`btn small ${p.appliedAt ? 'secondary' : ''}`}>{p.appliedAt ? 'Apply again' : 'Use this template'}</button></form>

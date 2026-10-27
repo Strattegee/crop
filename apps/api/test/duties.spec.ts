@@ -169,6 +169,33 @@ describe('shift duties: API', () => {
     await http().patch('/settings').set(as('admin')).send({ publishedChanges: 'open' }).expect(200);
   });
 
+  it('duties can be chosen when adding shifts, for every shift in a block', async () => {
+    const list = (await http().get('/shift-duties').set(as('alloc')).expect(200)).body as { id: string; name: string }[];
+    const alcohol = list.find(d => d.name === 'Serves alcohol')!.id;
+    const sup = list.find(d => d.name.startsWith('Food'))!.id;
+    const made = (await http().post('/shifts').set(as('alloc')).send({
+      facilityId: site, role: 'Waiter', startDate: '2026-12-14', endDate: '2026-12-15', startTime: '17:00', endTime: '23:00',
+      quantity: 2, dutyIds: [alcohol, sup, alcohol],
+    }).expect(201)).body;
+    expect(made.created).toBe(4);
+    const shifts = (await http().get('/shifts?from=2026-12-14&to=2026-12-15').set(as('alloc')).expect(200)).body as { id: string; duties: { name: string }[] }[];
+    const ours = shifts.filter(x => made.ids.includes(x.id));
+    expect(ours).toHaveLength(4);
+    for (const x of ours) expect(x.duties.map(d => d.name)).toEqual(['Food safety supervisor on site', 'Serves alcohol']);
+    // Ana's RSA has run out, so she can't be put on them.
+    await http().post(`/shifts/${made.ids[0]}/assign`).set(as('alloc')).send({ workerId: ana }).expect(409);
+    const history = (await http().get(`/shifts/${made.ids[0]}/history`).set(as('alloc')).expect(200)).body.map((h: { summary: string }) => h.summary);
+    expect(history).toEqual(expect.arrayContaining(['Duty added: Serves alcohol']));
+
+    // A switched-off duty refuses the whole request; nothing is created.
+    await http().patch(`/shift-duties/${sup}`).set(as('admin')).send({ active: false }).expect(200);
+    const bad = await http().post('/shifts').set(as('alloc')).send({ facilityId: site, role: 'Waiter', date: '2026-12-16', startTime: '17:00', endTime: '23:00', dutyIds: [sup] }).expect(400);
+    expect(bad.body.message).toBe('One of those duties is switched off or no longer exists');
+    expect((await http().get('/shifts?from=2026-12-16&to=2026-12-16').set(as('alloc')).expect(200)).body).toEqual([]);
+    await http().patch(`/shift-duties/${sup}`).set(as('admin')).send({ active: true }).expect(200);
+    await http().post('/shifts').set(as('alloc')).send({ facilityId: site, role: 'Waiter', date: '2026-12-16', startTime: '17:00', endTime: '23:00', dutyIds: 'bar' }).expect(400);
+  });
+
   it('copied weeks and templates keep the duties, and the usual person must still meet them', async () => {
     const list = (await http().get('/shift-duties').set(as('alloc')).expect(200)).body as { id: string; name: string }[];
     const alcohol = list.find(d => d.name === 'Serves alcohol')!.id;

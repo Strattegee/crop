@@ -23,6 +23,7 @@ export async function createShifts(f: FormData) {
       startTime: str(f, 'startTime'), endTime: str(f, 'endTime'),
       ...(single ? { date: str(f, 'startDate') } : { startDate: str(f, 'startDate'), endDate: str(f, 'endDate'), weekdays: weekdays.length ? weekdays : undefined }),
       quantity: Number(str(f, 'quantity') ?? 1), notes: str(f, 'notes'),
+      dutyIds: f.getAll('dutyIds').map(String).filter(Boolean),
     },
   }), 'Shifts added.');
 }
