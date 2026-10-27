@@ -1,0 +1,50 @@
+name: Merge Claude's pull requests
+# David, 27 Oct: scheduled Claude runs may ship their own work while he is away (docs/WORKING-ALONE.md).
+# A pull request is merged here only when ALL of these hold:
+#   - it carries the `claude-automerge` label (Claude adds it only to work the working-alone rules let it ship
+#     without asking; held work never gets it, and removing the label stops the merge),
+#   - it targets main, comes from a branch in this repository (not a fork) and isn't a draft,
+#   - CI passed on its latest commit, and every other check on that commit passed too.
+# Merges made with the workflow token don't start other workflows, so this then starts the staging deploy
+# itself (it also runs on an ordinary push to main).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+
+concurrency: claude-automerge
+
+jobs:
+  merge:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge if it qualifies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list -R "$REPO" --state open --base main --head "$BRANCH" \
+                 --json number,headRefOid,isDraft,isCrossRepository,labels \
+                 --jq '[.[] | select(.headRefOid == env.SHA and (.isDraft | not) and (.isCrossRepository | not)
+                                       and any(.labels[]; .name == "claude-automerge"))][0].number // empty')
+          if [ -z "$pr" ]; then echo "No open pull request with the claude-automerge label at $SHA; nothing to do."; exit 0; fi
+
+          # Every check on this commit must be finished and passed (not just CI).
+          bad=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+                  --jq '[.check_runs[] | select(.status != "completed" or ((.conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral") | not)) | .name] | join(", ")')
+          if [ -n "$bad" ]; then echo "Not merging #$pr: checks not passed yet: $bad"; exit 0; fi
+
+          # --match-head-commit refuses if someone pushed after these checks ran.
+          gh pr merge "$pr" -R "$REPO" --merge --match-head-commit "$SHA"
+          gh pr comment "$pr" -R "$REPO" --body "Merged automatically: CI passed on ${SHA:0:7} and the pull request carries the \`claude-automerge\` label (see docs/WORKING-ALONE.md). Starting the staging deploy."
+          gh workflow run deploy-staging.yml -R "$REPO" --ref main
