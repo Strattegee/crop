@@ -12,7 +12,7 @@ import { startFakeIdp } from './fake-idp.js';
 
 const slot = (over: Partial<Slot>): Slot => ({
   weekday: 1, startTime: '07:00', endTime: '15:00', breakMinutes: 30, areaId: null, shiftCodeId: null, role: 'Chef',
-  needsPerson: true, workerId: null, notes: null, ...over,
+  needsPerson: true, workerId: null, notes: null, equipmentIds: [], ...over,
 });
 
 describe('roster templates: rules', () => {
@@ -24,10 +24,15 @@ describe('roster templates: rules', () => {
   });
 
   it('sums up what happened in plain words', () => {
-    expect(applySummary({ created: 0, assigned: 0, leftOpen: [] })).toBe('There were no shifts to add.');
-    expect(applySummary({ created: 1, assigned: 0, leftOpen: [] })).toBe('1 shift added.');
+    const none = { equipmentBooked: 0, equipmentLeftOff: [] };
+    expect(applySummary({ created: 0, assigned: 0, leftOpen: [], ...none })).toBe('There were no shifts to add.');
+    expect(applySummary({ created: 1, assigned: 0, leftOpen: [], ...none })).toBe('1 shift added.');
     expect(applySummary({
-      created: 5, assigned: 3,
+      created: 2, assigned: 0, leftOpen: [], equipmentBooked: 1,
+      equipmentLeftOff: [{ date: '2026-11-11', startTime: '07:00', role: 'Equipment only', equipmentName: 'Truck 2', reason: 'Truck 2 is out of service' }],
+    })).toBe('2 shifts added. 1 equipment booking made. 1 equipment booking left off: Truck 2 is out of service.');
+    expect(applySummary({
+      created: 5, assigned: 3, ...none,
       leftOpen: [{ date: '2026-11-11', startTime: '07:00', role: 'Chef', workerName: 'Ana Example', reason: 'Ana Example is on leave on Wed 11 Nov' }],
     })).toBe('5 shifts added, 3 with their usual person (waiting for them to confirm). 1 left open because the usual person can\'t work it: Ana Example is on leave on Wed 11 Nov.');
   });
@@ -162,6 +167,45 @@ describe('roster templates and copying a week', () => {
     expect(empty.body.message).toBe('There are no shifts at Harbour Kitchen in the week of 2027-05-31 to copy');
   });
 
+  it('carries equipment bookings over, leaving off what can\'t be booked', async () => {
+    const depot = (await http().post('/facilities').set(as('admin')).send({ name: 'Depot', state: 'VIC' }).expect(201)).body.id;
+    const type = (await http().post('/equipment-types').set(as('admin')).send({ name: 'Truck' }).expect(201)).body.id;
+    const truck1 = (await http().post('/equipment').set(as('admin')).send({ equipmentTypeId: type, name: 'Truck 1', homeFacilityId: depot }).expect(201)).body.id;
+    const truck2 = (await http().post('/equipment').set(as('admin')).send({ equipmentTypeId: type, name: 'Truck 2', homeFacilityId: depot }).expect(201)).body.id;
+    const W1 = '2027-05-03', W2 = '2027-05-10';
+    // Monday: Ana drives Truck 1. Tuesday: Truck 2 on dry hire (equipment only).
+    const wet = (await http().post('/shifts').set(as('alloc')).send({ facilityId: depot, role: 'Chef', date: W1, startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
+    await http().post(`/shifts/${wet}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
+    await http().post(`/shifts/${wet}/equipment`).set(as('alloc')).send({ equipmentId: truck1 }).expect(200);
+    const dry = (await http().post('/shifts').set(as('alloc')).send({ facilityId: depot, equipmentOnly: true, date: '2027-05-04', startTime: '06:00', endTime: '18:00' }).expect(201)).body.ids[0];
+    await http().post(`/shifts/${dry}/equipment`).set(as('alloc')).send({ equipmentId: truck2 }).expect(200);
+
+    const tpl = (await http().post('/roster/templates').set(as('alloc')).send({ facilityId: depot, weekStart: W1, name: 'Depot week' }).expect(201)).body;
+    expect(tpl).toMatchObject({ shifts: 2, withPeople: 1, equipmentBookings: 2 });
+    const one = (await http().get(`/roster/templates/${tpl.id}`).set(as('alloc')).expect(200)).body;
+    expect(one.shiftList.map((x: { equipment: string[]; equipmentOnly: boolean }) => [x.equipment, x.equipmentOnly])).toEqual([[['Truck 1'], false], [['Truck 2'], true]]);
+    const bare = (await http().post('/roster/templates').set(as('alloc')).send({ facilityId: depot, weekStart: W1, name: 'No trucks', equipment: false }).expect(201)).body;
+    expect(bare.equipmentBookings).toBe(0);
+
+    // Truck 2 goes out of service: applying books Truck 1 again and leaves Truck 2 off, saying why.
+    await http().patch(`/equipment/${truck2}`).set(as('admin')).send({ status: 'out_of_service' }).expect(200);
+    const r = (await http().post(`/roster/templates/${tpl.id}/apply`).set(as('alloc')).send({ weekStart: W2 }).expect(200)).body;
+    expect(r).toMatchObject({ created: 2, assigned: 1, equipmentBooked: 1 });
+    expect(r.equipmentLeftOff).toEqual([{ date: '2027-05-11', startTime: '06:00', role: 'Equipment only', equipmentName: 'Truck 2', reason: 'Truck 2 is out of service' }]);
+    expect(r.summary).toContain('1 equipment booking left off: Truck 2 is out of service');
+    const week2 = (await http().get(`/roster?from=${W2}&to=${plus6(W2)}&facilityId=${depot}`).set(as('alloc')).expect(200)).body.shifts as Array<{ status: string; equipment: Array<{ name: string }> }>;
+    expect(week2.map(x => [x.status, x.equipment.map(e => e.name)])).toEqual([['assigned', ['Truck 1']], ['open', []]]);
+
+    // Copying a week carries equipment too, unless asked not to; equipment back in service is booked again.
+    await http().patch(`/equipment/${truck2}`).set(as('admin')).send({ status: 'active' }).expect(200);
+    const copied = (await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: depot, toWeek: '2027-05-17', fromWeek: W1 }).expect(200)).body;
+    expect(copied).toMatchObject({ created: 2, equipmentBooked: 2, equipmentLeftOff: [] });
+    const week3 = (await http().get(`/roster?from=2027-05-17&to=2027-05-23&facilityId=${depot}`).set(as('alloc')).expect(200)).body.shifts as Array<{ status: string }>;
+    expect(week3.map(x => x.status)).toEqual(['assigned', 'booked']);
+    const plain = (await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: depot, toWeek: '2027-05-24', fromWeek: W1, equipment: false }).expect(200)).body;
+    expect(plain).toMatchObject({ created: 2, equipmentBooked: 0, equipmentLeftOff: [] });
+  });
+
   it('puts templates away without deleting them, and keeps businesses apart', async () => {
     expect((await http().get('/roster/templates').set(as('other')).expect(200)).body).toEqual([]);
     await http().get(`/roster/templates/${templateId}`).set(as('other')).expect(404);
@@ -169,7 +213,7 @@ describe('roster templates and copying a week', () => {
     await http().post('/roster/copy-week').set(as('other')).send({ facilityId: site, toWeek: '2027-05-03' }).expect(400);
 
     await http().post(`/roster/templates/${templateId}/archive`).set(as('alloc')).expect(200);
-    expect((await http().get('/roster/templates').set(as('alloc')).expect(200)).body).toEqual([]);
+    expect((await http().get(`/roster/templates?facilityId=${site}`).set(as('alloc')).expect(200)).body).toEqual([]);
     await http().post(`/roster/templates/${templateId}/apply`).set(as('alloc')).send({ weekStart: '2027-05-03' }).expect(404);
     // The name is free again once the old one is put away.
     await http().post('/roster/templates').set(as('alloc')).send({ facilityId: site, weekStart: SOURCE, name: 'Usual week', people: false }).expect(201);
@@ -180,10 +224,15 @@ describe('roster templates and copying a week', () => {
       await c.query('begin');
       await c.query(`select set_config('app.tenant_id', $1, true)`, [otherId]);
       expect((await c.query('select count(*)::int as n from roster_template_shifts')).rows[0].n).toBe(0);
+      expect((await c.query('select count(*)::int as n from roster_template_equipment')).rows[0].n).toBe(0);
       await c.query('rollback');
       await c.query('begin');
       await c.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
       await expect(c.query('delete from roster_templates')).rejects.toThrow(/permission denied/);
+      await c.query('rollback');
+      await c.query('begin');
+      await c.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+      await expect(c.query('delete from roster_template_equipment')).rejects.toThrow(/permission denied/);
       await c.query('rollback');
     } finally {
       await c.end();

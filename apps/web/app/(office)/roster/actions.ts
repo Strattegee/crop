@@ -105,7 +105,7 @@ type ApplyResult = { summary: string };
 
 export async function saveTemplate(f: FormData) {
   await attempt(back(f), () => api('/roster/templates', {
-    method: 'POST', body: { facilityId: str(f, 'facilityId'), weekStart: str(f, 'week'), name: str(f, 'name'), people: f.get('people') === 'on' },
+    method: 'POST', body: { facilityId: str(f, 'facilityId'), weekStart: str(f, 'week'), name: str(f, 'name'), people: f.get('people') === 'on', equipment: f.get('equipment') === 'on' },
   }), `Saved as the template "${str(f, 'name') ?? ''}".`);
 }
 
@@ -115,7 +115,7 @@ export async function applyTemplate(f: FormData) {
   await attempt(back(f), async () => {
     if (!id) throw new ApiError(400, 'Choose a template');
     r = await api<ApplyResult>(`/roster/templates/${id}/apply`, {
-      method: 'POST', body: { weekStart: str(f, 'week'), people: f.get('people') === 'on', addToExisting: f.get('addToExisting') === 'on' },
+      method: 'POST', body: { weekStart: str(f, 'week'), people: f.get('people') === 'on', equipment: f.get('equipment') === 'on', addToExisting: f.get('addToExisting') === 'on' },
     });
   }, () => r.summary);
 }
@@ -125,7 +125,7 @@ export async function copyWeek(f: FormData) {
   await attempt(back(f), async () => {
     r = await api<ApplyResult>('/roster/copy-week', {
       method: 'POST',
-      body: { facilityId: str(f, 'facilityId'), toWeek: str(f, 'week'), fromWeek: str(f, 'fromWeek'), people: f.get('people') === 'on', addToExisting: f.get('addToExisting') === 'on' },
+      body: { facilityId: str(f, 'facilityId'), toWeek: str(f, 'week'), fromWeek: str(f, 'fromWeek'), people: f.get('people') === 'on', equipment: f.get('equipment') === 'on', addToExisting: f.get('addToExisting') === 'on' },
     });
   }, () => r.summary);
 }

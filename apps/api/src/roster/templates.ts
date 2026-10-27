@@ -16,6 +16,8 @@ export interface Slot {
   needsPerson: boolean;
   workerId: string | null;
   notes: string | null;
+  /** Equipment usually booked on this shift. */
+  equipmentIds: string[];
 }
 
 export interface PlannedShift extends Slot {
@@ -33,7 +35,12 @@ export function planWeek(slots: Slot[], weekStart: string): PlannedShift[] {
 /** A shift left open because its usual person couldn't be put on it, and why (plain words, never credential details). */
 export interface LeftOpen { date: string; startTime: string; role: string; workerName: string; reason: string }
 
-export interface ApplyResult { created: number; assigned: number; leftOpen: LeftOpen[] }
+/** Equipment that couldn't be booked again, and why (plain words). */
+export interface EquipmentLeftOff { date: string; startTime: string; role: string; equipmentName: string; reason: string }
+
+export interface ApplyResult { created: number; assigned: number; leftOpen: LeftOpen[]; equipmentBooked: number; equipmentLeftOff: EquipmentLeftOff[] }
+
+const list = (reasons: string[]) => reasons.slice(0, 5).join('; ') + (reasons.length > 5 ? `; and ${reasons.length - 5} more` : '');
 
 /** The office's confirmation after applying a template or copying a week. */
 export function applySummary(r: ApplyResult): string {
@@ -41,11 +48,13 @@ export function applySummary(r: ApplyResult): string {
   const shifts = `${r.created} ${r.created === 1 ? 'shift' : 'shifts'} added`;
   const people = r.assigned ? `, ${r.assigned} with their usual person (waiting for them to confirm)` : '';
   const open = r.leftOpen.length
-    ? `. ${r.leftOpen.length} left open because the usual person can't work ${r.leftOpen.length === 1 ? 'it' : 'them'}: `
-      + r.leftOpen.slice(0, 5).map(o => o.reason).join('; ')
-      + (r.leftOpen.length > 5 ? `; and ${r.leftOpen.length - 5} more` : '')
+    ? `. ${r.leftOpen.length} left open because the usual person can't work ${r.leftOpen.length === 1 ? 'it' : 'them'}: ${list(r.leftOpen.map(o => o.reason))}`
     : '';
-  return `${shifts}${people}${open}.`;
+  const booked = r.equipmentBooked ? `. ${r.equipmentBooked} equipment ${r.equipmentBooked === 1 ? 'booking' : 'bookings'} made` : '';
+  const off = r.equipmentLeftOff.length
+    ? `. ${r.equipmentLeftOff.length} equipment ${r.equipmentLeftOff.length === 1 ? 'booking' : 'bookings'} left off: ${list(r.equipmentLeftOff.map(o => o.reason))}`
+    : '';
+  return `${shifts}${people}${open}${booked}${off}.`;
 }
 
 /**

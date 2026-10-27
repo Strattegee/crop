@@ -144,5 +144,6 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-10-27 midday (scheduled run)
 
 - Shipped: emails about change requests (backlog item 2). When someone asks for a change to a published roster, every owner and admin now gets an email saying who asked, which shift and what change, with a link that opens the shift on the roster. When an owner or admin approves or declines it (or withdraws it for them), the person who asked gets an email with the outcome and any note. Nobody is emailed about something they did themselves. Demo people with example addresses are logged, not emailed, as before.
-- Next: carrying equipment bookings over with a template or copied week, then duplicating a month.
+- Also shipped: equipment in roster templates and copied weeks. Saving a template now remembers the equipment on each shift, and filling a week from a template or copying a week books the same equipment again where it can be (in service, its dates current, not booked elsewhere, an operator who holds the licence). Anything that can't be booked is left off, and the office is told which and why. Each of the three forms has a tick box to leave equipment out.
+- Next: duplicating a whole month, then the needs-attention list or shift duties.
 - Waiting on David: nothing new (still the question about messaging staff when a week is published).
