@@ -10,6 +10,7 @@ import { bool, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import {
   ITEM_CATEGORIES, isLow, returnBlock, roundQty, summariseUsage, takeBlock, type MovementKind, type MovementLine,
+  transferBlock,
 } from './items.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,7 +82,7 @@ async function workerName(db: PoolClient, workerId: string | null): Promise<stri
 
 const MOVEMENT_COLS = `m.id, m.kind, m.quantity::float8 as quantity, m.facility_id as "facilityId", f.name as "facilityName",
   m.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
-  m.shift_id as "shiftId", m.unit_cost_cents as "unitCostCents", m.charge_cents as "chargeCents", m.notes, m.created_at as "recordedAt"`;
+  m.shift_id as "shiftId", m.transfer_id as "transferId", m.unit_cost_cents as "unitCostCents", m.charge_cents as "chargeCents", m.notes, m.created_at as "recordedAt"`;
 const MOVEMENT_FROM = `stock_movements m left join facilities f on f.id = m.facility_id left join workers w on w.id = m.worker_id`;
 
 /** The catalogue of items and consumables (PPE, fuel, sundries) and their stock movements. */
@@ -279,6 +280,36 @@ export class ItemsController {
         kind: 'returned', quantity: qty, facilityId, workerId, shiftId, notes,
         unitCostCents: out.cost ?? item.unitCostCents, chargeCents: out.cost === null ? item.chargeCents : out.charge,
       });
+    });
+  }
+
+  /**
+   * Moves counted stock from one site to another: two ledger rows sharing a transfer id, at the item's cost now.
+   * Refused when the sites are the same or the first site doesn't have enough.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post(':id/transfer')
+  transfer(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const fromId = uuidOrNull(body, 'fromFacilityId', 'the site it leaves');
+    const toId = uuidOrNull(body, 'toFacilityId', 'the site it goes to');
+    if (!fromId) throw new BadRequestException('Choose the site the stock leaves');
+    if (!toId) throw new BadRequestException('Choose the site the stock goes to');
+    const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
+    const notes = text(body, 'notes', { max: 500 });
+    return withTenant(this.pool, t.tenantId, async db => {
+      const item = await lockItem(db, id);
+      const problem = transferBlock({ itemName: item.name, tracksStock: item.tracksStock, fromId, toId });
+      if (problem) throw new BadRequestException(problem);
+      const from = await siteName(db, fromId);
+      await siteName(db, toId);
+      const block = takeBlock({ itemName: item.name, unit: item.unit, tracksStock: true, siteName: from, quantity: qty, onHand: await onHand(db, id, fromId) });
+      if (block) throw new ConflictException(block);
+      await db.query(
+        `with t as (select gen_random_uuid() as id)
+         insert into stock_movements(tenant_id, item_id, facility_id, kind, quantity, transfer_id, unit_cost_cents, charge_cents, notes, recorded_by)
+         select $1, $2, f, 'transferred', q, t.id, $3, $4, $5, $6 from t, (values ($7::uuid, -$9::numeric), ($8::uuid, $9::numeric)) v(f, q)`,
+        [t.tenantId, id, item.unitCostCents, item.chargeCents, notes, auth.userId, fromId, toId, qty]);
+      return this.one(db, id);
     });
   }
 

@@ -2,7 +2,7 @@
 
 export const ITEM_CATEGORIES = ['ppe', 'fuel', 'sundries', 'tools', 'other'] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
-export type MovementKind = 'received' | 'issued' | 'used' | 'returned' | 'adjusted';
+export type MovementKind = 'received' | 'issued' | 'used' | 'returned' | 'adjusted' | 'transferred';
 
 /** Quantities are kept to 3 decimal places (litres of fuel, metres of tape). */
 export const roundQty = (n: number) => Math.round(n * 1000) / 1000;
@@ -35,6 +35,13 @@ export function takeBlock(t: TakeInput): string | null {
       ? `There are no ${t.itemName} (${t.unit}) on hand at ${t.siteName}`
       : `Only ${describeQty(t.onHand, t.itemName, t.unit)} on hand at ${t.siteName}`;
   }
+  return null;
+}
+
+/** Why stock can't be moved between two sites, or null. The amount on hand is checked with `takeBlock`. */
+export function transferBlock(t: { itemName: string; tracksStock: boolean; fromId: string; toId: string }): string | null {
+  if (!t.tracksStock) return `Stock isn't counted for ${t.itemName}, so there is nothing to move`;
+  if (t.fromId === t.toId) return 'Choose two different sites';
   return null;
 }
 

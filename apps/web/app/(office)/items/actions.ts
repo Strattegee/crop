@@ -29,3 +29,9 @@ export async function issue(id: string, f: FormData) {
 export async function count(id: string, f: FormData) {
   await attempt('/items', () => api(`/items/${id}/count`, { method: 'POST', body: { facilityId: str(f, 'facilityId'), quantity: qty(f), notes: str(f, 'notes') } }), 'Stocktake recorded.');
 }
+
+export async function transfer(id: string, f: FormData) {
+  await attempt('/items', () => api(`/items/${id}/transfer`, { method: 'POST', body: {
+    fromFacilityId: str(f, 'fromFacilityId'), toFacilityId: str(f, 'toFacilityId'), quantity: qty(f), notes: str(f, 'notes'),
+  } }), 'Stock moved.');
+}

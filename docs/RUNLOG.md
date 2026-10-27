@@ -196,5 +196,6 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-10-28 morning, 6:10am Melbourne (scheduled run)
 
 - Shipped: the Dashboard is now roster-first (Needs attention, last planned piece for the employer). It opens with Needs attention for the coming week: how many things, how many start within a day, a count of each kind ("3 shifts with nobody on them", "1 person yet to confirm", cover gaps…) and the five most pressing, each opening its shift on the roster. Below that, what's waiting on a decision (leave requests, roster change requests, credentials to check), then people and sites. It uses each business's own words and no longer talks about "your agency".
-- Next: transfers of items between sites, then correcting a mistaken employment entry.
+- Also shipped: moving stock between sites. On the Items page, each counted item now has "Move from … to …": pick the site it leaves (with how many it has), the site it goes to, and how many. It's refused if the first site doesn't have enough. Both sites' stock updates at once and the move is kept in the item's history like every other movement.
+- Next: correcting a mistaken employment entry, then the employment type on the Workers list.
 - Waiting on David: nothing new.

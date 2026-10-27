@@ -2,7 +2,7 @@ import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
-import { addItem, count, issue, receive } from './actions';
+import { addItem, count, issue, receive, transfer } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +28,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <h1>{tw.many(T.item)}</h1>
-      <p className="muted">PPE, fuel, sundries and tools: stock at each site, what goes out to people and shifts, and what it costs. Every movement is kept; corrections are a stocktake, never an edit.</p>
+      <p className="muted">PPE, fuel, sundries and tools: stock at each {tw.lower(T.site)}, moving it between {tw.lower(T.site, true)}, what goes out to people and shifts, and what it costs. Every movement is kept; corrections are a stocktake, never an edit.</p>
       <Notices error={sp.error} done={sp.done} />
       {low.length > 0 && <div className="notice error">Low stock: {low.map(s => `${items.find(i => i.id === s.itemId)?.name} at ${s.facilityName} (${q(s.onHand)})`).join('; ')}.</div>}
       {canAdmin && (
@@ -65,7 +65,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
                     <td>
                       {activeSites.length === 0 ? <span className="muted small">Add a site first</span> : (
                         <details>
-                          <summary className="muted" style={{ cursor: 'pointer' }}>Receive, issue, count</summary>
+                          <summary className="muted" style={{ cursor: 'pointer' }}>{i.tracksStock && activeSites.length > 1 ? 'Receive, issue, move, count' : 'Receive, issue, count'}</summary>
                           <div className="item-forms">
                             {i.tracksStock && (
                               <form action={receive.bind(null, i.id)} className="form-row">
@@ -82,6 +82,20 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
                                 {i.tracksStock && siteSelect}
                                 <input name="quantity" type="number" min={0} step="any" required placeholder="How many" aria-label="Quantity issued" />
                                 <button className="btn small secondary">Issue</button>
+                              </form>
+                            )}
+                            {i.tracksStock && activeSites.length > 1 && at.some(s => s.onHand > 0) && (
+                              <form action={transfer.bind(null, i.id)} className="form-row">
+                                <strong className="small">Move from</strong>
+                                <select name="fromFacilityId" required aria-label={`${tw.one(T.site)} it leaves`} defaultValue={at.find(s => s.onHand > 0)?.facilityId}>
+                                  {at.filter(s => s.onHand > 0).map(s => <option key={s.facilityId} value={s.facilityId}>{s.facilityName} ({q(s.onHand)})</option>)}
+                                </select>
+                                <span className="small">to</span>
+                                <select name="toFacilityId" required aria-label={`${tw.one(T.site)} it goes to`} defaultValue={activeSites.find(s => s.id !== at.find(x => x.onHand > 0)?.facilityId)?.id}>
+                                  {activeSites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                                <input name="quantity" type="number" min={0} step="any" required placeholder="How many" aria-label="Quantity moved" />
+                                <button className="btn small secondary">Move</button>
                               </form>
                             )}
                             {i.tracksStock && canAdmin && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQty, isLow, lineCents, returnBlock, summariseUsage, takeBlock, type MovementLine } from '../src/items/items.js';
+import { formatQty, isLow, lineCents, returnBlock, summariseUsage, takeBlock, transferBlock, type MovementLine } from '../src/items/items.js';
 
 const take = { itemName: 'Safety gloves', unit: 'pair', tracksStock: true, onHand: 3, siteName: 'North Yard', quantity: 2 };
 const line = (over: Partial<MovementLine>): MovementLine =>
@@ -11,6 +11,13 @@ describe('items and consumables', () => {
     expect(formatQty(0.1 + 0.2)).toBe('0.3');
     expect(lineCents(-12.345, 199)).toBe(2457);
     expect(lineCents(3, 450)).toBe(1350);
+  });
+
+  it('only moves counted stock between two different sites', () => {
+    const t = { itemName: 'Safety gloves', tracksStock: true, fromId: 'a', toId: 'b' };
+    expect(transferBlock(t)).toBeNull();
+    expect(transferBlock({ ...t, toId: 'a' })).toBe('Choose two different sites');
+    expect(transferBlock({ ...t, tracksStock: false })).toBe("Stock isn't counted for Safety gloves, so there is nothing to move");
   });
 
   it('refuses to take more than a site has, unless stock isn\'t counted', () => {
