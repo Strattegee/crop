@@ -61,3 +61,37 @@ export function publishedChangesLabel(rule: PublishedChanges): string {
 
 /** The database's code for a change refused by the business's after-publishing rule (migration 0024). */
 export const ROSTER_LOCKED = 'CRLK1';
+
+/** One of a person's shifts, as told to them when a week is published. */
+export interface MyShift { localDate: string; localStart: string; localEnd: string; role: string; areaName: string | null; confirmed: boolean }
+
+const dayLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
+const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
+const hm = (t: string) => t.replace(/^0(\d)/, '$1');
+
+/**
+ * The message a person gets when their week is published (David and Steve, 27 Oct: yes), or when it is
+ * published again after changes that affect them. Shift times and roles only: never health or credential details.
+ */
+export function rosterMessage(o: {
+  first: string; business: string; site: string; weekStart: string; shifts: MyShift[]; updated: boolean;
+}) {
+  const week = dayLabel(o.weekStart);
+  const lines = o.shifts.map(s => `- ${dayLabel(s.localDate)}, ${hm(s.localStart)}–${hm(s.localEnd)}: ${s.role}${s.areaName ? ` (${s.areaName})` : ''}${s.confirmed ? '' : ' (please confirm with the office)'}`);
+  const subject = o.updated
+    ? `Your shifts at ${o.site} for the week of ${week} have changed`
+    : `Your shifts at ${o.site} for the week of ${week}`;
+  const intro = o.updated
+    ? `${o.business} has changed the roster for ${o.site}, week of ${week}.`
+    : `${o.business} has published the roster for ${o.site}, week of ${week}.`;
+  const body = o.shifts.length
+    ? `${o.updated ? 'Your shifts that week are now' : 'Your shifts'}:\n${lines.join('\n')}`
+    : `You no longer have any shifts at ${o.site} that week.`;
+  const email = [`Hi ${o.first},`, '', intro, '', body, '', `If you can't work any of these, contact ${o.business} as soon as you can.`].join('\n');
+  const listed = o.shifts.slice(0, 5).map(s => `${shortDay(s.localDate)} ${hm(s.localStart)}-${hm(s.localEnd)}`).join(', ');
+  const more = o.shifts.length > 5 ? ` +${o.shifts.length - 5} more (see email)` : '';
+  const sms = o.shifts.length
+    ? `${o.business}: ${o.updated ? 'your shifts have changed. Now' : 'your shifts'} at ${o.site}, wk of ${week}: ${listed}${more}.`
+    : `${o.business}: you no longer have shifts at ${o.site} in the week of ${week}.`;
+  return { subject, email, sms };
+}

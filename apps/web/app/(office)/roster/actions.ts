@@ -48,8 +48,11 @@ export async function cancelShift(shiftId: string, f: FormData) {
 /** Draft → Live: publishes the week for the site shown (or every site). Changes after this are logged. */
 export async function publishWeek(f: FormData) {
   const site = str(f, 'site');
-  await attempt(back(f), () => api('/roster/publish', { method: 'POST', body: { weekStart: str(f, 'week'), ...(site ? { facilityId: site } : {}) } }),
-    'Published. The week is live; changes from now on are logged.');
+  const notify = f.get('notify') === 'on';
+  let messages = 0;
+  await attempt(back(f), async () => {
+    messages = (await api<{ messages: number }>('/roster/publish', { method: 'POST', body: { weekStart: str(f, 'week'), notify, ...(site ? { facilityId: site } : {}) } })).messages;
+  }, () => `Published. The week is live; changes from now on are logged.${notify ? (messages ? ` ${messages} message${messages === 1 ? '' : 's'} sent to staff with their shifts.` : ' Nobody needed a message.') : ' No messages sent.'}`);
 }
 
 export async function offer(shiftId: string, f: FormData) {

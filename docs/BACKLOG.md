@@ -79,7 +79,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [x] Platform admin screen for Strattegee: add a business, give/change/remove access, audit log (26 Oct). Next: welcome email when access is given (ask David), and a way to rename a business.
 - [x] Rename the top-right "Agency" switcher to "Business" (26 Oct).
 - [ ] Clients page is agency-shaped; small employers may only need Sites. Hide or rename per business (words feature).
-- [ ] Zitadel verification codes don't arrive at strattegee.com (checked junk and archive). Check the Microsoft 365 quarantine and Zitadel's SMTP sender before real staff sign up. Workaround: mark the email verified in the Zitadel console (Users → user → Email).
+- [x] (27 Oct: codes now arrive) Zitadel verification codes don't arrive at strattegee.com (checked junk and archive). Check the Microsoft 365 quarantine and Zitadel's SMTP sender before real staff sign up. Workaround: mark the email verified in the Zitadel console (Users → user → Email).
 - Note: david@strattegee.com has access to Caring For You (since 22 Oct) and The Grand Cafe – Demo (26 Oct), so it shows both.
 
 ## From Steve and David's answers (26 Oct; docs/decisions/2026-10-26-steve-answers.md)
@@ -96,7 +96,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Priority in the people list: later, with Steve.
 
 ## Questions for David and Steve (new, 26 Oct night)
-- Steve/David: when a week is published, should staff get a message (email/SMS now, app later) with their shifts, and should they be told about changes after that? Built so far: publishing marks the week live and logs changes, but sends nothing.
+- (Answered 27 Oct: yes, and built.) When a week is published staff get their shifts by email and text; after changes, publishing again tells the people affected.
 
 ## Questions for David and Steve (sent 26 Oct; answered the same evening, see docs/decisions/2026-10-26-steve-answers.md; all answered)
 - Steve: colour for an offered shift; what Template (grey) shifts are; what the "T" line holds; A/P/N from start time or shift code; does Publish week notify staff and are later changes logged; what sets "Pri" (priority).
