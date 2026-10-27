@@ -8,10 +8,19 @@ import {
 } from './actions';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, mondayOf, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
+
+type Attention = {
+  days: number; total: number; urgent: number; truncated: boolean;
+  items: {
+    shiftId: string; kind: 'person_blocked' | 'equipment_blocked' | 'open' | 'unconfirmed'; urgent: boolean; title: string; detail: string; startsIn: string;
+    shift: { id: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string };
+  }[];
+};
+const ATTENTION_SHOWN = 15;
 
 type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null; shiftLetter?: string | null;
@@ -104,7 +113,7 @@ export default async function RosterPage({ searchParams }: {
 
   const showLog = sp.log === '1' && span !== 'month';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -115,6 +124,8 @@ export default async function RosterPage({ searchParams }: {
     span === 'month' ? Promise.resolve([] as Template[]) : api<Template[]>(`/roster/templates${site ? `?facilityId=${site}` : ''}`).catch(() => [] as Template[]),
     api<{ publishedChanges?: PublishedChanges }>('/settings').catch(() => ({} as { publishedChanges?: PublishedChanges })),
     span === 'month' ? Promise.resolve([] as ChangeRequest[]) : api<ChangeRequest[]>(`/roster/change-requests?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as ChangeRequest[]),
+    // Needs attention (backlog item 12): the next seven days from now, whatever period is on screen.
+    api<Attention>(`/roster/attention${site ? `?facilityId=${site}` : ''}`).catch(() => null),
   ]);
   const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
@@ -335,6 +346,38 @@ export default async function RosterPage({ searchParams }: {
           )}
         </div>
       </section>}
+
+      {attention && attention.total > 0 && (
+        <details className="card roster-attention" open={attention.urgent > 0} aria-label="Needs attention">
+          <summary>
+            <h2>Needs attention</h2>
+            <span className="muted">
+              {' '}{attention.total} in the next {attention.days} days
+              {attention.urgent > 0 && <> · <strong className="bad">{attention.urgent} within a day</strong></>}
+            </span>
+          </summary>
+          <ol>
+            {attention.items.slice(0, ATTENTION_SHOWN).map(i => (
+              <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
+                <span className={`att-kind ${i.kind}`} aria-hidden="true" />
+                <span>
+                  <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
+                  <br />
+                  {/* Opens the shift in its own day or week, whatever is on screen now. */}
+                  <Link href={url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}>
+                    {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
+                  </Link>
+                  {!site && <span className="muted"> · {i.shift.facilityName}</span>}
+                  {i.shift.areaName && <span className="muted"> · {i.shift.areaName}</span>}
+                  <span className={i.urgent ? 'bad small' : 'muted small'}> · {i.startsIn}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          {attention.total > ATTENTION_SHOWN && <p className="muted small">And {attention.total - ATTENTION_SHOWN} more; the most pressing are shown first.</p>}
+          {attention.truncated && <p className="muted small">Only the first few hundred shifts were checked. Choose a site to see the rest.</p>}
+        </details>
+      )}
 
       {changeRequests.length > 0 && (
         <section className="card roster-requests" aria-label="Changes waiting for approval">
