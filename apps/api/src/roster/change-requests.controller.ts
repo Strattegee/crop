@@ -7,7 +7,8 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
-import { CHANGE_REQUEST_KINDS, requestProblem, requestSummary, type ChangeRequestKind, type ChangeRequestStatus } from './change-requests.js';
+import { queueNotification } from '../notifications/notify.js';
+import { CHANGE_REQUEST_KINDS, requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary, type ChangeRequestKind, type ChangeRequestStatus, type RequestForEmail } from './change-requests.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { rosterChangeRefusal } from './offers-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
@@ -24,6 +25,7 @@ const COLS = `r.id, r.shift_id as "shiftId", r.kind, r.worker_id as "workerId", 
   case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
   (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from shift_assignments ca join workers cw on cw.id = ca.worker_id
     where ca.shift_id = s.id and ca.resource_kind = 'worker' and ca.status in ('assigned', 'confirmed') limit 1) as "currentName",
+  r.facility_id as "facilityId", to_char(r.week_start, 'YYYY-MM-DD') as "weekStart",
   s.role, s.status as "shiftStatus", f.name as "facilityName", a.name as "areaName",
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
   to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
@@ -49,6 +51,24 @@ async function oneRequest(db: PoolClient, id: string, lock = false) {
     `select id, shift_id, kind, worker_id, reason, status, requested_by from roster_change_requests where id = $1 ${lock ? 'for update' : ''}`, [id])).rows[0];
   if (!r) throw new NotFoundException('Change request not found');
   return r;
+}
+
+/** The request as an email describes it, worded against the shift as it is now (call before changing the shift). */
+async function forEmail(db: PoolClient, id: string): Promise<{ r: RequestForEmail; email: string | null; requestedBy: string }> {
+  const row = (await db.query<Row & RequestForEmail & { requestedByEmail: string | null }>(
+    `select ${COLS}, r.requested_by_email as "requestedByEmail" from ${FROM} where r.id = $1`, [id])).rows[0];
+  return { r: { ...row, summary: requestSummary(row) }, email: row.requestedByEmail, requestedBy: row.requestedBy };
+}
+
+/** Tells the person who asked how their request was decided, unless they decided it themselves. */
+async function tellAsker(db: PoolClient, tenantId: string, id: string, before: Awaited<ReturnType<typeof forEmail>>,
+  outcome: 'approved' | 'declined' | 'withdrawn', auth: AuthContext, decidedByName: string | null, note: string | null) {
+  if (!before.email || before.requestedBy === auth.userId) return;
+  const m = requestDecidedEmail(before.r, outcome, decidedByName, note, process.env.APP_URL ?? '');
+  await queueNotification(db, tenantId, {
+    channel: 'email', to: before.email, template: 'change_request_decided', subject: m.subject, body: m.body,
+    createdBy: auth.userId, dedupeKey: `change-request:${id}:${outcome}`,
+  });
 }
 
 /**
@@ -99,9 +119,20 @@ export class ChangeRequestsController {
       }
       try {
         const newId = (await db.query<{ id: string }>(
-          `insert into roster_change_requests(tenant_id, shift_id, facility_id, week_start, kind, worker_id, reason, requested_by, requested_by_name)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-          [t.tenantId, id, s.facility_id, week, kind, workerId, reason, auth.userId, actor.name])).rows[0].id;
+          `insert into roster_change_requests(tenant_id, shift_id, facility_id, week_start, kind, worker_id, reason, requested_by, requested_by_name, requested_by_email)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+          [t.tenantId, id, s.facility_id, week, kind, workerId, reason, auth.userId, actor.name, auth.email || null])).rows[0].id;
+        // Owners and admins hear about it straight away (not the asker, if they are one).
+        const { r } = await forEmail(db, newId);
+        const m = requestArrivedEmail(r, process.env.APP_URL ?? '');
+        const mine = (auth.email ?? '').trim().toLowerCase();
+        for (const o of (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows) {
+          if (!o.email || o.email.trim().toLowerCase() === mine) continue;
+          await queueNotification(db, t.tenantId, {
+            channel: 'email', to: o.email, template: 'change_request', subject: m.subject, body: m.body,
+            createdBy: auth.userId, dedupeKey: `change-request:${newId}:arrived:${o.email.trim().toLowerCase()}`,
+          });
+        }
         return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [newId])).rows, auth)[0];
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new ConflictException('A change to this shift is already waiting for approval');
@@ -147,6 +178,7 @@ export class ChangeRequestsController {
     return withTenant(this.pool, t.tenantId, async db => {
       const r = await oneRequest(db, id, true);
       if (r.status !== 'pending') throw new ConflictException(`This request has already been ${r.status}`);
+      const before = await forEmail(db, id);
       let warnings: string[] = [];
       switch (r.kind) {
         case 'assign': warnings = await assignWorker(db, t.tenantId, auth.userId, r.shift_id, r.worker_id!); break;
@@ -159,6 +191,7 @@ export class ChangeRequestsController {
       await db.query(
         `update roster_change_requests set status = 'approved', decided_by = $2, decided_by_name = $3, decided_at = now(), decision_note = $4 where id = $1`,
         [id, auth.userId, actor.name, note]);
+      await tellAsker(db, t.tenantId, id, before, 'approved', auth, actor.name ?? null, note);
       const [row] = present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth);
       return { ...row, warnings, applied: r.kind !== 'other' };
     }, actor);
@@ -191,6 +224,7 @@ export class ChangeRequestsController {
       await db.query(
         `update roster_change_requests set status = $2, decided_by = $3, decided_by_name = $4, decided_at = now(), decision_note = $5 where id = $1`,
         [id, status, auth.userId, actor.name, note]);
+      await tellAsker(db, t.tenantId, id, await forEmail(db, id), status, auth, actor.name ?? null, note);
       return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth)[0];
     }, actor);
   }

@@ -6,7 +6,7 @@ import { Client } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
-import { requestProblem, requestSummary } from '../src/roster/change-requests.js';
+import { requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary, shiftLine } from '../src/roster/change-requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 // A Monday well in the future, so the week is never history while these tests run.
@@ -33,6 +33,41 @@ describe('change requests: plain words and checks', () => {
   });
 });
 
+describe('change requests: emails', () => {
+  const r = {
+    summary: 'Put Ana Example on the shift', reason: 'Swapped with Ben', kind: 'assign' as const, requestedByName: 'Sam Allocator',
+    facilityName: 'Harbour Kitchen', areaName: 'Kitchen', role: 'Chef', localDate: '2031-03-04', localStart: '07:00', localEnd: '15:00',
+    weekStart: '2031-03-03', facilityId: 'f1', shiftId: 's1',
+  };
+
+  it('describes the shift in plain words', () => {
+    expect(shiftLine(r)).toBe('Tuesday 4 March, 07:00–15:00, Chef, Kitchen, Harbour Kitchen');
+    expect(shiftLine({ ...r, areaName: null })).toBe('Tuesday 4 March, 07:00–15:00, Chef, Harbour Kitchen');
+  });
+
+  it('tells owners and admins what was asked, with a link to the shift', () => {
+    const m = requestArrivedEmail(r, 'https://crop.test/');
+    expect(m.subject).toBe('Change requested: Harbour Kitchen, Tuesday 4 March');
+    expect(m.body).toContain('Sam Allocator has asked for a change to the published roster at Harbour Kitchen.');
+    expect(m.body).toContain('Change: Put Ana Example on the shift');
+    expect(m.body).toContain('Their note: Swapped with Ben');
+    expect(m.body).toContain('https://crop.test/roster?week=2031-03-03&site=f1&shift=s1');
+    // For a cancellation the reason is already the change, so it isn't repeated; without an app address there's no link.
+    const c = requestArrivedEmail({ ...r, kind: 'cancel', summary: 'Cancel the shift: Quiet day', reason: 'Quiet day' }, '');
+    expect(c.body).not.toContain('Their note');
+    expect(c.body).toContain('open the shift on the roster in CROP');
+  });
+
+  it('tells the asker the outcome', () => {
+    expect(requestDecidedEmail(r, 'approved', 'Olive Owner', null, '').body).toContain('Olive Owner approved it, and the change has been made.');
+    expect(requestDecidedEmail({ ...r, kind: 'other' }, 'approved', 'Olive Owner', null, '').body).toContain('will make the change on the shift');
+    const d = requestDecidedEmail(r, 'declined', 'Olive Owner', 'Ben is covering', 'https://crop.test');
+    expect(d.subject).toBe('Change declined: Harbour Kitchen, Tuesday 4 March');
+    expect(d.body).toContain('Olive Owner declined it, so the shift stays as it was.');
+    expect(d.body).toContain('Their note: Ben is covering');
+  });
+});
+
 describe('change requests on a published roster', () => {
   let app: INestApplication;
   let db: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -56,7 +91,7 @@ describe('change requests on a published roster', () => {
       idp.addUser({ sub, email, email_verified: true, name: `${sub} Example` });
       tok[sub] = await idp.token(sub, { expiresIn: '1h' });
     }
-    Object.assign(process.env, { APP_DATABASE_URL: db.appUrl, AUTH_ISSUER: idp.issuer, AUTH_AUDIENCE: 'aud' });
+    Object.assign(process.env, { APP_DATABASE_URL: db.appUrl, AUTH_ISSUER: idp.issuer, AUTH_AUDIENCE: 'aud', APP_URL: 'https://crop.test' });
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = mod.createNestApplication();
     await app.init();
@@ -85,6 +120,18 @@ describe('change requests on a published roster', () => {
     await idp?.close();
     await db?.drop();
   });
+
+  // Emails queued about one request (read as the table owner).
+  const mail = async (id: string) => {
+    const c = new Client({ connectionString: db.ownerUrl });
+    await c.connect();
+    try {
+      return (await c.query<{ to: string; template: string; subject: string; body: string }>(
+        `select to_address as to, template, subject, body from notifications where dedupe_key like $1 order by created_at, to_address`, [`change-request:${id}:%`])).rows;
+    } finally {
+      await c.end();
+    }
+  };
 
   const ask = (shift: string, body: Record<string, unknown>, who = 'alloc') => http().post(`/shifts/${shift}/change-requests`).set(as(who)).send(body);
 
@@ -124,6 +171,15 @@ describe('change requests on a published roster', () => {
     const log = (await http().get(`/shifts/${shiftA}/history`).set(as('alloc')).expect(200)).body;
     expect(log.at(-1)).toMatchObject({ kind: 'assigned', afterPublish: true, actorName: 'owner Example' });
     await http().post(`/change-requests/${r.id}/approve`).set(as('owner')).send({}).expect(409);
+
+    // The owner heard when it arrived; the allocator heard it was approved.
+    const sent = await mail(r.id);
+    expect(sent.map(m => [m.to, m.template])).toEqual([['owner@x.com', 'change_request'], ['alloc@x.com', 'change_request_decided']]);
+    expect(sent[0].body).toContain('alloc Example has asked for a change');
+    expect(sent[0].body).toContain('Change: Put Ana Example on the shift');
+    expect(sent[0].body).toContain(`https://crop.test/roster?week=${WEEK}&site=${site}&shift=${shiftA}`);
+    expect(sent[1].subject).toMatch(/^Change approved: Harbour Kitchen, Monday 3 March/);
+    expect(sent[1].body).toContain('owner Example approved it, and the change has been made.');
   });
 
   it('approving a change that can no longer be made changes nothing and keeps the request waiting', async () => {
@@ -136,6 +192,10 @@ describe('change requests on a published roster', () => {
     expect(still.status).toBe('pending');
     const declined = (await http().post(`/change-requests/${r.id}/decline`).set(as('owner')).send({ note: 'Ben is covering' }).expect(200)).body;
     expect(declined).toMatchObject({ status: 'declined', decisionNote: 'Ben is covering', canWithdraw: false });
+    const [, told] = await mail(r.id);
+    expect(told).toMatchObject({ to: 'alloc@x.com', template: 'change_request_decided' });
+    expect(told.body).toContain('Put Ana Example on the shift');
+    expect(told.body).toContain('Their note: Ben is covering');
   });
 
   it('confirming someone who has agreed', async () => {
@@ -151,6 +211,8 @@ describe('change requests on a published roster', () => {
     expect(pulled.summary).toBe('Record that Ben Example pulled out');
     await http().post(`/change-requests/${pulled.id}/withdraw`).set(as('alloc2')).expect(403);
     await http().post(`/change-requests/${pulled.id}/withdraw`).set(as('alloc')).expect(200);
+    // Withdrawing your own request sends you nothing.
+    expect((await mail(pulled.id)).map(m => m.template)).toEqual(['change_request']);
 
     const p2 = (await ask(shiftB, { change: 'pulled_out' }).expect(201)).body;
     await http().post(`/change-requests/${p2.id}/approve`).set(as('owner')).send({}).expect(200);
