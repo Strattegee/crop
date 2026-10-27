@@ -141,18 +141,22 @@ export class ChangeRequestsController {
     }, actor);
   }
 
-  /** Requests for a week (any date in it), newest first; `status` defaults to pending (`all` for every one). */
+  /**
+   * Requests for a week (any date in it), newest first; `status` defaults to pending (`all` for every one).
+   * Without a week, pending requests in every week (the Dashboard's count), earliest week first.
+   */
   @Roles(...OFFICE_ROLES)
   @Get('roster/change-requests')
   list(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query() q: Record<string, string>) {
-    const weekStart = mondayOf(date(q, 'weekStart', { required: true })!);
-    const facilityId = q.facilityId && UUID.test(q.facilityId) ? q.facilityId : null;
     const status = (q.status ?? 'pending') as ChangeRequestStatus | 'all';
     if (!STATUSES.includes(status)) throw new BadRequestException('Status must be pending, approved, declined, withdrawn or all');
+    const anyWeek = (q.weekStart === undefined || q.weekStart === '') && status === 'pending';
+    const weekStart = anyWeek ? null : mondayOf(date(q, 'weekStart', { required: true })!);
+    const facilityId = q.facilityId && UUID.test(q.facilityId) ? q.facilityId : null;
     return withTenant(this.pool, t.tenantId, async db => present((await db.query<Row>(
       `select ${COLS} from ${FROM}
-        where r.week_start = $1 and ($2::uuid is null or r.facility_id = $2) and ($3 = 'all' or r.status = $3)
-        order by r.created_at desc limit 200`, [weekStart, facilityId, status])).rows, auth));
+        where ($1::date is null or r.week_start = $1) and ($2::uuid is null or r.facility_id = $2) and ($3 = 'all' or r.status = $3)
+        order by ${anyWeek ? 'r.week_start, ' : ''}r.created_at desc limit 200`, [weekStart, facilityId, status])).rows, auth));
   }
 
   /** Every request made for one shift, oldest first. */

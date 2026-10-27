@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { attentionItems, offerNote, startsIn, type AttentionShift } from '../src/roster/attention.js';
+import { attentionCounts, attentionItems, offerNote, startsIn, type AttentionShift } from '../src/roster/attention.js';
 import { addDays, todayIn } from '../src/workforce/compliance.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -57,6 +57,16 @@ describe('needs attention: rules', () => {
     expect(items[2].title).toBe("Ana Example hasn't confirmed");
     expect(items[3]).toMatchObject({ title: "Ben Sample can't work this shift now", detail: 'Ben Sample is on leave that day.' });
     expect(items[4].title).toBe("Forklift 1 can't be used on this shift now");
+  });
+
+  it('counts items by kind for the Dashboard', () => {
+    const items = attentionItems([
+      shift('a', 5), shift('b', 50), shift('c', 30, { workerName: 'Ana Example', assignmentStatus: 'assigned' }),
+      shift('d', 70, { workerName: 'Ben Sample', assignmentStatus: 'confirmed', personBlocks: ['No.'] }),
+    ], now);
+    expect(attentionCounts(items)).toEqual({
+      total: 4, urgent: 1, byKind: { person_blocked: 1, equipment_blocked: 0, cover_gap: 0, open: 2, unconfirmed: 1 },
+    });
   });
 
   it("doesn't also ask for confirmation from someone who can't work it", () => {
