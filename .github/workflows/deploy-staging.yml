@@ -21,6 +21,24 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -t ed25519 "$HOST" >> ~/.ssh/known_hosts
+      - name: Store service keys kept in GitHub
+        # Optional keys David can add as repository secrets instead of logging in to the server.
+        # Values go over SSH on stdin (never on a command line) and replace any old line in /srv/crop/.env.
+        env:
+          HOST: ${{ vars.STAGING_HOST }}
+          CLICKSEND_USERNAME: ${{ secrets.CLICKSEND_USERNAME }}
+          CLICKSEND_API_KEY: ${{ secrets.CLICKSEND_API_KEY }}
+        run: |
+          lines=""; names=""
+          for k in CLICKSEND_USERNAME CLICKSEND_API_KEY; do
+            v="${!k}"
+            if [ -n "$v" ]; then lines+="$k=$v"$'\n'; names+="$k "; fi
+          done
+          if [ -z "$lines" ]; then echo "No service keys in GitHub secrets; leaving the server's settings as they are."; exit 0; fi
+          # Remove the old lines for these names (fixed names, safe on a command line), then append the new values from stdin.
+          for k in $names; do ssh crop@"$HOST" "sed -i '/^$k=/d' /srv/crop/.env"; done
+          printf '%s' "$lines" | ssh crop@"$HOST" 'umask 077; cat >> /srv/crop/.env'
+          echo "Stored: $names"
       - name: Copy release and start
         env:
           HOST: ${{ vars.STAGING_HOST }}
