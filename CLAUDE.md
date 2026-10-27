@@ -24,7 +24,7 @@ Open → Offered/Broadcast → Booked; Open → Assigned → Booked; Cancelled; 
 ## Working rules
 - What to build next: `docs/BACKLOG.md` (priority order, decisions behind it). Scheduled runs follow `docs/WORKING-ALONE.md` and log in `docs/RUNLOG.md`. Progress page source: `docs/progress/`.
 - CROP serves any industry (packs: healthcare, labour hire, construction, hospitality); use neutral terms (Client, Site, Area, Role, Shift). Rules are business defaults that a client or site can make stricter.
-- Each parallel Claude session works on its own branch and opens a PR into `main`.
+- Each parallel Claude session works on its own branch and opens a PR into `main`. Label a PR `claude-automerge` only when docs/WORKING-ALONE.md lets it ship without asking; GitHub then merges it once CI passes and deploys staging.
 - Australian English in UI copy. No real worker or patient data in fixtures.
 
 ## Repository layout and conventions

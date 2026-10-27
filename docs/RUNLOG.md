@@ -170,3 +170,6 @@ Newest first. One entry per working session or scheduled run.
 ## 27 Oct, evening (David's request)
 - Roster: the day headings now stay at the top while scrolling through shifts. The grid scrolls inside its own box, as tall as the window (a box that only scrolled sideways stopped the headings sticking).
 - Roster: Needs attention can be closed and opened from its heading (an arrow and Show / Hide), and stays as the office left it in that browser. It still opens by itself when something starts within a day, unless it was closed.
+
+## 27 Oct, evening (with David)
+- David added the "Merge Claude's pull requests" workflow: pull requests labelled `claude-automerge` are merged by GitHub once CI passes, then staging is deployed. Runs add the label only to work they may ship without asking (docs/WORKING-ALONE.md, step 4), so they no longer wait for David to merge.
