@@ -159,3 +159,10 @@ Newest first. One entry per working session or scheduled run.
 - Zitadel codes now arrive (David). ClickSend keys: David adding them on the server.
 - SMS live on staging: David added the ClickSend keys (the API username differed from the login email; a shell-exported old value briefly overrode the new one). Test text received.
 - International (David and Steve): order AU, NZ, US, UK. Built: country and time zone per business and per site, with each country's regions and postcodes. The rest listed under International in the backlog.
+
+## 2026-10-27 evening (scheduled run)
+
+- Left alone: the international (countries and time zones) pull request, opened by David's session as this run started (merged during the run).
+- Shipped: a Needs attention panel at the top of the roster (backlog item 12, first slice). It looks at the next seven days, whatever week is on screen, and lists: shifts nobody is on (and whether they've been offered, are waiting on replies, or the offers ran out), people who haven't confirmed their shift, and people or equipment booked on a shift who can no longer work it (a licence or right to work runs out by then, leave approved since they were booked, a machine out of service or overdue for a check). Anything starting within a day comes first and opens the panel; each line opens that shift on the roster.
+- Next: Cards / Detailed / Simple roster views, or shift duties.
+- Waiting on David: nothing new.

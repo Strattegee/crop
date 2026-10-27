@@ -22,6 +22,7 @@ import { PublishingController } from './roster/publishing.controller.js';
 import { RosterTemplatesController } from './roster/templates.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
 import { CredentialRequirementsController, CredentialTypesController } from './workforce/credential-types.controller.js';
+import { AttentionController } from './roster/attention.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
 
 @Module({
@@ -31,7 +32,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
-    ItemsController, StockController, ShiftItemsController, WorkerItemsController,
+    ItemsController, StockController, ShiftItemsController, WorkerItemsController, AttentionController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }],
 })

@@ -61,7 +61,7 @@ function range(q: { from?: string; to?: string }) {
   return { from, to };
 }
 
-const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
+export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
   s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", sc.letter as "shiftLetter", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
   s.starts_at as "startsAt", s.ends_at as "endsAt", s.break_minutes as "breakMinutes", f.timezone,
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
@@ -77,7 +77,7 @@ const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName
   coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name) order by e.name)
               from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
              where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment`;
-const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
+export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
   left join areas a on a.id = s.area_id left join shift_codes sc on sc.id = s.shift_code_id
   left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
   left join workers w on w.id = sa.worker_id`;
