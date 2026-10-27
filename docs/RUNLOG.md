@@ -199,3 +199,10 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: moving stock between sites. On the Items page, each counted item now has "Move from … to …": pick the site it leaves (with how many it has), the site it goes to, and how many. It's refused if the first site doesn't have enough. Both sites' stock updates at once and the move is kept in the item's history like every other movement.
 - Next: correcting a mistaken employment entry, then the employment type on the Workers list.
 - Waiting on David: nothing new.
+
+## 2026-10-28 morning, 9:10am Melbourne (scheduled run)
+
+- Shipped: correcting a mistaken employment entry. On a person's page, the Employment card has "Correct a mistake": fix the type or hours of any entry; for the latest entry, also change the date it starts (the entry before it then ends the day before), or withdraw it if it was added by mistake, so the one before carries on. Nothing is overwritten: the old entry stays in History, struck through and marked corrected or withdrawn. The roster, bank fill and eligibility ignore corrected entries.
+- Also shipped: the Workers list shows how each person is employed today (full-time, part-time, casual or bank, with hours a week) and has an Employment filter, including "Not recorded".
+- Next: start and end of employment on the employment record, or duties in the café demo.
+- Waiting on David: nothing new.

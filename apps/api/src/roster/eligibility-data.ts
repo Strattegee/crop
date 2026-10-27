@@ -65,7 +65,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
     `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
        from workers w
        left join lateral (select employment_type from employment_terms e
-                           where e.worker_id = w.id and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
+                           where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
                            order by e.starts_on desc limit 1) et on true
       where ${workerIds ? 'w.id = any($1)' : "w.status = 'active' and $1::uuid[] is null"}
       order by w.last_name, w.first_name`, [workerIds ?? null, shift.localDate])).rows;
