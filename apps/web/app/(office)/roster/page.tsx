@@ -6,9 +6,11 @@ import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, saveTemplate, unassign,
 } from './actions';
+import { cookies } from 'next/headers';
+import { AttentionPanel } from './attention-panel';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, mondayOf, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  ATTENTION_COOKIE, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, lanes, mondayOf, monthCopyWeeks, parseSpan, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -112,6 +114,8 @@ export default async function RosterPage({ searchParams }: {
   const switchTo = (s: Span) => url({ ...at(s, anchorForSwitch(range, s, today)), shift: s === 'month' ? undefined : sp.shift });
 
   const showLog = sp.log === '1' && span !== 'month';
+  // Needs attention opens when something starts within a day, unless the office closed it (David, 27 Oct).
+  const attentionPref = (await cookies()).get(ATTENTION_COOKIE)?.value;
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
   const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
@@ -347,15 +351,17 @@ export default async function RosterPage({ searchParams }: {
         </div>
       </section>}
 
-      {attention && attention.total > 0 && (
-        <details className="card roster-attention" open={attention.urgent > 0} aria-label="Needs attention">
-          <summary>
+      {attention && attention.total > 0 && (() => {
+        const attentionOpen = attentionPref === 'open' || (attentionPref !== 'closed' && attention.urgent > 0);
+        return (
+        <AttentionPanel open={attentionOpen} summary={<>
             <h2>Needs attention</h2>
             <span className="muted">
               {' '}{attention.total} in the next {attention.days} days
               {attention.urgent > 0 && <> · <strong className="bad">{attention.urgent} within a day</strong></>}
             </span>
-          </summary>
+            <span className="att-toggle muted small" aria-hidden="true" />
+          </>}>
           <ol>
             {attention.items.slice(0, ATTENTION_SHOWN).map(i => (
               <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
@@ -376,8 +382,9 @@ export default async function RosterPage({ searchParams }: {
           </ol>
           {attention.total > ATTENTION_SHOWN && <p className="muted small">And {attention.total - ATTENTION_SHOWN} more; the most pressing are shown first.</p>}
           {attention.truncated && <p className="muted small">Only the first few hundred shifts were checked. Choose a site to see the rest.</p>}
-        </details>
-      )}
+        </AttentionPanel>
+        );
+      })()}
 
       {changeRequests.length > 0 && (
         <section className="card roster-requests" aria-label="Changes waiting for approval">

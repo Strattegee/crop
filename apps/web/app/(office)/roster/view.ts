@@ -206,3 +206,6 @@ export function monthCopyWeeks(anyDayInMonth: string): { mondays: string[]; next
   for (; m.slice(0, 7) === first.slice(0, 7); m = addDays(m, 7)) mondays.push(m);
   return { mondays, nextWeek: m };
 }
+
+/** Remembers whether the office opened or closed the Needs attention panel (per browser, a year). */
+export const ATTENTION_COOKIE = 'crop_attention';
