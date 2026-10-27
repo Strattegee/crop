@@ -49,7 +49,7 @@ export default async function WorkerPage({ params, searchParams }: {
   const [w, types, agency, rtw, avail, employment, settings] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
     api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),
-    api<EmploymentTerms[]>(`/workers/${id}/employment`).catch(() => null),
+    api<EmploymentTerms[]>(`/workers/${id}/employment?withdrawn=true`).catch(() => null),
     api<{ timezone?: string }>('/settings').catch(() => ({} as { timezone?: string })),
   ]);
   // "Today" in the business's time zone, never the server's.

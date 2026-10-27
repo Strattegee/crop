@@ -150,6 +150,56 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     await http().get('/roster?from=2026-11-08&to=2026-11-02').set(as('alloc')).expect(400);
   });
 
+  it('corrects or withdraws a mistaken employment entry, keeping what was there', async () => {
+    const live = async () => (await http().get(`/workers/${ben}/employment`).set(as('alloc')).expect(200)).body;
+    await http().post(`/workers/${ben}/employment`).set(as('admin')).send({ employmentType: 'casual', startsOn: '2026-01-01' }).expect(201);
+    const typo = (await http().post(`/workers/${ben}/employment`).set(as('admin')).send({ employmentType: 'full_time', contractedHours: 83, startsOn: '2026-12-01' }).expect(400));
+    expect(typo.body.message).toMatch(/0 to 80/);
+    const wrong = (await http().post(`/workers/${ben}/employment`).set(as('admin')).send({ employmentType: 'full_time', contractedHours: 30, startsOn: '2026-12-01' }).expect(201)).body;
+    const first = (await live()).find((x: { startsOn: string }) => x.startsOn === '2026-01-01');
+
+    await http().post(`/workers/${ben}/employment/${wrong.id}/correct`).set(as('alloc')).send({ employmentType: 'part_time', contractedHours: 38 }).expect(403);
+    await http().post(`/workers/${ben}/employment/${wrong.id}/correct`).set(as('admin')).send({ employmentType: 'full_time', contractedHours: 30 }).expect(400);
+    // Hours were meant to be 38, from 15 November.
+    const fixed = (await http().post(`/workers/${ben}/employment/${wrong.id}/correct`).set(as('admin'))
+      .send({ employmentType: 'full_time', contractedHours: 38, startsOn: '2026-11-15' }).expect(200)).body;
+    expect(fixed).toMatchObject({ employmentType: 'full_time', contractedHours: 38, startsOn: '2026-11-15', endsOn: null });
+    expect(await live()).toMatchObject([
+      { id: fixed.id, startsOn: '2026-11-15', endsOn: null },
+      { id: first.id, employmentType: 'casual', startsOn: '2026-01-01', endsOn: '2026-11-14' },
+    ]);
+    await http().post(`/workers/${ben}/employment/${wrong.id}/correct`).set(as('admin')).send({ employmentType: 'casual' }).expect(400);
+    await http().post(`/workers/${ben}/employment/${first.id}/correct`).set(as('admin')).send({ employmentType: 'bank', startsOn: '2026-02-01' }).expect(400);
+    await http().post(`/workers/${ben}/employment/${first.id}/withdraw`).set(as('admin')).expect(400);
+
+    // The roster uses the corrected terms.
+    const roster = await http().get('/roster?from=2026-11-16&to=2026-11-22').set(as('alloc')).expect(200);
+    expect(roster.body.people.find((p: { id: string }) => p.id === ben)).toMatchObject({ employmentType: 'full_time', contractedHours: 38 });
+
+    // Then it turns out the full-time terms shouldn't be there at all: casual carries on.
+    await http().post(`/workers/${ben}/employment/${fixed.id}/withdraw`).set(as('alloc')).expect(403);
+    const after = (await http().post(`/workers/${ben}/employment/${fixed.id}/withdraw`).set(as('admin')).expect(200)).body;
+    expect(after).toMatchObject([{ id: first.id, employmentType: 'casual', endsOn: null }]);
+    const history = (await http().get(`/workers/${ben}/employment?withdrawn=true`).set(as('alloc')).expect(200)).body;
+    expect(history.map((h: { withdrawnReason: string | null; contractedHours: number | null }) => `${h.withdrawnReason}:${h.contractedHours}`))
+      .toEqual(['null:null', 'corrected:30', 'withdrawn:38']);
+    expect(history[2].replacesId).toBe(wrong.id);
+    // New terms can start again after the casual ones.
+    await http().post(`/workers/${ben}/employment`).set(as('admin')).send({ employmentType: 'bank', startsOn: '2026-12-01' }).expect(201);
+    await http().post(`/workers/${ben}/employment/${fixed.id}/correct`).set(as('other')).send({ employmentType: 'casual' }).expect(404);
+
+    // The Workers list shows today's employment and filters by it.
+    const dee = (await http().post('/workers').set(as('admin')).send({ firstName: 'Dee', lastName: 'Listed', roles: ['Chef'] }).expect(201)).body.id;
+    const deeTerms = (await http().post(`/workers/${dee}/employment`).set(as('admin')).send({ employmentType: 'part_time', contractedHours: 20, startsOn: '2020-01-01' }).expect(201)).body;
+    const parts = (await http().get('/workers?employment=part_time').set(as('alloc')).expect(200)).body;
+    expect(parts.find((x: { id: string }) => x.id === dee)).toMatchObject({ employmentType: 'part_time', contractedHours: 20 });
+    expect(parts.every((x: { employmentType: string }) => x.employmentType === 'part_time')).toBe(true);
+    await http().post(`/workers/${dee}/employment/${deeTerms.id}/withdraw`).set(as('admin')).expect(200);
+    const none = (await http().get('/workers?employment=none').set(as('alloc')).expect(200)).body;
+    expect(none.find((x: { id: string }) => x.id === dee)).toMatchObject({ employmentType: null, contractedHours: null });
+    await http().patch(`/workers/${dee}`).set(as('admin')).send({ status: 'inactive' }).expect(200); // out of the later candidate lists
+  });
+
   it('lists who could work a shift and enforces credentials, visa hours and rest', async () => {
     const food = (await http().post('/credential-types').set(as('admin')).send({ name: 'Food handling', category: 'training', hasNumber: false, needsEvidence: false }).expect(201)).body.id;
     await http().post('/credential-requirements').set(as('admin')).send({ credentialTypeId: food, scope: 'role', role: 'Chef', severity: 'hard' }).expect(201);

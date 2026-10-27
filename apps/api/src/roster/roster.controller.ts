@@ -11,6 +11,10 @@ import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
 import { actorOf } from './publishing.js';
+import { correctionPlan, withdrawalPlan, type TermDates } from './employment.js';
+
+const TERM_COLS = `id, employment_type as "employmentType", contracted_hours::float8 as "contractedHours",
+  to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'bank'] as const;
@@ -177,16 +181,81 @@ export class ShiftCodesController {
 export class EmploymentController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
+  /** Live terms, latest first; `withdrawn=true` adds corrected and withdrawn entries (with when and why). */
   @Roles(...OFFICE_ROLES)
   @Get()
-  list(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string) {
+  list(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string, @Query('withdrawn') withdrawn?: string) {
+    const all = withdrawn === 'true';
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('Worker not found');
       return (await db.query(
-        `select id, employment_type as "employmentType", contracted_hours::float8 as "contractedHours",
-                to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"
-           from employment_terms where worker_id = $1 order by starts_on desc`, [workerId])).rows;
+        `select ${TERM_COLS}${all ? `, withdrawn_at as "withdrawnAt", withdrawn_reason as "withdrawnReason", replaces_id as "replacesId"` : ''}
+           from employment_terms where worker_id = $1 ${all ? '' : 'and withdrawn_at is null'}
+          order by withdrawn_at is not null, starts_on desc, created_at desc`, [workerId])).rows;
     });
+  }
+
+  /**
+   * Fixes a mistaken entry: the type, the hours, or (latest terms only) the start date. The old row is kept,
+   * marked corrected, and a new one takes its place; the previous terms' end date follows a moved start.
+   */
+  @Roles('owner', 'admin')
+  @Post(':id/correct')
+  @HttpCode(200)
+  correct(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('workerId', ParseUUIDPipe) workerId: string,
+    @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const employmentType = oneOf(body, 'employmentType', EMPLOYMENT_TYPES, { required: true })!;
+    const contractedHours = hours(body, 'contractedHours');
+    const startsOn = date(body, 'startsOn');
+    return withTenant(this.pool, t.tenantId, async db => {
+      const live = await this.liveTerms(db, workerId);
+      const term = (await db.query<{ id: string; employment_type: string; contracted_hours: number | null; withdrawn_at: Date | null; starts_on: string; ends_on: string | null }>(
+        `select id, employment_type, contracted_hours::float8 as contracted_hours, withdrawn_at,
+                to_char(starts_on, 'YYYY-MM-DD') as starts_on, to_char(ends_on, 'YYYY-MM-DD') as ends_on
+           from employment_terms where id = $1 and worker_id = $2`, [id, workerId])).rows[0];
+      if (!term) throw new NotFoundException('Employment terms not found');
+      const plan = correctionPlan(live, id, startsOn);
+      if (!plan.ok) throw new BadRequestException(plan.message);
+      const newStart = startsOn ?? term.starts_on;
+      if (term.employment_type === employmentType && term.contracted_hours === contractedHours && newStart === term.starts_on) {
+        throw new BadRequestException('Nothing to correct: the type, hours and start date are the same');
+      }
+      await db.query(`update employment_terms set withdrawn_at = now(), withdrawn_by = $2, withdrawn_reason = 'corrected' where id = $1`, [id, auth.userId]);
+      if (plan.previousId) await db.query('update employment_terms set ends_on = $2 where id = $1', [plan.previousId, plan.previousEndsOn]);
+      return (await db.query(
+        `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, ends_on, created_by, replaces_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${TERM_COLS}`,
+        [t.tenantId, workerId, employmentType, contractedHours, newStart, term.ends_on, auth.userId, id],
+      )).rows[0];
+    });
+  }
+
+  /** Withdraws the latest terms entered by mistake; the terms before them carry on. The row is kept, marked withdrawn. */
+  @Roles('owner', 'admin')
+  @Post(':id/withdraw')
+  @HttpCode(200)
+  withdraw(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('workerId', ParseUUIDPipe) workerId: string,
+    @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const live = await this.liveTerms(db, workerId);
+      if (!(await db.query('select 1 from employment_terms where id = $1 and worker_id = $2', [id, workerId])).rowCount) {
+        throw new NotFoundException('Employment terms not found');
+      }
+      const plan = withdrawalPlan(live, id);
+      if (!plan.ok) throw new BadRequestException(plan.message);
+      await db.query(`update employment_terms set withdrawn_at = now(), withdrawn_by = $2, withdrawn_reason = 'withdrawn' where id = $1`, [id, auth.userId]);
+      if (plan.previousId) await db.query('update employment_terms set ends_on = $2 where id = $1', [plan.previousId, plan.previousEndsOn]);
+      return (await db.query(
+        `select ${TERM_COLS} from employment_terms where worker_id = $1 and withdrawn_at is null order by starts_on desc`, [workerId])).rows;
+    });
+  }
+
+  /** Locks the worker (so two corrections can't cross) and returns their live terms' dates. */
+  private async liveTerms(db: PoolClient, workerId: string): Promise<TermDates[]> {
+    if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+    return (await db.query<TermDates>(
+      `select id, to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"
+         from employment_terms where worker_id = $1 and withdrawn_at is null`, [workerId])).rows;
   }
 
   /** Starts new terms from a date; the current terms end the day before. */
@@ -198,17 +267,16 @@ export class EmploymentController {
     const startsOn = date(body, 'startsOn', { required: true })!;
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
-      if ((await db.query('select 1 from employment_terms where worker_id = $1 and starts_on >= $2', [workerId, startsOn])).rowCount) {
+      if ((await db.query('select 1 from employment_terms where worker_id = $1 and starts_on >= $2 and withdrawn_at is null', [workerId, startsOn])).rowCount) {
         throw new BadRequestException('Employment terms already start on or after that date');
       }
       await db.query(
-        `update employment_terms set ends_on = $2::date - 1 where worker_id = $1 and (ends_on is null or ends_on >= $2)`,
+        `update employment_terms set ends_on = $2::date - 1 where worker_id = $1 and withdrawn_at is null and (ends_on is null or ends_on >= $2)`,
         [workerId, startsOn]);
       return (await db.query(
         `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, created_by)
          values ($1,$2,$3,$4,$5,$6)
-         returning id, employment_type as "employmentType", contracted_hours::float8 as "contractedHours",
-                   to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"`,
+         returning ${TERM_COLS}`,
         [t.tenantId, workerId, employmentType, contractedHours, startsOn, auth.userId],
       )).rows[0];
     });
@@ -341,7 +409,7 @@ export class ShiftsController {
                              and (s.starts_at at time zone f.timezone)::date between $1 and $2), 0)::float8 as "rosteredHours"
            from workers w
            left join lateral (select employment_type, contracted_hours from employment_terms e
-                               where e.worker_id = w.id and e.starts_on <= $1 and (e.ends_on is null or e.ends_on >= $1)
+                               where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $1 and (e.ends_on is null or e.ends_on >= $1)
                                order by e.starts_on desc limit 1) et on true
           where w.status = 'active'
           order by w.last_name, w.first_name`, [from, to])).rows;

@@ -4,6 +4,7 @@ import { currentAgency } from '../../../lib/current-user';
 import { Badge, COMPLIANCE_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
 import { addWorker } from './actions';
+import { EMPLOYMENT_LABEL } from './[id]/employment-card';
 import { T, words } from '../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
   status: string; roles: string[]; compliance: string; issueCount: number;
+  employmentType: string | null; contractedHours: number | null;
 };
 
 export default async function WorkersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -20,6 +22,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   if (p.search) qs.set('search', p.search);
   if (p.compliance) qs.set('compliance', p.compliance);
   if (p.status) qs.set('status', p.status);
+  if (p.employment) qs.set('employment', p.employment);
   const [workers, agency] = await Promise.all([api<Worker[]>(`/workers?${qs}`), currentAgency()]);
   // Employment terms are set by owners and admins.
   const canSetEmployment = agency?.role === 'owner' || agency?.role === 'admin';
@@ -27,10 +30,10 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <h1>{tw.many(T.worker)}</h1>
-      <p className="muted">Everyone who works shifts for your agency, and whether they are compliant to work.</p>
+      <p className="muted">Everyone who works shifts for the business, how they are employed today, and whether they are compliant to work.</p>
       <Notices error={p.error} done={p.done} />
 
-      <details className="card" open={workers.length === 0 && !p.search && !p.compliance}>
+      <details className="card" open={workers.length === 0 && !p.search && !p.compliance && !p.employment}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add a worker</summary>
         <form action={addWorker} className="form-row" style={{ marginTop: 12 }}>
           <label>First name<input name="firstName" required maxLength={100} /></label>
@@ -69,6 +72,13 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             <option value="offboarded">Offboarded</option>
           </select>
         </label>
+        <label>Employment
+          <select name="employment" defaultValue={p.employment ?? ''}>
+            <option value="">Any</option>
+            {Object.entries(EMPLOYMENT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="none">Not recorded</option>
+          </select>
+        </label>
         <button type="submit" className="btn secondary">Filter</button>
       </form>
 
@@ -77,12 +87,13 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           <p className="muted" style={{ margin: 0 }}>No workers found.</p>
         ) : (
           <table>
-            <thead><tr><th>Name</th><th>Roles</th><th>Contact</th><th>Status</th><th>Compliance</th></tr></thead>
+            <thead><tr><th>Name</th><th>Roles</th><th>Employment</th><th>Contact</th><th>Status</th><th>Compliance</th></tr></thead>
             <tbody>
               {workers.map(w => (
                 <tr key={w.id}>
                   <td><Link href={`/workers/${w.id}`}>{w.lastName}, {w.firstName}</Link>{w.preferredName && <span className="muted"> ({w.preferredName})</span>}</td>
                   <td>{w.roles.join(', ') || '—'}</td>
+                  <td>{w.employmentType ? <>{EMPLOYMENT_LABEL[w.employmentType] ?? w.employmentType}{w.contractedHours !== null && <span className="muted"> · {w.contractedHours} h</span>}</> : <span className="muted">—</span>}</td>
                   <td>{w.email ?? ''}{w.email && w.phone ? <br /> : null}{w.phone ?? ''}</td>
                   <td style={{ textTransform: 'capitalize' }}>{w.status}</td>
                   <td>

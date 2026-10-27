@@ -15,7 +15,7 @@ prog={
  'DM':('done',1,'22 Oct','Core data model built; extended module by module'),
  'SCH':('done',1,'22 Oct','Agencies, data separation between agencies, facilities'),
  'AUTH':('active',.85,None,'Sign-in, 2FA, roles and invitations done. Platform screen: add businesses and manage who can sign in, logged (26 Oct). Office audit log to do'),
- 'PPL':('active',.55,None,'Worker profiles done. Employment (full-time, part-time, casual or bank, hours a week, effective-dated) on each person\'s page (27 Oct). Rest of the employment record to do'),
+ 'PPL':('active',.6,None,'Worker profiles done. Employment (full-time, part-time, casual or bank, hours a week, effective-dated) on each person\'s page (27 Oct); correcting or withdrawing a mistaken entry, and employment on the Workers list with a filter (28 Oct). Start and end of employment to do'),
  'DOC':('done',1,'24 Oct','Uploads stored privately in Sydney, opened by short-lived links'),
  'CRED':('done',1,'24 Oct','Credentials, rules, verification, right to work (VEVO), expiry reminders (people and equipment dates)'),
  'CLI':('active',.6,None,'Clients, facilities and areas done. Contacts and client rules to do'),
