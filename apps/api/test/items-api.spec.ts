@@ -135,6 +135,41 @@ describe('items and consumables API', () => {
     expect((await http().get('/items?all=true').set(as('alloc')).expect(200)).body).toHaveLength(2);
   });
 
+  it('moves stock between sites as a pair of ledger rows', async () => {
+    const before = (await http().get(`/items/${gloves}`).set(as('alloc')).expect(200)).body;
+    const atNorth = before.sites.find((x: { facilityId: string }) => x.facilityId === north).onHand as number;
+    await http().post(`/items/${gloves}/transfer`).set(as('worker')).send({ fromFacilityId: north, toFacilityId: south, quantity: 1 }).expect(403);
+    expect((await http().post(`/items/${gloves}/transfer`).set(as('alloc')).send({ fromFacilityId: north, toFacilityId: north, quantity: 1 }).expect(400)).body.message).toBe('Choose two different sites');
+    await http().post(`/items/${gloves}/transfer`).set(as('alloc')).send({ toFacilityId: south, quantity: 1 }).expect(400);
+    const short = await http().post(`/items/${gloves}/transfer`).set(as('alloc')).send({ fromFacilityId: north, toFacilityId: south, quantity: atNorth + 1 }).expect(409);
+    expect(short.body.message).toBe(`Only ${atNorth} × Safety gloves (pair) on hand at North Yard`);
+    expect((await http().post(`/items/${diesel}/transfer`).set(as('alloc')).send({ fromFacilityId: north, toFacilityId: south, quantity: 1 }).expect(400)).body.message)
+      .toBe("Stock isn't counted for Diesel, so there is nothing to move");
+
+    const r = await http().post(`/items/${gloves}/transfer`).set(as('alloc')).send({ fromFacilityId: north, toFacilityId: south, quantity: 2, notes: 'For the south crew' }).expect(201);
+    expect(r.body.onHand).toBe(before.onHand);
+    expect(r.body.sites).toEqual(expect.arrayContaining([
+      expect.objectContaining({ facilityId: north, onHand: atNorth - 2 }), expect.objectContaining({ facilityId: south, onHand: 2 }),
+    ]));
+    const moved = r.body.movements.filter((m: { kind: string }) => m.kind === 'transferred');
+    expect(moved).toHaveLength(2);
+    expect(moved[0].transferId).toBe(moved[1].transferId);
+    expect(moved.map((m: { quantity: number }) => m.quantity).sort()).toEqual([-2, 2]);
+    expect(moved[0]).toMatchObject({ unitCostCents: 900, notes: 'For the south crew' });
+    // Transfers aren't use: a shift's and a person's items are unchanged.
+    expect((await http().get(`/shifts/${shift}/items`).set(as('alloc')).expect(200)).body.lines[1]).toMatchObject({ quantity: 4 });
+    // The database refuses a transfer row without its pair id.
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    try {
+      await expect(owner.query(
+        `insert into stock_movements(tenant_id, item_id, facility_id, kind, quantity, unit_cost_cents) select tenant_id, id, $2, 'transferred', 1, 0 from items where id = $1`,
+        [gloves, north])).rejects.toThrow(/stock_movements_transfer_check/);
+    } finally {
+      await owner.end();
+    }
+  });
+
   it('keeps the movement history append-only', async () => {
     const appDb = new Client({ connectionString: db.appUrl });
     await appDb.connect();
