@@ -6,26 +6,32 @@ import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, isTimeZone, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
-import { STATE_TIMEZONES } from '../clients/abn.js';
-
-const STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT'] as const;
+import { COUNTRIES, isCountry, normalPostcode, siteZone, type CountryCode } from '../common/countries.js';
+import { loadSettings } from '../workforce/settings.js';
 const COLS = `f.id, f.name, f.client_id as "clientId", c.name as "clientName", f.address_line as "addressLine", f.suburb, f.state,
-  f.postcode, f.timezone, f.phone, f.parking_notes as "parkingNotes", f.entry_notes as "entryNotes", f.active`;
+  f.postcode, f.country, f.timezone, f.phone, f.parking_notes as "parkingNotes", f.entry_notes as "entryNotes", f.active`;
 
-function postcode(body: Record<string, unknown>) {
-  const v = text(body, 'postcode', { max: 4 });
-  if (v !== null && !/^\d{4}$/.test(v)) throw new BadRequestException('Postcode must be 4 digits');
-  return v;
-}
-
-/** The time zone comes from the state (ORG-3), unless one is given (e.g. Broken Hill uses Adelaide time). */
-function timezoneFor(body: Record<string, unknown>, state: string | null): string | null {
-  const tz = text(body, 'timezone', { max: 60 });
-  if (tz) {
-    if (!isTimeZone(tz)) throw new BadRequestException('Time zone is not valid');
-    return tz;
+/**
+ * A site's country, region (state), postcode and time zone, checked against the country (migration 0028).
+ * Australian and US sites pick from the state list; NZ and UK take a region name. The time zone comes from
+ * the one given, else the state where that settles it, else the country's default (Broken Hill: give Adelaide).
+ */
+function place(body: Record<string, unknown>, country: CountryCode) {
+  const c = COUNTRIES[country];
+  const has = (k: string) => Boolean(body && k in body);
+  let region = text(body, 'state', { max: 60 });
+  if (region && c.regions) {
+    region = region.toUpperCase();
+    if (!c.regions.includes(region)) throw new BadRequestException(`Choose a ${c.regionLabel.toLowerCase()} in ${c.name}`);
   }
-  return state ? STATE_TIMEZONES[state] : null;
+  let pc = text(body, 'postcode', { max: 10 });
+  if (pc) {
+    pc = normalPostcode(country, pc);
+    if (!c.postcode.test(pc)) throw new BadRequestException(`Postcode for ${c.name}: ${c.postcodeHint}`);
+  }
+  const tz = text(body, 'timezone', { max: 60 });
+  if (tz && !isTimeZone(tz)) throw new BadRequestException('Choose a valid time zone');
+  return { region, postcode: pc, givenZone: tz, has };
 }
 
 async function clientExists(db: PoolClient, id: string | null) {
@@ -56,16 +62,19 @@ export class FacilitiesController {
   @Post()
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { required: true, max: 200 });
-    const state = oneOf(body, 'state', STATES);
-    const timezone = timezoneFor(body, state) ?? 'Australia/Melbourne';
     const clientId = text(body, 'clientId', { max: 40 });
+    const given = text(body, 'country', { max: 2 });
+    if (given && !isCountry(given)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     return withTenant(this.pool, t.tenantId, async db => {
       await clientExists(db, clientId);
+      const country = (given as CountryCode | null) ?? (await loadSettings(db, t.tenantId)).country;
+      const p = place(body, country);
+      const timezone = siteZone(country, p.region, p.givenZone);
       const row = (await db.query<{ id: string }>(
-        `insert into facilities(tenant_id, client_id, name, address_line, suburb, state, postcode, timezone, phone, parking_notes, entry_notes)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-        [t.tenantId, clientId, name, text(body, 'addressLine', { max: 200 }), text(body, 'suburb', { max: 100 }), state, postcode(body),
-          timezone, text(body, 'phone', { max: 30 }), text(body, 'parkingNotes', { max: 1000 }), text(body, 'entryNotes', { max: 1000 })],
+        `insert into facilities(tenant_id, client_id, name, address_line, suburb, state, postcode, timezone, phone, parking_notes, entry_notes, country)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+        [t.tenantId, clientId, name, text(body, 'addressLine', { max: 200 }), text(body, 'suburb', { max: 100 }), p.region, p.postcode,
+          timezone, text(body, 'phone', { max: 30 }), text(body, 'parkingNotes', { max: 1000 }), text(body, 'entryNotes', { max: 1000 }), country],
       )).rows[0];
       return (await db.query(`select ${COLS} from facilities f left join clients c on c.id = f.client_id where f.id = $1`, [row.id])).rows[0];
     });
@@ -86,24 +95,32 @@ export class FacilitiesController {
   @Patch(':id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const has = (k: string) => Boolean(body && k in body);
-    const state = oneOf(body, 'state', STATES);
-    const tz = has('timezone') || state ? timezoneFor(body, state) : null;
     const clientId = text(body, 'clientId', { max: 40 });
+    const given = text(body, 'country', { max: 2 });
+    if (given && !isCountry(given)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     return withTenant(this.pool, t.tenantId, async db => {
       if (has('clientId')) await clientExists(db, clientId);
+      const cur = (await db.query<{ country: CountryCode; state: string | null; postcode: string | null }>('select country, state, postcode from facilities where id = $1', [id])).rows[0];
+      if (!cur) throw new NotFoundException('facility not found');
+      const country = (given as CountryCode | null) ?? cur.country;
+      const p = place(body, country);
+      const state = has('state') ? p.region : (given && given !== cur.country ? null : cur.state);
+      const pc = has('postcode') ? p.postcode : (given && given !== cur.country ? null : cur.postcode);
+      // A new country or state moves the site's time zone too, unless one is given.
+      const tz = p.givenZone ?? (given || has('state') ? siteZone(country, state, null) : null);
       const r = await db.query(
         `update facilities set
            name = coalesce($2, name), client_id = case when $3 then $4::uuid else client_id end,
            address_line = case when $5 then $6 else address_line end, suburb = case when $7 then $8 else suburb end,
-           state = case when $9 then $10 else state end, postcode = case when $11 then $12 else postcode end,
+           state = case when $9 then $10 else state end, postcode = case when $11 then $12 else postcode end, country = $21,
            timezone = coalesce($13, timezone), phone = case when $14 then $15 else phone end,
            parking_notes = case when $16 then $17 else parking_notes end, entry_notes = case when $18 then $19 else entry_notes end,
            active = coalesce($20, active)
          where id = $1`,
         [id, text(body, 'name', { max: 200 }), has('clientId'), clientId, has('addressLine'), text(body, 'addressLine', { max: 200 }),
-          has('suburb'), text(body, 'suburb', { max: 100 }), has('state'), state, has('postcode'), postcode(body), tz,
+          has('suburb'), text(body, 'suburb', { max: 100 }), true, state, true, pc, tz,
           has('phone'), text(body, 'phone', { max: 30 }), has('parkingNotes'), text(body, 'parkingNotes', { max: 1000 }),
-          has('entryNotes'), text(body, 'entryNotes', { max: 1000 }), bool(body, 'active')],
+          has('entryNotes'), text(body, 'entryNotes', { max: 1000 }), bool(body, 'active'), country],
       );
       if (!r.rowCount) throw new NotFoundException('facility not found');
       return (await db.query(`select ${COLS} from facilities f left join clients c on c.id = f.client_id where f.id = $1`, [id])).rows[0];

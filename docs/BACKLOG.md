@@ -95,6 +95,15 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Light client accounts for clients not on CROP (order shifts).
 - [ ] Priority in the people list: later, with Steve.
 
+## International (David and Steve, 27 Oct): Australia, then New Zealand, the USA, the UK
+- [x] (27 Oct) Country and time zone per business and per site; regions and postcodes per country.
+- [ ] Phone numbers and texts per country: store mobiles in international form (+64, +1, +44); ClickSend sends internationally; per-country sender (number or alphanumeric ID) and costs (check with David before sending outside Australia: costs money).
+- [ ] Right to work per country: AU (VEVO, built), NZ (visa check via Immigration NZ VisaView), US (I-9 / E-Verify), UK (share code / right to work check). Needs David/Steve confirmation of what each client must record; build the record shape per country.
+- [ ] Currency per business (AUD, NZD, USD, GBP) for item costs, charges and later pay and invoicing; money already stored in cents.
+- [ ] Industry templates per country (credentials differ: e.g. AU White Card vs UK CSCS vs US OSHA 10; NZ Site Safe). Tag pack credentials by country.
+- [ ] Business number per country (AU ABN built; NZ NZBN, UK Companies House number, US EIN) on clients.
+- [ ] Date and number formats per country (US month-first dates), and spelling (UI stays Australian English for now).
+
 ## Questions for David and Steve (new, 26 Oct night)
 - (Answered 27 Oct: yes, and built.) When a week is published staff get their shifts by email and text; after changes, publishing again tells the people affected.
 
