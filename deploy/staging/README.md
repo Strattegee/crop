@@ -44,3 +44,5 @@ Bucket `crop-staging-docs` (Spaces, SYD1). The access key (limited to that bucke
 
 ## Email and SMS
 Keys in `/srv/crop/.env`: `RESEND_API_KEY` (domain cropwms.com verified in Resend), `CLICKSEND_USERNAME`, `CLICKSEND_API_KEY`, `CLICKSEND_FROM` (defaults to the dedicated number +61429804977 in compose.yml; set it in .env only to override). Test from the office app: Messages → Email me a test / Text a test.
+
+Without logging in to the server: add `CLICKSEND_USERNAME` and `CLICKSEND_API_KEY` as GitHub repository secrets (Settings → Secrets and variables → Actions). Each deploy copies them into `/srv/crop/.env` (replacing old values) before starting the containers; re-run "Deploy staging" after adding them.
