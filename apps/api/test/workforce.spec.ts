@@ -153,6 +153,6 @@ describe('workers, credentials and compliance', () => {
     await http().patch('/settings').set(as('alloc')).send({ expiringWindowDays: 60 }).expect(403);
     await http().patch('/settings').set(as('admin')).send({ timezone: 'Mars/Base' }).expect(400);
     const res = await http().patch('/settings').set(as('admin')).send({ expiringWindowDays: 5 }).expect(200);
-    expect(res.body).toEqual({ expiringWindowDays: 5, timezone: 'Australia/Melbourne', smsMonthlyCap: 2000, minRestHours: 10, publishedChanges: 'open' });
+    expect(res.body).toEqual({ expiringWindowDays: 5, timezone: 'Australia/Melbourne', country: 'AU', smsMonthlyCap: 2000, minRestHours: 10, publishedChanges: 'open' });
   });
 });
