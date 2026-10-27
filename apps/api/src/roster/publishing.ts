@@ -25,7 +25,7 @@ export function actorOf(auth: AuthContext): Actor {
 }
 
 export type ChangeKind = 'created' | 'assigned' | 'booked' | 'confirmed' | 'unassigned' | 'pulled_out' | 'cancelled'
-  | 'equipment_added' | 'equipment_removed' | 'times_changed' | 'notes_changed';
+  | 'equipment_added' | 'equipment_removed' | 'times_changed' | 'notes_changed' | 'duty_added' | 'duty_removed';
 
 /** One line of the change log in plain English. Never includes leave kinds or credential details. */
 export function changeSummary(c: { kind: ChangeKind; workerName: string | null; equipmentName: string | null; detail: string | null; via: string }): string {
@@ -43,6 +43,8 @@ export function changeSummary(c: { kind: ChangeKind; workerName: string | null; 
     case 'equipment_removed': return `${what} taken off the shift`;
     case 'times_changed': return 'Times changed';
     case 'notes_changed': return 'Notes changed';
+    case 'duty_added': return c.detail ? `Duty added: ${c.detail}` : 'Duty added';
+    case 'duty_removed': return c.detail ? `Duty removed: ${c.detail}` : 'Duty removed';
   }
 }
 

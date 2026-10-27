@@ -103,7 +103,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
 
   for (const i of p.issues) {
     const code: ReasonCode = i.credentialTypeId === 'right-to-work' ? 'right_to_work' : 'credential';
-    const message = `${p.name}'s ${i.typeName} ${PROBLEM_TEXT[i.problem]}`;
+    const message = `${p.name}'s ${i.typeName} ${PROBLEM_TEXT[i.problem]}${i.forDuty ? ` (needed for ${i.forDuty})` : ''}`;
     if (i.severity === 'hard' && i.problem !== 'expiring') blocks.push({ code, message });
     else warnings.push({ code, message });
   }

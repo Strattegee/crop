@@ -18,6 +18,8 @@ export interface RequirementRule {
   scope: 'all_workers' | 'role';
   role: string | null;
   severity: Severity;
+  /** Set when the rule comes from a duty on a shift (migration 0029), e.g. "Serves alcohol". */
+  forDuty?: string;
 }
 
 export interface CredentialFacts {
@@ -60,6 +62,8 @@ export interface ComplianceIssue {
   severity: Severity;
   problem: Problem;
   credentialId: string | null;
+  /** The shift duty that needs this credential, when only a duty does. */
+  forDuty?: string;
 }
 
 /** Adds days to a YYYY-MM-DD date. */
@@ -115,14 +119,17 @@ export function workerCompliance(
   const byType = new Map<string, RequirementRule>();
   for (const r of rules.filter(r => appliesTo(r, roles))) {
     const prev = byType.get(r.credentialTypeId);
+    // A business-wide or role rule is named plainly; a duty is named only when the duty alone asks for it (or asks harder).
     if (!prev || (prev.severity === 'warning' && r.severity === 'hard')) byType.set(r.credentialTypeId, r);
+    else if (prev.forDuty && !r.forDuty && prev.severity === r.severity) byType.set(r.credentialTypeId, r);
   }
 
   for (const rule of byType.values()) {
     const ofType = credentials.filter(c => c.credentialTypeId === rule.credentialTypeId);
     const usable = ofType.filter(c => c.verification !== 'rejected');
     const issue = (problem: Problem, credentialId: string | null = null) =>
-      issues.push({ credentialTypeId: rule.credentialTypeId, typeName: rule.typeName, severity: rule.severity, problem, credentialId });
+      issues.push({ credentialTypeId: rule.credentialTypeId, typeName: rule.typeName, severity: rule.severity, problem, credentialId,
+        ...(rule.forDuty ? { forDuty: rule.forDuty } : {}) });
 
     if (usable.length === 0) {
       issue(ofType.length > 0 ? 'rejected' : 'missing');

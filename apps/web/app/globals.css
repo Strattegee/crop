@@ -308,3 +308,8 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .rcard .dl:last-child { padding-bottom: 4px; }
 .ribbon.look-simple .rcard { margin-bottom: 2px; border-bottom-width: 3px !important; }
 .ribbon.look-simple .rcard .band { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.duty-needs { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 16px; }
+.duty-needs legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
+.duty-needs label.inline { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.duty-list label.inline { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.rcard .dt { padding: 0 6px 3px; font-size: 10px; font-weight: 600; color: #6a4c93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

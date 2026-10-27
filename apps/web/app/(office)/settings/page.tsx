@@ -64,6 +64,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Link href="/settings/shift-types" className="btn small secondary">Shift types</Link>
       </div>
 
+      <div className="card">
+        <h2>Shift duties</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Extra duties a {tw.lower(T.shift)} can carry, such as serving alcohol, each with the credentials it needs. Tick them on a {tw.lower(T.shift)} in the {tw.lower(T.roster)}.</p>
+        <Link href="/settings/shift-duties" className="btn small secondary">Shift duties</Link>
+      </div>
+
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Words we use</h2>
         <p className="muted" style={{ marginTop: 0 }}>Call things what your business calls them. Menus, page titles and the {tw.lower(T.roster)} use these words. Leave a word blank to go back to the standard one.</p>

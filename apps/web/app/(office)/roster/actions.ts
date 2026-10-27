@@ -76,6 +76,15 @@ export async function removeEquipment(shiftId: string, equipmentId: string, f: F
   await attempt(back(f), () => api(`/shifts/${shiftId}/equipment/${equipmentId}/remove`, { method: 'POST' }), 'Equipment removed from the shift.');
 }
 
+/** Sets the duties on a shift (Settings → Shift duties); says if the person on it no longer meets them. */
+export async function setDuties(shiftId: string, f: FormData) {
+  const dutyIds = f.getAll('dutyIds').filter((x): x is string => typeof x === 'string');
+  let problems: string[] = [];
+  await attempt(back(f), async () => {
+    problems = (await api<{ personProblems?: string[] }>(`/shifts/${shiftId}/duties`, { method: 'PUT', body: { dutyIds } })).personProblems ?? [];
+  }, () => problems.length ? `Duties saved. ${problems.join('. ')}.` : 'Duties saved.');
+}
+
 /** Staging only (DEMO_TOOLS=on): fills an empty business with an invented café so the roster can be shown. */
 export async function loadDemoWeek(f: FormData) {
   if (process.env.DEMO_TOOLS !== 'on') return;

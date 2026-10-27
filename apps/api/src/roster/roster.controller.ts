@@ -76,7 +76,9 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
     order by px.ended_at desc limit 1) as "pulledOutName",
   coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name) order by e.name)
               from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
-             where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment`;
+             where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment,
+  coalesce((select json_agg(json_build_object('id', d.id, 'name', d.name) order by lower(d.name))
+              from shift_duty_links dl join shift_duties d on d.id = dl.duty_id where dl.shift_id = s.id), '[]'::json) as duties`;
 export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
   left join areas a on a.id = s.area_id left join shift_codes sc on sc.id = s.shift_code_id
   left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
