@@ -18,6 +18,8 @@ export interface Slot {
   notes: string | null;
   /** Equipment usually booked on this shift. */
   equipmentIds: string[];
+  /** Duties the shift carries (migration 0029); they always go with it, before anyone is put on. */
+  dutyIds?: string[];
 }
 
 export interface PlannedShift extends Slot {

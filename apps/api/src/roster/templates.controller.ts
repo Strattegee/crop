@@ -45,7 +45,8 @@ async function slotsFromWeek(db: PoolClient, facilityId: string, weekStart: stri
             s.break_minutes as "breakMinutes", s.area_id as "areaId", s.shift_code_id as "shiftCodeId", s.role,
             s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes,
             coalesce((select json_agg(se.equipment_id order by se.created_at) from shift_assignments se
-                       where se.shift_id = s.id and se.resource_kind = 'equipment' and se.status in ('assigned', 'confirmed')), '[]'::json) as "equipmentIds"
+                       where se.shift_id = s.id and se.resource_kind = 'equipment' and se.status in ('assigned', 'confirmed')), '[]'::json) as "equipmentIds",
+            coalesce((select json_agg(dl.duty_id) from shift_duty_links dl where dl.shift_id = s.id), '[]'::json) as "dutyIds"
        from shifts s join facilities f on f.id = s.facility_id
        left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
       where s.facility_id = $1 and s.status <> 'cancelled'
@@ -85,6 +86,12 @@ async function createFromSlots(
       [tenantId, f.id, p.areaId, p.shiftCodeId, p.role, p.date, p.startTime, f.timezone, p.overnight ? 1 : 0, p.endTime,
         p.breakMinutes, p.notes, auth.userId, p.needsPerson])).rows[0].id;
     result.created++;
+    // Duties first, so eligibility for the usual person sees what the shift needs. Switched-off duties are dropped.
+    if (p.dutyIds?.length) {
+      await db.query(
+        `insert into shift_duty_links(tenant_id, shift_id, duty_id) select $1, $2, d.id from shift_duties d where d.id = any($3) and d.active`,
+        [tenantId, id, p.dutyIds]);
+    }
     if (people) await putUsualPerson(db, tenantId, auth, id, p, result);
     if (equipment) await bookUsualEquipment(db, tenantId, auth, id, p, result);
   }
@@ -201,6 +208,12 @@ export class RosterTemplatesController {
            from json_to_recordset($3::json) as x(id uuid, weekday int, "startTime" text, "endTime" text, "breakMinutes" int, "areaId" uuid,
                 "shiftCodeId" uuid, role text, "needsPerson" boolean, "workerId" uuid, notes text)`,
         [t.tenantId, id, JSON.stringify(rows), people]);
+      const duties = rows.flatMap(r => (r.dutyIds ?? []).map(d => ({ s: r.id, d })));
+      if (duties.length) {
+        await db.query(
+          `insert into roster_template_duties(tenant_id, template_shift_id, duty_id)
+           select $1, x.s, x.d from json_to_recordset($2::json) as x(s uuid, d uuid) on conflict do nothing`, [t.tenantId, JSON.stringify(duties)]);
+      }
       if (equipment) {
         const pairs = rows.flatMap(r => r.equipmentIds.map(e => ({ s: r.id, e })));
         if (pairs.length) {
@@ -246,7 +259,8 @@ export class RosterTemplatesController {
       const slots = (await db.query<Slot>(
         `select weekday, to_char(start_time, 'HH24:MI') as "startTime", to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes",
                 area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId", notes,
-                coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds"
+                coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds",
+                coalesce((select json_agg(td.duty_id) from roster_template_duties td where td.template_shift_id = ts.id), '[]'::json) as "dutyIds"
            from roster_template_shifts ts where template_id = $1`, [id])).rows;
       const r = await createFromSlots(db, t.tenantId, auth, f, weekStart, slots, people, equipment);
       return { ...r, weekStart, facilityId: f.id, summary: applySummary(r) };

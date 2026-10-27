@@ -4,7 +4,7 @@ import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, saveTemplate, unassign,
+  recordReply, removeEquipment, requestChange, saveTemplate, setDuties, unassign,
 } from './actions';
 import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
@@ -29,8 +29,10 @@ type Shift = {
   role: string; status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
-  offersPending?: number; pulledOutName?: string | null;
+  offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
 };
+/** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
+type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' }[] };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
@@ -223,7 +225,10 @@ export default async function RosterPage({ searchParams }: {
   let offers: Offer[] = [];
   let equipCandidates: EquipCandidate[] = [];
   let panelError: string | null = null;
-  const shiftHistory = selected ? await api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : [];
+  const [shiftHistory, duties] = selected ? await Promise.all([
+    api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]),
+    api<Duty[]>('/shift-duties').catch(() => [] as Duty[]),
+  ]) : [[] as Change[], [] as Duty[]];
   if (selected && selected.status !== 'cancelled') {
     try {
       const [bank, all, eq] = await Promise.all([
@@ -274,6 +279,7 @@ export default async function RosterPage({ searchParams }: {
     <span className="st">{stage(s).label}</span>
     <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
     {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
+    {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
     {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
   </>);
 
@@ -886,6 +892,22 @@ export default async function RosterPage({ searchParams }: {
                     <p className="muted small" style={{ marginTop: 10 }}>Agency fill comes next: send the shift to your agencies when your own staff can&apos;t cover it.</p>
                   </>
                 )}
+              </section>
+            )}
+
+            {(duties.some(d => d.active) || !!selected.duties?.length) && (
+              <section>
+                <h3>Duties</h3>
+                <form action={setDuties.bind(null, selected.id)} className="duty-list">
+                  <input type="hidden" name="back" value={here} />
+                  {duties.filter(d => d.active || selected.duties?.some(x => x.id === d.id)).map(d => (
+                    <label key={d.id} className="inline">
+                      <input type="checkbox" name="dutyIds" value={d.id} defaultChecked={selected.duties?.some(x => x.id === d.id)} disabled={!d.active && !selected.duties?.some(x => x.id === d.id)} />
+                      <span>{d.name}{d.requirements.length > 0 && <span className="muted small"> · needs {d.requirements.map(r => r.typeName).join(', ')}</span>}{!d.active && <span className="muted small"> (switched off)</span>}</span>
+                    </label>
+                  ))}
+                  <button className="btn small secondary">Save duties</button>
+                </form>
               </section>
             )}
 

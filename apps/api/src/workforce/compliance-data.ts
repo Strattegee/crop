@@ -15,8 +15,9 @@ export async function complianceContext(db: PoolClient, tenantId: string) {
     settings,
     rules,
     today,
-    evaluate(roles: string[], credentials: CredentialFacts[], rightToWork: RightToWorkFacts | null, onDate = today) {
-      return workerCompliance(roles, rules, credentials, onDate, settings.expiringWindowDays, rightToWork);
+    /** `extraRules`: rules from the duties on a shift (they apply to whoever works it). */
+    evaluate(roles: string[], credentials: CredentialFacts[], rightToWork: RightToWorkFacts | null, onDate = today, extraRules: RequirementRule[] = []) {
+      return workerCompliance(roles, extraRules.length ? [...rules, ...extraRules] : rules, credentials, onDate, settings.expiringWindowDays, rightToWork);
     },
   };
 }

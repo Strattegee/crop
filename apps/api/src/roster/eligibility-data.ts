@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
-import { addDays } from '../workforce/compliance.js';
+import { addDays, type RequirementRule } from '../workforce/compliance.js';
 import { PERIODS, type AvailabilityFacts, type LeaveFacts, type Period } from './availability.js';
 import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OperatorNeed, type OtherShift, type ShiftFacts } from './eligibility.js';
 
@@ -38,6 +38,20 @@ export async function operatorNeedsForShift(db: PoolClient, shiftId: string): Pr
        join equipment_types et on et.id = e.equipment_type_id join credential_types ct on ct.id = et.operator_credential_type_id
       where sa.shift_id = $1 and sa.resource_kind = 'equipment' and sa.status in ('assigned', 'confirmed')
       order by e.name`, [shiftId])).rows;
+}
+
+/**
+ * The credential rules the duties on a shift add (migration 0029). They apply to whoever works the shift,
+ * whatever their role. Only active duties and credential types count.
+ */
+export async function dutyRulesForShift(db: PoolClient, shiftId: string): Promise<RequirementRule[]> {
+  return (await db.query<{ credential_type_id: string; type_name: string; severity: 'hard' | 'warning'; duty: string }>(
+    `select r.credential_type_id, ct.name as type_name, r.severity, d.name as duty
+       from shift_duty_links l join shift_duties d on d.id = l.duty_id
+       join shift_duty_requirements r on r.duty_id = d.id join credential_types ct on ct.id = r.credential_type_id
+      where l.shift_id = $1 and d.active and ct.active
+      order by d.name, ct.name`, [shiftId])).rows
+    .map(r => ({ credentialTypeId: r.credential_type_id, typeName: r.type_name, scope: 'all_workers', role: null, severity: r.severity, forDuty: r.duty }));
 }
 
 /**
@@ -83,6 +97,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
   }
 
   const operatorNeeds = await operatorNeedsForShift(db, shiftId);
+  const dutyRules = await dutyRulesForShift(db, shiftId);
   const availability = await availabilityByWorker(db, ids, shift.localDate);
   const leave = await leaveByWorker(db, ids, shift.localDate);
 
@@ -90,7 +105,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
   const weekTo = addDays(weekFrom, 6);
   return workers.map(w => {
     const mine = others.get(w.id) ?? [];
-    const { issues } = ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate);
+    const { issues } = ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate, dutyRules);
     const e = shiftEligibility(shift, {
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
