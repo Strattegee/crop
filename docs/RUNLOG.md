@@ -158,3 +158,4 @@ Newest first. One entry per working session or scheduled run.
 - David and Steve: yes, publishing should tell staff. Built: Publish week emails and texts each person their shifts; publishing changes tells only the people affected (including anyone taken off). "Tell staff" tick box to publish quietly.
 - Zitadel codes now arrive (David). ClickSend keys: David adding them on the server.
 - SMS live on staging: David added the ClickSend keys (the API username differed from the login email; a shell-exported old value briefly overrode the new one). Test text received.
+- International (David and Steve): order AU, NZ, US, UK. Built: country and time zone per business and per site, with each country's regions and postcodes. The rest listed under International in the backlog.

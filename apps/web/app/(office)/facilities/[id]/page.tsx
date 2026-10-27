@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
-import { SPECIALTIES, STATES } from '../../../../lib/places';
+import { SPECIALTIES, placeLine, zoneName } from '../../../../lib/places';
+import { PlaceFields } from '../../../../lib/place-fields';
 import { Notices } from '../../notices';
 import { addArea, setAreaActive, updateFacility } from '../../clients/actions';
 import { T, words } from '../../../../lib/terms';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 type Facility = {
   id: string; name: string; clientId: string | null; clientName: string | null; addressLine: string | null; suburb: string | null;
-  state: string | null; postcode: string | null; timezone: string; phone: string | null; parkingNotes: string | null; entryNotes: string | null;
+  state: string | null; postcode: string | null; country: string; timezone: string; phone: string | null; parkingNotes: string | null; entryNotes: string | null;
   areas: { id: string; name: string; specialty: string | null; active: boolean }[];
 };
 
@@ -19,12 +20,12 @@ export default async function FacilityPage({ params, searchParams }: { params: P
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [f, agency] = await Promise.all([api<Facility>(`/facilities/${id}`), currentAgency()]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
-  const address = [f.addressLine, f.suburb, [f.state, f.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const address = placeLine(f);
   return (
     <>
       <p style={{ margin: '0 0 8px' }}>{f.clientId ? <Link href={`/clients/${f.clientId}`}>← {f.clientName}</Link> : <Link href="/facilities">← Facilities</Link>}</p>
       <h1>{f.name}</h1>
-      <p className="muted" style={{ marginTop: 0 }}>{address || 'No address yet'} · {f.timezone.replace('Australia/', '')} time{f.phone && <> · {f.phone}</>}</p>
+      <p className="muted" style={{ marginTop: 0 }}>{address || 'No address yet'} · {zoneName(f.timezone)} time{f.phone && <> · {f.phone}</>}</p>
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -73,9 +74,7 @@ export default async function FacilityPage({ params, searchParams }: { params: P
           <form action={updateFacility.bind(null, f.id)} className="form-row" style={{ marginTop: 12 }}>
             <label>Name<input name="name" required defaultValue={f.name} maxLength={200} /></label>
             <label>Street address<input name="addressLine" defaultValue={f.addressLine ?? ''} maxLength={200} /></label>
-            <label>Suburb<input name="suburb" defaultValue={f.suburb ?? ''} maxLength={100} /></label>
-            <label>State<select name="state" defaultValue={f.state ?? 'VIC'}>{STATES.map(s => <option key={s}>{s}</option>)}</select></label>
-            <label>Postcode<input name="postcode" defaultValue={f.postcode ?? ''} maxLength={4} inputMode="numeric" /></label>
+            <PlaceFields d={f} editing />
             <label>Phone<input name="phone" defaultValue={f.phone ?? ''} maxLength={30} /></label>
             <label style={{ flexBasis: '100%' }}>Parking notes<textarea name="parkingNotes" defaultValue={f.parkingNotes ?? ''} maxLength={1000} rows={2} /></label>
             <label style={{ flexBasis: '100%' }}>Entry and security notes<textarea name="entryNotes" defaultValue={f.entryNotes ?? ''} maxLength={1000} rows={2} /></label>

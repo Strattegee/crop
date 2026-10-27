@@ -6,6 +6,7 @@ import type { Pool } from 'pg';
 import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { int, isTimeZone, text } from '../common/validate.js';
+import { isCountry } from '../common/countries.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
@@ -58,17 +59,20 @@ export class ComplianceController {
     const smsCap = int(body, 'smsMonthlyCap', 0, 1000000);
     const minRest = int(body, 'minRestHours', 0, 24);
     const tz = text(body, 'timezone', { max: 60 });
-    if (tz && !isTimeZone(tz)) throw new BadRequestException('timezone must be an IANA time zone');
+    if (tz && !isTimeZone(tz)) throw new BadRequestException('Choose a valid time zone');
+    const country = text(body, 'country', { max: 2 });
+    if (country && !isCountry(country)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     const published = text(body, 'publishedChanges', { max: 20 });
     if (published && !PUBLISHED_CHANGES.includes(published as PublishedChanges)) throw new BadRequestException('Choose what can change after a roster is published');
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
       await db.query(
-        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes) values ($1,$2,$3,$4,$5,$6)
+        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes, country) values ($1,$2,$3,$4,$5,$6,$7)
          on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone,
-           sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours, published_changes = excluded.published_changes`,
+           sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours, published_changes = excluded.published_changes,
+           country = excluded.country`,
         [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap, minRest ?? cur.minRestHours,
-          published ?? cur.publishedChanges],
+          published ?? cur.publishedChanges, country ?? cur.country],
       );
       return loadSettings(db, t.tenantId);
     });

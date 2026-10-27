@@ -7,13 +7,14 @@ import { addCredentialType, addRule, addStarterSet, removeRule, saveSettings, se
 import { addDemoStaff, applyPack, completeDemo } from './industry-actions';
 import { T, words } from '../../../lib/terms';
 import { saveTerms } from './terms-actions';
+import { COUNTRIES, zoneName } from '../../../lib/places';
 
 export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number } };
-type Settings = { expiringWindowDays: number; timezone: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
+type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -172,10 +173,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <h2>Business settings</h2>
         <form action={saveSettings} className="form-row">
           <label>Show as expiring this many days ahead<input name="expiringWindowDays" type="number" min={1} max={365} defaultValue={settings.expiringWindowDays} disabled={!canEdit} /></label>
-          <label>Time zone
+          <label>Country
+            <select name="country" defaultValue={settings.country ?? 'AU'} disabled={!canEdit}>
+              {Object.entries(COUNTRIES).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
+            </select>
+          </label>
+          <label>Time zone (for &quot;today&quot; and reminders; each site keeps its own)
             <select name="timezone" defaultValue={settings.timezone} disabled={!canEdit}>
-              {['Australia/Melbourne', 'Australia/Sydney', 'Australia/Brisbane', 'Australia/Adelaide', 'Australia/Perth', 'Australia/Hobart', 'Australia/Darwin']
-                .map(tz => <option key={tz} value={tz}>{tz.replace('Australia/', '')}</option>)}
+              {Object.entries(COUNTRIES).map(([k, c]) => (
+                <optgroup key={k} label={c.name}>{c.zones.map(z => <option key={z} value={z}>{zoneName(z)}</option>)}</optgroup>
+              ))}
             </select>
           </label>
           <label>Monthly text limit<input name="smsMonthlyCap" type="number" min={0} max={1000000} defaultValue={settings.smsMonthlyCap} disabled={!canEdit} /></label>

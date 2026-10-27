@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
 import { Badge } from '../../../../lib/format';
-import { CLIENT_STATUS, STATES } from '../../../../lib/places';
+import { CLIENT_STATUS } from '../../../../lib/places';
+import { PlaceFields } from '../../../../lib/place-fields';
 import { Notices } from '../../notices';
 import { addFacility, updateClient } from '../actions';
 import { T, words } from '../../../../lib/terms';
@@ -18,7 +19,8 @@ type ClientDetail = {
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [c, agency] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency()]);
+  const [c, agency, settings] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' }))]);
+  const home = settings.country ?? 'AU';
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   return (
     <>
@@ -49,9 +51,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
             <form action={addFacility.bind(null, c.id)} className="form-row" style={{ marginTop: 12 }}>
               <label>Name<input name="name" required maxLength={200} placeholder="e.g. Northside Private Hospital" /></label>
               <label>Street address<input name="addressLine" maxLength={200} /></label>
-              <label>Suburb<input name="suburb" maxLength={100} /></label>
-              <label>State<select name="state" defaultValue="VIC">{STATES.map(s => <option key={s}>{s}</option>)}</select></label>
-              <label>Postcode<input name="postcode" maxLength={4} inputMode="numeric" /></label>
+              <PlaceFields homeCountry={home} />
               <label>Phone<input name="phone" maxLength={30} /></label>
               <button type="submit" className="btn">Add facility</button>
             </form>

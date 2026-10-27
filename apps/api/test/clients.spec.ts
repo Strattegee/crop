@@ -89,4 +89,25 @@ describe('clients, facilities and areas', () => {
     const moved = await http().patch(`/facilities/${f.id}`).set(as('admin')).send({ state: 'NSW', suburb: 'Broken Hill', timezone: 'Australia/Broken_Hill' }).expect(200);
     expect(moved.body).toMatchObject({ state: 'NSW', timezone: 'Australia/Broken_Hill' });
   });
+
+  it('handles sites in other countries: region, postcode and time zone follow the country', async () => {
+    // A US site: state from the list, time zone from the state, ZIP code.
+    const la = await http().post('/facilities').set(as('admin')).send({ name: 'LA Warehouse', country: 'US', state: 'ca', postcode: '90012' }).expect(201);
+    expect(la.body).toMatchObject({ country: 'US', state: 'CA', timezone: 'America/Los_Angeles', postcode: '90012' });
+    await http().post('/facilities').set(as('admin')).send({ name: 'Bad ZIP', country: 'US', state: 'NY', postcode: '3000' }).expect(400);
+    await http().post('/facilities').set(as('admin')).send({ name: 'Bad state', country: 'US', state: 'VIC' }).expect(400);
+    // A UK site: free-text county, postcode tidied, London time.
+    const uk = await http().post('/facilities').set(as('admin')).send({ name: 'Leeds Depot', country: 'GB', state: 'West Yorkshire', postcode: 'ls11ur' }).expect(201);
+    expect(uk.body).toMatchObject({ country: 'GB', state: 'West Yorkshire', postcode: 'LS1 1UR', timezone: 'Europe/London' });
+    await http().post('/facilities').set(as('admin')).send({ name: 'Nope', country: 'FR' }).expect(400);
+    // The business moves to New Zealand: new sites default to NZ and Auckland time.
+    await http().patch('/settings').set(as('admin')).send({ country: 'NZ', timezone: 'Pacific/Auckland' }).expect(200);
+    expect((await http().get('/settings').set(as('admin')).expect(200)).body).toMatchObject({ country: 'NZ', timezone: 'Pacific/Auckland' });
+    const nz = await http().post('/facilities').set(as('admin')).send({ name: 'Auckland Kitchen', state: 'Auckland', postcode: '1010' }).expect(201);
+    expect(nz.body).toMatchObject({ country: 'NZ', state: 'Auckland', timezone: 'Pacific/Auckland' });
+    // Moving a site to another country clears the old state and postcode and moves the time zone.
+    const moved = await http().patch(`/facilities/${la.body.id}`).set(as('admin')).send({ country: 'AU', state: 'WA' }).expect(200);
+    expect(moved.body).toMatchObject({ country: 'AU', state: 'WA', postcode: null, timezone: 'Australia/Perth' });
+    await http().patch('/settings').set(as('admin')).send({ country: 'ZZ' }).expect(400);
+  });
 });
