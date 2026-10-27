@@ -11,12 +11,12 @@ import { applyPackTerms } from '../terms/terms.controller.js';
 
 const summary = (p: IndustryPack) => ({
   id: p.id, name: p.name, description: p.description,
-  counts: { roles: p.roles.length, credentials: p.credentials.length, shiftCodes: p.shiftCodes.length, equipmentTypes: p.equipmentTypes.length, items: p.items.length },
+  counts: { roles: p.roles.length, credentials: p.credentials.length, shiftCodes: p.shiftCodes.length, equipmentTypes: p.equipmentTypes.length, items: p.items.length, duties: p.duties.length },
 });
 
 /** Adds what's missing from a pack, matched by name (or code). Returns how many of each were added. */
 async function applyPack(db: PoolClient, tenantId: string, userId: string, pack: IndustryPack) {
-  const added = { roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, words: 0 };
+  const added = { roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, duties: 0, words: 0 };
   const typeIds = new Map<string, string>();
   for (const cr of pack.credentials) {
     const found = (await db.query<{ id: string }>('select id from credential_types where lower(name) = lower($1) limit 1', [cr.name])).rows[0];
@@ -60,6 +60,20 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
        values ($1,$2,$3,$4,$5,$6,$7) on conflict do nothing`,
       [tenantId, it.name, it.category, it.unit, it.costCents, it.category !== 'fuel', it.reorderLevel ?? null]);
     added.items += r.rowCount ?? 0;
+  }
+  // Shift duties: added with what they need only when the business has no duty of that name (theirs is never changed).
+  for (const d of pack.duties) {
+    const r = (await db.query<{ id: string }>(
+      `insert into shift_duties(tenant_id, name, description) values ($1,$2,$3) on conflict do nothing returning id`,
+      [tenantId, d.name, d.description])).rows[0];
+    if (!r) continue;
+    added.duties++;
+    for (const [list, severity] of [[d.must ?? [], 'hard'], [d.should ?? [], 'warning']] as const) {
+      for (const name of list) {
+        const typeId = typeIds.get(name);
+        if (typeId) await db.query('insert into shift_duty_requirements(tenant_id, duty_id, credential_type_id, severity) values ($1,$2,$3,$4) on conflict do nothing', [tenantId, r.id, typeId, severity]);
+      }
+    }
   }
   added.words = await applyPackTerms(db, tenantId, pack.id, userId);
   await db.query(

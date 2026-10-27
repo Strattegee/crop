@@ -225,10 +225,11 @@ export default async function RosterPage({ searchParams }: {
   let offers: Offer[] = [];
   let equipCandidates: EquipCandidate[] = [];
   let panelError: string | null = null;
-  const [shiftHistory, duties] = selected ? await Promise.all([
-    api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]),
+  // Duties are needed by the shift panel and the Add shifts form.
+  const [shiftHistory, duties] = await Promise.all([
+    selected ? api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     api<Duty[]>('/shift-duties').catch(() => [] as Duty[]),
-  ]) : [[] as Change[], [] as Duty[]];
+  ]);
   if (selected && selected.status !== 'cancelled') {
     try {
       const [bank, all, eq] = await Promise.all([
@@ -523,6 +524,16 @@ export default async function RosterPage({ searchParams }: {
             </fieldset>
             <label style={{ flex: '0 1 110px' }}>People<input name="quantity" type="number" min={1} max={20} defaultValue={1} /></label>
             <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />Equipment only</label>
+            {duties.some(d => d.active) && (
+              <fieldset className="weekdays">
+                <legend>Duties <Link href="/settings/shift-duties" className="muted small">(change duties)</Link></legend>
+                {duties.filter(d => d.active).map(d => (
+                  <label key={d.id} className="inline" title={d.requirements.length ? `Needs ${d.requirements.map(r => r.typeName).join(', ')}` : undefined}>
+                    <input type="checkbox" name="dutyIds" value={d.id} />{d.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <button type="submit" className="btn">Add</button>
           </form>
         )}

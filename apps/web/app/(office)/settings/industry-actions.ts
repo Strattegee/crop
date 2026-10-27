@@ -18,7 +18,7 @@ export async function applyPack(id: string) {
   await attempt('/settings', async () => {
     added = (await api<{ added: Added }>(`/industry-packs/${id}/apply`, { method: 'POST' })).added;
     revalidatePath('/', 'layout');
-  }, 'Template applied. Adjust roles, rules, shift codes, equipment and items to suit the business.');
+  }, 'Template applied. Adjust roles, rules, shift types, shift duties, equipment and items to suit the business.');
   void added;
 }
 

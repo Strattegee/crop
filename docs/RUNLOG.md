@@ -180,3 +180,9 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: shift duties (first slice). Settings now has "Shift duties": a business lists things a shift can involve, such as "Serves alcohol" or "Food safety supervisor", and what each needs (for example an RSA, must have or should have). In the roster's shift panel the office ticks the duties for that shift, and the cards show them. Whoever works the shift must also meet its duties, so someone whose RSA has run out can still work a shift with no bar service, but can't be put on one that serves alcohol (the reason says so). Adding a duty to a shift someone is already on tells the office if they no longer meet it. Duty changes appear in the shift's history and follow the after-publishing setting; templates and copied weeks keep the duties.
 - Next: duties in the industry templates and when adding shifts, the "one food safety supervisor on every shift" site rule, then a Needs attention count on the Dashboard.
 - Waiting on David: nothing new.
+
+## 2026-10-28 early morning, 12:20am Melbourne (scheduled run)
+
+- Shipped: shift duties in the industry templates and when adding shifts (next slice of shift duties). Each industry template now brings the duties that business usually needs, with the credentials each one requires: for example a café gets "Serves alcohol" (needs an RSA), "Food safety supervisor", "Handles food" and "First aid officer"; construction gets "Works at heights", "Confined space work" and "Asbestos area". A duty the business already has under the same name is left as it is. On the roster, the Add shifts form now has a Duties tick list, so a block of bar shifts can be made with "Serves alcohol" on every one in one go.
+- Next: the "at least one food safety supervisor on every shift" site rule, then a Needs attention count on the Dashboard.
+- Waiting on David: nothing new.

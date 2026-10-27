@@ -16,6 +16,8 @@ describe('industry packs: content', () => {
       const names = new Set(p.credentials.map(c => c.name));
       expect(names.size, `${p.id}: duplicate credential`).toBe(p.credentials.length);
       for (const r of p.roles) for (const n of [...(r.must ?? []), ...(r.should ?? [])]) expect(names.has(n), `${p.id} ${r.name}: ${n}`).toBe(true);
+      for (const d of p.duties) for (const n of [...(d.must ?? []), ...(d.should ?? [])]) expect(names.has(n), `${p.id} duty ${d.name}: ${n}`).toBe(true);
+      expect(new Set(p.duties.map(d => d.name.toLowerCase())).size, `${p.id}: duplicate duty`).toBe(p.duties.length);
       for (const e of p.equipmentTypes) if (e.operatorCredential) expect(names.has(e.operatorCredential), `${p.id} ${e.name}`).toBe(true);
       expect(new Set(p.roles.map(r => r.name)).size).toBe(p.roles.length);
       expect(new Set(p.shiftCodes.map(s => s.code)).size).toBe(p.shiftCodes.length);
@@ -29,6 +31,15 @@ describe('industry packs: content', () => {
       const sig = JSON.stringify([c.category, c.number, c.expiry]);
       if (seen.has(c.name)) expect(sig, c.name).toBe(seen.get(c.name));
       else seen.set(c.name, sig);
+    }
+  });
+
+  it('a duty shared by several packs is described the same way in each', () => {
+    const seen = new Map<string, string>();
+    for (const p of PACKS) for (const d of p.duties) {
+      const sig = JSON.stringify([d.description, d.must ?? [], d.should ?? []]);
+      if (seen.has(d.name)) expect(sig, d.name).toBe(seen.get(d.name));
+      else seen.set(d.name, sig);
     }
   });
 });
@@ -75,10 +86,10 @@ describe('industry packs: applying', () => {
 
     const c = await http().post('/industry-packs/construction/apply').set(as('admin')).expect(200);
     const pack = PACKS.find(p => p.id === 'construction')!;
-    expect(c.body.added).toMatchObject({ roles: pack.roles.length, credentials: pack.credentials.length, equipmentTypes: pack.equipmentTypes.length, items: pack.items.length });
+    expect(c.body.added).toMatchObject({ roles: pack.roles.length, credentials: pack.credentials.length, equipmentTypes: pack.equipmentTypes.length, items: pack.items.length, duties: pack.duties.length });
 
     const again = await http().post('/industry-packs/construction/apply').set(as('admin')).expect(200);
-    expect(again.body.added).toEqual({ roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, words: 0 });
+    expect(again.body.added).toEqual({ roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, duties: 0, words: 0 });
 
     // Labour hire shares the forklift licence, White Card and others: they aren't added twice.
     const l = await http().post('/industry-packs/labour-hire/apply').set(as('admin')).expect(200);
@@ -86,6 +97,8 @@ describe('industry packs: applying', () => {
     const shared = lh.credentials.filter(x => pack.credentials.some(y => y.name === x.name)).length;
     expect(shared).toBeGreaterThan(2);
     expect(l.body.added.credentials).toBe(lh.credentials.length - shared);
+    // "First aid officer" is in both: added once.
+    expect(l.body.added.duties).toBe(lh.duties.length - 1);
 
     // Equipment types carry their operator licence, and roles show up.
     const types = await http().get('/equipment-types').set(as('alloc')).expect(200);
@@ -113,6 +126,25 @@ describe('industry packs: applying', () => {
     expect(saved.body.find((x: { code: number }) => x.code === 1050)).toMatchObject({ singular: 'Credential' }); // reset to default
     const theirs = await http().get('/terms').set(as('other')).expect(200);
     expect(theirs.body.find((x: { code: number }) => x.code === 1010)).toMatchObject({ singular: 'Worker' });
+  });
+
+  it('adds shift duties with what they need, and never changes a duty the business already has', async () => {
+    // The other business already has its own "Serves alcohol" with no requirements.
+    await http().post('/shift-duties').set(as('other')).send({ name: 'serves alcohol', description: 'Ours' }).expect(201);
+    const r = await http().post('/industry-packs/hospitality/apply').set(as('other')).expect(200);
+    const hosp = PACKS.find(p => p.id === 'hospitality')!;
+    expect(r.body.added.duties).toBe(hosp.duties.length - 1);
+    const duties = (await http().get('/shift-duties').set(as('other')).expect(200)).body as { name: string; description: string; requirements: { typeName: string; severity: string }[] }[];
+    const ours = duties.find(d => d.name === 'serves alcohol')!;
+    expect(ours).toMatchObject({ description: 'Ours', requirements: [] });
+    const handles = duties.find(d => d.name === 'Handles food')!;
+    expect(handles.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ typeName: 'Food Handler Training', severity: 'hard' }),
+      expect.objectContaining({ typeName: 'Allergen Awareness Training', severity: 'warning' }),
+    ]));
+    // Duties stay with their own business.
+    const hire = (await http().get('/shift-duties').set(as('admin')).expect(200)).body as { name: string }[];
+    expect(hire.some(d => d.name === 'Handles food')).toBe(false);
   });
 
   it('a business can add its own role', async () => {
