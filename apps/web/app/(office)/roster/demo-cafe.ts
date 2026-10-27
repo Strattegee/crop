@@ -1,7 +1,8 @@
 /**
  * Staging demo: "The Grand Café", a large café in Victoria. Every person is invented; certificate numbers are
  * DEMO placeholders. Roles and requirements are an example employer configuration, not legal requirements.
- * Built only through the public API, so the demo exercises the same rules as real use.
+ * Built only through the public API, so the demo exercises the same rules as real use. Evening shifts carry the
+ * "Serves alcohol" duty and the site has a food safety supervisor cover rule, so both show in the demo.
  */
 import { api } from '../../../lib/api';
 import { completeDemoCredentials } from '../demo-tools';
@@ -95,7 +96,7 @@ const EXCEPTIONS: Record<string, Record<string, 'missing' | number>> = {
   'Hamish Kerr': { 'Driver Licence (Car)': 20 },
 };
 
-type ShiftSpec = { area: string; code: string; role: string; days: number[]; qty?: number; leaveOpen?: number[] };
+type ShiftSpec = { area: string; code: string; role: string; days: number[]; qty?: number; leaveOpen?: number[]; duties?: string[] };
 
 export async function loadCafeDemo(week: string, today: string) {
   const site = (await post('/facilities', { name: 'The Grand Café', state: 'VIC', suburb: 'Fitzroy', addressLine: '1 Example Street', postcode: '3065' })).id;
@@ -150,6 +151,18 @@ export async function loadCafeDemo(week: string, today: string) {
   // The business may already have its own rules (e.g. a police check for everyone): meet those too.
   await completeDemoCredentials({ workerIds: Object.values(ids).map(p => p.id), businessWideOnly: true });
 
+  // Shift duties: evening shifts serve alcohol, so whoever works them needs a current RSA (Alex Rivera's has run out,
+  // so he can work days but not the bar). A business that already has the duty (from an industry template) keeps its own.
+  const duties: Record<string, string> = {};
+  const existingDuties = await api<{ id: string; name: string; active: boolean }[]>('/shift-duties').catch(() => []);
+  const serves = existingDuties.find(x => x.name.toLowerCase() === 'serves alcohol' && x.active);
+  duties['Serves alcohol'] = serves?.id ?? (await post('/shift-duties', {
+    name: 'Serves alcohol', description: 'Bar service on this shift', requirements: [{ credentialTypeId: types['Responsible Service of Alcohol (RSA)'], severity: 'hard' }],
+  })).id;
+  // Cover rule: a food safety supervisor whenever anyone is working. The head chef and manager cover weekdays;
+  // late and weekend shifts show as cover gaps on the roster.
+  await post('/cover-rules', { credentialTypeId: types['Food Safety Supervisor Certificate'], facilityId: site }).catch(() => undefined);
+
   // Equipment and consumables.
   const vanType = (await post('/equipment-types', { name: 'Van', operatorCredentialTypeId: types['Driver Licence (Car)'] })).id;
   const espressoType = (await post('/equipment-types', { name: 'Espresso machine' })).id;
@@ -176,14 +189,14 @@ export async function loadCafeDemo(week: string, today: string) {
   const plan: ShiftSpec[] = [
     { area: 'Back Office', code: 'OFFICE', role: 'General Manager', days: wk },
     { area: 'Front of House', code: 'EARLY', role: 'Duty Manager', days: all },
-    { area: 'Front of House', code: 'CLOSE', role: 'Duty Manager', days: late },
+    { area: 'Front of House', code: 'CLOSE', role: 'Duty Manager', days: late, duties: ['Serves alcohol'] },
     { area: 'Front of House', code: 'MID', role: 'FOH Supervisor', days: all },
     { area: 'Coffee Bar', code: 'EARLY', role: 'Head Barista', days: wk },
     { area: 'Coffee Bar', code: 'EARLY', role: 'Barista', days: all, qty: 2, leaveOpen: [6] },
     { area: 'Coffee Bar', code: 'MID', role: 'Barista', days: weekend },
     { area: 'Front of House', code: 'EARLY', role: 'Waitstaff', days: all, qty: 2 },
     { area: 'Front of House', code: 'MID', role: 'Waitstaff', days: all, qty: 2, leaveOpen: [5] },
-    { area: 'Front of House', code: 'CLOSE', role: 'Waitstaff', days: late, qty: 2, leaveOpen: [4] },
+    { area: 'Front of House', code: 'CLOSE', role: 'Waitstaff', days: late, qty: 2, leaveOpen: [4], duties: ['Serves alcohol'] },
     { area: 'Front of House', code: 'MID', role: 'Food Runner', days: all },
     { area: 'Kitchen', code: 'K-AM', role: 'Head Chef', days: wk },
     { area: 'Kitchen', code: 'K-AM', role: 'Sous Chef', days: weekend },
@@ -202,6 +215,7 @@ export async function loadCafeDemo(week: string, today: string) {
     for (const d of s.days) {
       const res = await post<{ ids: string[] }>('/shifts', {
         facilityId: site, areaId: areaIds[s.area], shiftCodeId: codes[s.code], role: s.role, date: addDays(week, d), quantity: s.qty ?? 1,
+        dutyIds: (s.duties ?? []).map(x => duties[x]),
       });
       if (s.leaveOpen?.includes(d)) open.add(res.ids[res.ids.length - 1]);
     }

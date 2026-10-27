@@ -206,3 +206,9 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: the Workers list shows how each person is employed today (full-time, part-time, casual or bank, with hours a week) and has an Employment filter, including "Not recorded".
 - Next: start and end of employment on the employment record, or duties in the café demo.
 - Waiting on David: nothing new.
+
+## 2026-10-28 morning, 9:30am Melbourne (scheduled run, second piece)
+
+- Shipped: the café demo now shows shift duties and cover rules. Its evening shifts (duty manager and waitstaff closing) carry "Serves alcohol", which needs an RSA, so Alex, whose RSA has run out, can work days but not the bar. The café also has a rule that a food safety supervisor must be on whenever anyone is working: the head chef and manager cover weekdays, and the late and weekend shifts show up as cover gaps on the roster and in Needs attention.
+- Next: start and end of employment on the employment record.
+- Waiting on David: nothing new.
