@@ -4,17 +4,19 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { bool, date, text } from '../common/validate.js';
+import { bool, date, int, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { randomUUID } from 'node:crypto';
 import { equipmentForShift } from './equipment-data.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
-import { applySummary, firstReason, planWeek, type ApplyResult, type LeftOpen, type PlannedShift, type Slot } from './templates.js';
+import { applySummary, copyWeeksSummary, firstReason, MAX_COPY_WEEKS, planWeek, weekPairs, type ApplyResult, type LeftOpen, type PlannedShift, type Slot } from './templates.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SHIFTS = 400;
+/** The most shifts copied in one go when copying several weeks. */
+const MAX_COPY_SHIFTS = 1000;
 
 function siteField(body: Record<string, unknown>): string {
   const v = body?.facilityId;
@@ -270,6 +272,48 @@ export class RosterTemplatesController {
       if (!slots.length) throw new BadRequestException(`There are no shifts at ${f.name} in the week of ${fromWeek} to copy`);
       const r = await createFromSlots(db, t.tenantId, auth, f, toWeek, slots, people, equipment);
       return { ...r, fromWeek, weekStart: toWeek, facilityId: f.id, summary: applySummary(r) };
+    });
+  }
+
+  /**
+   * Copies a run of weeks (for example a month: the four or five weeks starting in it) into the same number of
+   * weeks starting `toWeek` (by default straight after them). Same rules as copying one week, all or nothing:
+   * every week copied into must not be over and (unless `addToExisting`) must have no shifts yet. Source weeks
+   * with no shifts are skipped and named in the result.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('roster/copy-weeks')
+  @HttpCode(200)
+  copyWeeks(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
+    const facilityId = siteField(body);
+    const fromWeek = weekField(body, 'fromWeek')!;
+    const weeks = int(body, 'weeks', 1, MAX_COPY_WEEKS) ?? 4;
+    const toWeek = weekField(body, 'toWeek', false) ?? addDays(fromWeek, 7 * weeks);
+    const plan = weekPairs(fromWeek, weeks, toWeek);
+    if ('error' in plan) throw new BadRequestException(plan.error);
+    const people = bool(body, 'people') ?? true;
+    const equipment = bool(body, 'equipment') ?? true;
+    const addToExisting = bool(body, 'addToExisting') ?? false;
+    return this.tx(t, auth, async db => {
+      const f = await site(db, facilityId);
+      // Check every week first, so a refusal part-way through never leaves half a month copied.
+      for (const p of plan.pairs) await checkTarget(db, f, p.to, addToExisting);
+      const sources = [];
+      for (const p of plan.pairs) sources.push({ ...p, slots: await slotsFromWeek(db, facilityId, p.from) });
+      const total = sources.reduce((n, s) => n + s.slots.length, 0);
+      if (!total) throw new BadRequestException(`There are no shifts at ${f.name} in those weeks to copy`);
+      if (total > MAX_COPY_SHIFTS) throw new BadRequestException(`That would add more than ${MAX_COPY_SHIFTS} shifts. Copy fewer weeks at a time.`);
+      const r: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
+      const done: Array<{ from: string; to: string; created: number; assigned: number }> = [];
+      for (const s of sources) {
+        if (!s.slots.length) { done.push({ from: s.from, to: s.to, created: 0, assigned: 0 }); continue; }
+        const w = await createFromSlots(db, t.tenantId, auth, f, s.to, s.slots, people, equipment);
+        r.created += w.created; r.assigned += w.assigned; r.equipmentBooked += w.equipmentBooked;
+        r.leftOpen.push(...w.leftOpen); r.equipmentLeftOff.push(...w.equipmentLeftOff);
+        done.push({ from: s.from, to: s.to, created: w.created, assigned: w.assigned });
+      }
+      const emptyWeeks = done.filter(w => !w.created).map(w => w.from);
+      return { ...r, fromWeek, toWeek, facilityId: f.id, weeks: done, emptyWeeks, summary: copyWeeksSummary({ ...r, weeks: done, emptyWeeks }) };
     });
   }
 }

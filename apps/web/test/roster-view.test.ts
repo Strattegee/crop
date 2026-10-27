@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, parseSpan, rangeFor, tickLabel, weeksOf,
+  anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, parseSpan, rangeFor, tickLabel, weeksOf, monthCopyWeeks,
 } from '../app/(office)/roster/view';
 
 const TODAY = '2026-10-28'; // a Wednesday
@@ -114,5 +114,11 @@ describe('day timeline lanes and month week states', () => {
     expect(weekStateLabel([row('draft'), row('live')])).toEqual({ cls: 'draft', text: '1 of 2 sites in draft' });
     expect(weekStateLabel([row('live', 2), row('live', 1)])).toEqual({ cls: 'live', text: 'Live · 3 changes since' });
     expect(weekStateLabel([row('live')])).toEqual({ cls: 'live', text: 'Live' });
+  });
+
+  it('finds the weeks of a month to copy, and where the copy goes', () => {
+    expect(monthCopyWeeks('2026-10-27')).toEqual({ mondays: ['2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26'], nextWeek: '2026-11-02' });
+    expect(monthCopyWeeks('2026-11-01').mondays).toEqual(['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30']);
+    expect(monthCopyWeeks('2027-02-01')).toEqual({ mondays: ['2027-02-01', '2027-02-08', '2027-02-15', '2027-02-22'], nextWeek: '2027-03-01' });
   });
 });

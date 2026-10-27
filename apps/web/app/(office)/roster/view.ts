@@ -193,3 +193,16 @@ export function weekStateLabel(rows: { state: 'draft' | 'live' | 'history'; shif
   if (drafts) return { cls: 'draft', text: `${drafts} of ${shown.length} sites in draft` };
   return { cls: 'live', text: changes ? `Live · ${changes} ${changes === 1 ? 'change' : 'changes'} since` : 'Live' };
 }
+
+/**
+ * The weeks of a month for copying it: the Mondays that fall in the month (four or five), and the Monday
+ * straight after the last of them, where the copy goes by default.
+ */
+export function monthCopyWeeks(anyDayInMonth: string): { mondays: string[]; nextWeek: string } {
+  const first = monthStart(anyDayInMonth);
+  let m = mondayOf(first);
+  if (m < first) m = addDays(m, 7);
+  const mondays: string[] = [];
+  for (; m.slice(0, 7) === first.slice(0, 7); m = addDays(m, 7)) mondays.push(m);
+  return { mondays, nextWeek: m };
+}

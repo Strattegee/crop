@@ -65,3 +65,37 @@ export function firstReason(blocks: { message: string }[]): string {
   const m = blocks[0]?.message ?? 'not eligible';
   return m.replace(/\.$/, '');
 }
+
+/** The most weeks copied in one go (a month is four or five). */
+export const MAX_COPY_WEEKS = 6;
+
+/**
+ * Pairs each source week with the week it is copied into, for copying a run of weeks (e.g. a month).
+ * Source week i (from `fromWeek`) goes to `toWeek` + i weeks. Both must be Mondays. Returns the reason in
+ * plain words when the two runs overlap, since copying a week onto itself or onto a week still to be copied
+ * would double shifts.
+ */
+export function weekPairs(fromWeek: string, weeks: number, toWeek: string): { pairs: Array<{ from: string; to: string }> } | { error: string } {
+  if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_COPY_WEEKS) return { error: `Choose from 1 to ${MAX_COPY_WEEKS} weeks to copy` };
+  const pairs = Array.from({ length: weeks }, (_, i) => ({ from: addDays(fromWeek, 7 * i), to: addDays(toWeek, 7 * i) }));
+  const sources = new Set(pairs.map(p => p.from));
+  if (pairs.some(p => sources.has(p.to))) {
+    return { error: 'The weeks you are copying into overlap the weeks you are copying from. Choose a later start.' };
+  }
+  return { pairs };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "14 Jun" (written out, as Intl spells some short months in full). */
+const dm = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
+
+/** The office's confirmation after copying several weeks: the totals, then the same detail as a single week. */
+export function copyWeeksSummary(r: ApplyResult & { weeks: Array<{ from: string; to: string; created: number }>; emptyWeeks: string[] }): string {
+  const copied = r.weeks.filter(w => w.created > 0);
+  if (!copied.length) return 'There were no shifts to add.';
+  const span = copied.length === 1 ? `the week of ${dm(copied[0].to)}` : `${copied.length} weeks, from the week of ${dm(copied[0].to)} to the week of ${dm(copied[copied.length - 1].to)}`;
+  const empty = r.emptyWeeks.length
+    ? ` ${r.emptyWeeks.length === 1 ? 'The week of' : 'The weeks of'} ${r.emptyWeeks.map(dm).join(', ')} had no shifts, so nothing was copied from ${r.emptyWeeks.length === 1 ? 'it' : 'them'}.`
+    : '';
+  return `Copied into ${span}. ${applySummary(r)}${empty}`;
+}
