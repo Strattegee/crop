@@ -256,5 +256,6 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-10-29 morning, 6:15am Melbourne (scheduled run)
 
 - Shipped: Steve's covering line. In a shift's panel on the roster, "Covering" picks the person the shift is covering, with the people away that day listed first (on leave, then leave requested). The card then shows "Covering Sandra Example" under the person working it. It never says why they're away (the kind of leave stays private). Setting or clearing it shows in the shift's history and the week's changes, follows the business's rule for changing a published week, and doesn't message anyone; if the person being covered is put back on the shift, the line clears.
-- Next: requirement levels or the credential issuer field, or the worker app once its sign-in is confirmed.
+- Also shipped: who issued a credential. Adding a credential on a person's page has an optional "Issued by" (the licensing body or training provider), shown under the number; changing it on a checked credential sends it back for checking.
+- Next: an edit form for credentials on the person's page, or requirement levels (recorded but never warns), or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held). New question for Steve: is "Covering <name>" enough without the reason?

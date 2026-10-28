@@ -20,7 +20,7 @@ import { T, words } from '../../../../lib/terms';
 export const dynamic = 'force-dynamic';
 
 type Credential = {
-  id: string; typeName: string; number: string | null; issueDate: string | null; expiryDate: string | null;
+  id: string; typeName: string; number: string | null; issuedBy?: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
   documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
@@ -159,7 +159,7 @@ export default async function WorkerPage({ params, searchParams }: {
               {w.credentials.map(c => (
                 <tr key={c.id}>
                   <td>{c.typeName}</td>
-                  <td>{c.number ?? '—'}</td>
+                  <td>{c.number ?? '—'}{c.issuedBy && <div className="muted small">Issued by {c.issuedBy}</div>}</td>
                   <td>{formatDate(c.expiryDate)}</td>
                   <td><Badge label={CREDENTIAL_STATUS_LABEL[c.status]} /></td>
                   <td style={{ minWidth: 200 }}>

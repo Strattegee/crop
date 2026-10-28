@@ -19,6 +19,7 @@ export function AddCredentialForm({ types, action }: { types: CredentialType[]; 
       {(!type || type.hasNumber) && (
         <label>Number{type && <span className="muted"> (required)</span>}<input name="number" maxLength={100} required={!!type?.hasNumber} /></label>
       )}
+      <label>Issued by <span className="muted">(optional)</span><input name="issuedBy" maxLength={120} placeholder="e.g. the licensing body or training provider" /></label>
       <label>Issued <span className="muted">(optional)</span><input name="issueDate" type="date" /></label>
       {(!type || type.hasExpiry) && (
         <label>Expires{type && <span className="muted"> (required)</span>}<input name="expiryDate" type="date" required={!!type?.hasExpiry} /></label>

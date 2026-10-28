@@ -51,7 +51,7 @@ export async function addCredential(workerId: string, f: FormData) {
   await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/credentials`, {
     method: 'POST',
     body: {
-      credentialTypeId: str(f, 'credentialTypeId'), number: str(f, 'number'),
+      credentialTypeId: str(f, 'credentialTypeId'), number: str(f, 'number'), issuedBy: str(f, 'issuedBy'),
       issueDate: str(f, 'issueDate'), expiryDate: str(f, 'expiryDate'), notes: str(f, 'notes'),
     },
   }), 'Credential added. It needs verifying before it counts.');
