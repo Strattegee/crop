@@ -17,7 +17,7 @@ const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastN
   w.email, w.phone, w.status, w.roles, w.notes, w.created_at as "createdAt"`;
 const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name as "typeName", t.category,
   t.verification_method as "verificationMethod", t.verification_url as "verificationUrl",
-  c.number, to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
+  c.number, c.issued_by as "issuedBy", to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
   c.evidence, c.verification, c.verified_at as "verifiedAt", c.verification_note as "verificationNote",
   c.rejection_reason as "rejectionReason", c.notes, c.updated_at as "updatedAt"`;
 
@@ -171,9 +171,9 @@ export class WorkersController {
       if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
       if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this credential');
       const row = (await db.query<{ id: string }>(
-        `insert into worker_credentials(tenant_id, worker_id, credential_type_id, number, issue_date, expiry_date, notes)
-         values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-        [t.tenantId, workerId, typeId, fields.number, fields.issueDate, fields.expiryDate, fields.notes],
+        `insert into worker_credentials(tenant_id, worker_id, credential_type_id, number, issue_date, expiry_date, notes, issued_by)
+         values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+        [t.tenantId, workerId, typeId, fields.number, fields.issueDate, fields.expiryDate, fields.notes, fields.issuedBy],
       )).rows[0];
       await event(db, t.tenantId, row.id, auth.userId, 'created', fields);
       return getCredential(db, workerId, row.id);
@@ -191,21 +191,22 @@ export class WorkersController {
     const fields = credentialFields(body);
     const has = (k: string) => Boolean(body && k in body);
     return withTenant(this.pool, t.tenantId, async db => {
-      const before = (await db.query<{ number: string | null; issue: string | null; expiry: string | null; verification: string }>(
-        `select number, to_char(issue_date,'YYYY-MM-DD') as issue, to_char(expiry_date,'YYYY-MM-DD') as expiry, verification
+      const before = (await db.query<{ number: string | null; issuedBy: string | null; issue: string | null; expiry: string | null; verification: string }>(
+        `select number, issued_by as "issuedBy", to_char(issue_date,'YYYY-MM-DD') as issue, to_char(expiry_date,'YYYY-MM-DD') as expiry, verification
            from worker_credentials where id = $1 and worker_id = $2`, [credentialId, workerId],
       )).rows[0];
       if (!before) throw new NotFoundException('credential not found');
       const next = {
         number: has('number') ? fields.number : before.number,
+        issuedBy: has('issuedBy') ? fields.issuedBy : before.issuedBy,
         issueDate: has('issueDate') ? fields.issueDate : before.issue,
         expiryDate: has('expiryDate') ? fields.expiryDate : before.expiry,
       };
       if (next.issueDate && next.expiryDate && next.expiryDate < next.issueDate) throw new BadRequestException('Expiry date must be on or after the issue date');
-      const factsChanged = next.number !== before.number || next.issueDate !== before.issue || next.expiryDate !== before.expiry;
+      const factsChanged = next.number !== before.number || next.issuedBy !== before.issuedBy || next.issueDate !== before.issue || next.expiryDate !== before.expiry;
       const reset = factsChanged && before.verification !== 'unverified';
       await db.query(
-        `update worker_credentials set number = $3, issue_date = $4, expiry_date = $5,
+        `update worker_credentials set number = $3, issue_date = $4, expiry_date = $5, issued_by = $9,
            notes = case when $6::boolean then $7 else notes end,
            verification = case when $8 then 'unverified'::verification_status else verification end,
            verified_by = case when $8 then null else verified_by end, verified_at = case when $8 then null else verified_at end,
@@ -213,7 +214,7 @@ export class WorkersController {
            rejection_reason = case when $8 then null else rejection_reason end,
            updated_at = now()
          where id = $1 and worker_id = $2`,
-        [credentialId, workerId, next.number, next.issueDate, next.expiryDate, has('notes'), fields.notes, reset],
+        [credentialId, workerId, next.number, next.issueDate, next.expiryDate, has('notes'), fields.notes, reset, next.issuedBy],
       );
       await event(db, t.tenantId, credentialId, auth.userId, 'updated', { ...next, ...(has('notes') ? { notes: fields.notes } : {}) });
       if (reset) await event(db, t.tenantId, credentialId, auth.userId, 'verification_reset', { reason: 'details changed' });
@@ -279,6 +280,7 @@ export class WorkersController {
 function credentialFields(body: Record<string, unknown>) {
   const f = {
     number: text(body, 'number', { max: 100 }),
+    issuedBy: text(body, 'issuedBy', { max: 120 }),
     issueDate: date(body, 'issueDate'),
     expiryDate: date(body, 'expiryDate'),
     notes: text(body, 'notes', { max: 2000 }),

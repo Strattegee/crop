@@ -155,4 +155,24 @@ describe('workers, credentials and compliance', () => {
     const res = await http().patch('/settings').set(as('admin')).send({ expiringWindowDays: 5 }).expect(200);
     expect(res.body).toEqual({ expiringWindowDays: 5, timezone: 'Australia/Melbourne', country: 'AU', smsMonthlyCap: 2000, minRestHours: 10, publishedChanges: 'open' });
   });
+
+  it('records who issued a credential; changing it on a checked credential needs checking again', async () => {
+    const who = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Ivy', lastName: 'Example', roles: ['RN'] }).expect(201)).body.id;
+    const base = `/workers/${who}/credentials`;
+    const long = await http().post(base).set(as('alloc')).send({ credentialTypeId: types['National Police Check'], number: 'NPC-1', expiryDate: addDays(today, 400), issuedBy: 'x'.repeat(121) }).expect(400);
+    expect(long.body.message).toMatch(/Issued by/);
+    const c = (await http().post(base).set(as('alloc'))
+      .send({ credentialTypeId: types['National Police Check'], number: 'NPC-1', expiryDate: addDays(today, 400), issuedBy: '  Example Checks Pty Ltd ' }).expect(201)).body;
+    expect(c.issuedBy).toBe('Example Checks Pty Ltd');
+    await http().post(`${base}/${c.id}/verify`).set(as('admin')).send({}).expect(201);
+    // Saving the same issuer (or only notes) keeps it checked.
+    const same = await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ issuedBy: 'Example Checks Pty Ltd', notes: 'Seen' }).expect(200);
+    expect(same.body).toMatchObject({ verification: 'verified', issuedBy: 'Example Checks Pty Ltd' });
+    const changed = await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ issuedBy: 'Another Example Body' }).expect(200);
+    expect(changed.body).toMatchObject({ verification: 'unverified', issuedBy: 'Another Example Body' });
+    const cleared = await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ issuedBy: '' }).expect(200);
+    expect(cleared.body.issuedBy).toBeNull();
+    const w = await http().get(`/workers/${who}`).set(as('alloc')).expect(200);
+    expect(w.body.credentials[0]).toHaveProperty('issuedBy', null);
+  });
 });
