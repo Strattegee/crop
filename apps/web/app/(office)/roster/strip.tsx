@@ -9,7 +9,8 @@ export type StripPerson = {
 };
 export type StripEquip = { id: string; name: string; typeName: string; status: string; hours: number; fit?: 'ready' | 'warn' | 'blocked'; fitNote?: string };
 export type StripItem = { id: string; name: string; category: string; unit: string; onHand: number | null; low: boolean };
-type Labels = { people: string; equipment: string; items: string; person: string; role: string };
+/** The business's words (Settings → Words we use), passed from the server page. */
+type Labels = { people: string; equipment: string; items: string; person: string; role: string; roles: string; shift: string; sites: string };
 
 const fmt = (n: number) => (Math.round(n * 10) / 10).toString();
 const DRAG = 'application/x-crop-resource';
@@ -53,7 +54,7 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
         <>
           <div className="strip-filters">
             <select value={role} onChange={e => setRole(e.target.value)} aria-label={`Filter by ${labels.role.toLowerCase()}`}>
-              <option value="">All {labels.role.toLowerCase()}s</option>
+              <option value="">All {labels.roles.toLowerCase()}</option>
               {roles.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <label className="inline small"><input type="checkbox" checked={available} onChange={e => setAvailable(e.target.checked)} />Has hours left</label>
@@ -79,7 +80,7 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
             ))}
             {shownPeople.length === 0 && <p className="muted small">Nobody matches.</p>}
           </div>
-          <p className="muted small strip-help">{selectedShift ? 'Green can work the selected shift, amber with a warning, grey can’t. ' : ''}Drag a {labels.person.toLowerCase()} onto an open shift to assign them. Bal = contracted hours minus hours rostered. F full-time, P part-time, B bank, C casual.</p>
+          <p className="muted small strip-help">{selectedShift ? `Green can work the selected ${labels.shift.toLowerCase()}, amber with a warning, grey can’t. ` : ''}Drag a {labels.person.toLowerCase()} onto an open {labels.shift.toLowerCase()} to assign them. Bal = contracted hours minus hours rostered. F full-time, P part-time, B bank, C casual.</p>
         </>
       )}
 
@@ -92,7 +93,7 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
             </div>
           ))}
           {equipment.length === 0 && <p className="muted small">No {labels.equipment.toLowerCase()} registered yet.</p>}
-          {equipment.length > 0 && <p className="muted small strip-help">Drag onto a shift to book it. Hours = booked this week.</p>}
+          {equipment.length > 0 && <p className="muted small strip-help">Drag onto a {labels.shift.toLowerCase()} to book it. Hours = booked this week.</p>}
         </div>
       )}
 
@@ -105,7 +106,7 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
             </div>
           ))}
           {items.length === 0 && <p className="muted small">No {labels.items.toLowerCase()} yet.</p>}
-          {items.length > 0 && <p className="muted small strip-help">On hand across all sites; red is at or below the reorder level. Issuing to a shift comes with the shift panel.</p>}
+          {items.length > 0 && <p className="muted small strip-help">On hand across all {labels.sites.toLowerCase()}; red is at or below the reorder level. Add them to a {labels.shift.toLowerCase()} from its panel.</p>}
         </div>
       )}
     </aside>

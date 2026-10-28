@@ -1,6 +1,7 @@
 import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
 import { Badge } from '../../../lib/format';
+import { businessZone, whenIn } from '../../../lib/business';
 import { Notices } from '../notices';
 import { sendTest } from './actions';
 
@@ -15,19 +16,17 @@ type Log = { messages: Message[]; smsThisMonth: number; smsMonthlyCap: number; e
 const STATUS: Record<string, [string, 'ok' | 'warn' | 'bad' | 'neutral']> = {
   queued: ['Queued', 'neutral'], sending: ['Sending', 'neutral'], sent: ['Sent', 'ok'], failed: ['Failed', 'bad'], skipped: ['Not sent', 'warn'],
 };
-const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled', roster_published: 'Roster published', change_request: 'Change request', change_request_decided: 'Change request decided' };
+const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled', roster_published: 'Roster published', change_request: 'Change request', change_request_decided: 'Change request decided', onboarding_request: 'Onboarding request' };
 
-function when(iso: string) {
-  return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(iso));
-}
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
-  const [log, agency, sp] = await Promise.all([api<Log>('/notifications'), currentAgency(), searchParams]);
+  const [log, agency, sp, zone] = await Promise.all([api<Log>('/notifications'), currentAgency(), searchParams, businessZone()]);
+  const when = whenIn(zone);
   const canTest = agency?.role === 'owner' || agency?.role === 'admin';
   return (
     <>
       <h1>Messages</h1>
-      <p className="muted">Every email and text CROP sends for your agency.</p>
+      <p className="muted">Every email and text CROP sends for your business.</p>
       <Notices error={sp.error} done={sp.done} />
 
       <div className="grid">
