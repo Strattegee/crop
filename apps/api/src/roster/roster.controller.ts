@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
@@ -82,7 +82,9 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
               from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
              where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', d.id, 'name', d.name) order by lower(d.name))
-              from shift_duty_links dl join shift_duties d on d.id = dl.duty_id where dl.shift_id = s.id), '[]'::json) as duties`;
+              from shift_duty_links dl join shift_duties d on d.id = dl.duty_id where dl.shift_id = s.id), '[]'::json) as duties,
+  s.covering_worker_id as "coveringWorkerId",
+  (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from workers cw where cw.id = s.covering_worker_id) as "coveringName"`;
 export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
   left join areas a on a.id = s.area_id left join shift_codes sc on sc.id = s.shift_code_id
   left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
@@ -506,6 +508,27 @@ export class ShiftsController {
     const notes = text(body, 'notes', { max: 1000 });
     return this.tx(t, auth, async db => {
       if (!(await db.query('update shifts set notes = $2, updated_at = now() where id = $1', [id, notes])).rowCount) throw new NotFoundException('Shift not found');
+      return shiftById(db, id);
+    });
+  }
+
+  /**
+   * The person this shift is covering (Steve's "T" line, migration 0035), e.g. someone on leave; `workerId: null`
+   * clears it. Logged like any shift change, so the after-publishing rule applies. Never says why they're away.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('shifts/:id/covering')
+  setCovering(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const workerId = uuidField(body ?? {}, 'workerId', 'person');
+    return this.tx(t, auth, async db => {
+      const shift = await shiftById(db, id);
+      if (shift.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
+      if (shift.equipmentOnly) throw new BadRequestException('Nobody works an equipment-only shift, so it can\'t cover anyone');
+      if (workerId) {
+        if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new BadRequestException('Choose a person');
+        if (workerId === shift.workerId) throw new BadRequestException(`${shift.workerName} is working this shift, so it can't be covering them`);
+      }
+      if (shift.coveringWorkerId !== workerId) await db.query('update shifts set covering_worker_id = $2, updated_at = now() where id = $1', [id, workerId]);
       return shiftById(db, id);
     });
   }

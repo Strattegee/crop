@@ -273,3 +273,34 @@ export function shiftItemChoices(items: PanelItem[], stockHere: { itemId: string
   choices.sort((a, b) => Number(a.disabled) - Number(b.disabled) || a.name.localeCompare(b.name));
   return choices.map(({ id, label, disabled }) => ({ id, label, disabled }));
 }
+
+/** Steve's "T" line on a card (migration 0035): the person the shift covers. Never why they're away. */
+export const coveringLine = (name: string) => `Covering ${name}`;
+
+export type CoveringChoice = { id: string; label: string; away: boolean };
+
+/**
+ * Who the shift panel offers for "Covering": people on leave on the shift's date first (approved, then requested,
+ * labelled "on leave" / "leave requested", never the kind), then everyone else by name. The person working the
+ * shift is left out; whoever it covers now stays in the list even if they've left the roster.
+ */
+export function coveringChoices(
+  people: { id: string; name: string }[],
+  leave: { workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string }[],
+  localDate: string,
+  current: { id: string | null; name: string | null },
+  workingId: string | null,
+): CoveringChoice[] {
+  const away = new Map<string, 'approved' | 'requested'>();
+  for (const l of leave) {
+    if (l.startsOn > localDate || l.endsOn < localDate) continue;
+    if (l.status === 'approved' || !away.has(l.workerId)) away.set(l.workerId, l.status);
+  }
+  const list = people.filter(p => p.id !== workingId);
+  if (current.id && current.name && !list.some(p => p.id === current.id)) list.push({ id: current.id, name: current.name });
+  const rank = (id: string) => away.get(id) === 'approved' ? 0 : away.get(id) === 'requested' ? 1 : 2;
+  return list
+    .map(p => ({ p, r: rank(p.id) }))
+    .sort((a, b) => a.r - b.r || a.p.name.localeCompare(b.p.name))
+    .map(({ p, r }) => ({ id: p.id, label: r === 0 ? `${p.name} · on leave` : r === 1 ? `${p.name} · leave requested` : p.name, away: r < 2 }));
+}

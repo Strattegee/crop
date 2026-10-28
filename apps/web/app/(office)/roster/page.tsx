@@ -5,13 +5,13 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setDuties, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, unassign, useItem,
 } from './actions';
 import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,7 @@ type Shift = {
   workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
   offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
+  coveringWorkerId?: string | null; coveringName?: string | null;
 };
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
 type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' }[] };
@@ -283,7 +284,7 @@ export default async function RosterPage({ searchParams }: {
     href: url({ shift: s.id }), 'data-shift': s.id,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
-    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}`,
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
   const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
@@ -291,6 +292,7 @@ export default async function RosterPage({ searchParams }: {
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
     <span className="st">{stage(s, tw).label}</span>
     <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
+    {s.coveringName && <span className="cv">{coveringLine(s.coveringName)}</span>}
     {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
     {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
     {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
@@ -979,6 +981,29 @@ export default async function RosterPage({ searchParams }: {
                 )}
               </section>
             )}
+
+            {!selected.equipmentOnly && (() => {
+              // Steve's "T" line: who this shift covers (e.g. someone on leave). People away that day come first.
+              const choices = coveringChoices(roster.people, roster.leave ?? [], selected.localDate,
+                { id: selected.coveringWorkerId ?? null, name: selected.coveringName ?? null }, selected.workerId);
+              const awayCount = choices.filter(c => c.away).length;
+              return (
+                <section>
+                  <h3>Covering</h3>
+                  <form action={setCovering.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input type="hidden" name="back" value={here} />
+                    <label className="sr-only" htmlFor="coveringWorkerId">Who this {tw.lower(T.shift)} is covering</label>
+                    <select id="coveringWorkerId" name="workerId" defaultValue={selected.coveringWorkerId ?? ''}>
+                      <option value="">Nobody</option>
+                      {awayCount > 0 && <optgroup label="Away that day">{choices.filter(c => c.away).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>}
+                      <optgroup label={awayCount > 0 ? `Other ${tw.lower(T.worker, true)}` : tw.many(T.worker)}>{choices.filter(c => !c.away).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</optgroup>
+                    </select>
+                    <button className="btn small secondary">Save</button>
+                  </form>
+                  <p className="muted small" style={{ margin: '4px 0 0' }}>Shown on the card as &ldquo;Covering &lt;name&gt;&rdquo;, never the reason they&apos;re away.</p>
+                </section>
+              );
+            })()}
 
             {(duties.some(d => d.active) || !!selected.duties?.length) && (
               <section>

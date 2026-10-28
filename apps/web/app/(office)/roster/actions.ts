@@ -109,6 +109,15 @@ export async function setDuties(shiftId: string, f: FormData) {
   }, () => problems.length ? `Duties saved. ${problems.join('. ')}.` : 'Duties saved.');
 }
 
+/** Steve's "T" line: the person this shift covers; blank clears it. */
+export async function setCovering(shiftId: string, f: FormData) {
+  const workerId = str(f, 'workerId');
+  let name: string | null = null;
+  await attempt(back(f), async () => {
+    name = (await api<{ coveringName: string | null }>(`/shifts/${shiftId}/covering`, { method: 'PUT', body: { workerId } })).coveringName;
+  }, () => name ? `Now covering ${name}.` : 'Not covering anyone.');
+}
+
 /** Staging only (DEMO_TOOLS=on): fills an empty business with an invented café so the roster can be shown. */
 export async function loadDemoWeek(f: FormData) {
   if (process.env.DEMO_TOOLS !== 'on') return;
