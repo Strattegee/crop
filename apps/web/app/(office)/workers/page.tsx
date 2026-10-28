@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
   status: string; roles: string[]; compliance: string; issueCount: number;
-  employmentType: string | null; contractedHours: number | null;
+  employmentType: string | null; contractedHours: number | null; leftOn?: string | null;
 };
 
 export default async function WorkersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -77,6 +77,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             <option value="">Any</option>
             {Object.entries(EMPLOYMENT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             <option value="none">Not recorded</option>
+            <option value="left">Has left</option>
           </select>
         </label>
         <button type="submit" className="btn secondary">Filter</button>
@@ -93,7 +94,8 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
                 <tr key={w.id}>
                   <td><Link href={`/workers/${w.id}`}>{w.lastName}, {w.firstName}</Link>{w.preferredName && <span className="muted"> ({w.preferredName})</span>}</td>
                   <td>{w.roles.join(', ') || '—'}</td>
-                  <td>{w.employmentType ? <>{EMPLOYMENT_LABEL[w.employmentType] ?? w.employmentType}{w.contractedHours !== null && <span className="muted"> · {w.contractedHours} h</span>}</> : <span className="muted">—</span>}</td>
+                  <td>{w.employmentType ? <>{EMPLOYMENT_LABEL[w.employmentType] ?? w.employmentType}{w.contractedHours !== null && <span className="muted"> · {w.contractedHours} h</span>}</>
+                    : w.leftOn ? <span className="muted">Left {leftDate(w.leftOn)}</span> : <span className="muted">—</span>}</td>
                   <td>{w.email ?? ''}{w.email && w.phone ? <br /> : null}{w.phone ?? ''}</td>
                   <td style={{ textTransform: 'capitalize' }}>{w.status}</td>
                   <td>
@@ -108,4 +110,8 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
       </div>
     </>
   );
+}
+
+function leftDate(s: string) {
+  return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${s}T00:00:00Z`));
 }

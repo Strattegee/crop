@@ -26,3 +26,22 @@ export async function withdrawEmploymentTerms(workerId: string, termsId: string)
   await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/employment/${termsId}/withdraw`, { method: 'POST', body: {} }),
     'Employment entry withdrawn. The terms before it carry on.');
 }
+
+/** Ends employment on a last day; shifts they are on after it are counted so the office can find cover. */
+export async function endEmployment(workerId: string, f: FormData) {
+  let after = 0;
+  await attempt(`/workers/${workerId}`, async () => {
+    const r = await api<{ shiftsAfter: unknown[] }>(`/workers/${workerId}/employment/end`, {
+      method: 'POST', body: { lastDay: str(f, 'lastDay'), reason: str(f, 'reason') },
+    });
+    after = r.shiftsAfter.length;
+  }, () => after === 0
+    ? 'Employment ended. They have no shifts after their last day.'
+    : `Employment ended. They are still on ${after} shift${after === 1 ? '' : 's'} after their last day: ${after === 1 ? 'it needs' : 'these need'} someone else (see Needs attention on the roster).`);
+}
+
+/** Undoes an end of employment recorded by mistake (kept in History as corrected). */
+export async function undoEmploymentEnd(workerId: string) {
+  await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/employment/end/undo`, { method: 'POST', body: {} }),
+    'End of employment undone. They can be rostered again.');
+}
