@@ -355,15 +355,19 @@ export class StockController {
   }
 }
 
-async function usage(db: PoolClient, where: string, id: string) {
+async function usage(db: PoolClient, where: string, id: string, byPerson = false) {
   const lines = (await db.query<MovementLine>(
-    `select m.item_id as "itemId", i.name, i.unit, m.quantity::float8 as quantity, m.unit_cost_cents as "unitCostCents", m.charge_cents as "chargeCents"
-       from stock_movements m join items i on i.id = m.item_id
+    `select m.item_id as "itemId", i.name, i.unit, m.quantity::float8 as quantity, m.unit_cost_cents as "unitCostCents", m.charge_cents as "chargeCents",
+            m.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName"
+       from stock_movements m join items i on i.id = m.item_id left join workers w on w.id = m.worker_id
       where ${where} = $1 and m.kind in ('issued', 'used', 'returned') order by m.created_at`, [id])).rows;
-  return summariseUsage(lines);
+  return summariseUsage(lines, { byPerson });
 }
 
-/** What a shift used: items used on it or issued for it, net of returns, with cost and the charge to the client. */
+/**
+ * What a shift used: items used on it or issued for it, net of returns, with cost and the charge to the client.
+ * `?byPerson=true` gives one line per item and holder (`workerId`/`workerName`, null = used on the shift).
+ */
 @ApiBearerAuth()
 @ApiSecurity('tenant')
 @Controller('shifts/:id/items')
@@ -372,10 +376,11 @@ export class ShiftItemsController {
 
   @Roles(...OFFICE_ROLES)
   @Get()
-  get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+  get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('byPerson') byPerson?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query('select 1 from shifts where id = $1', [id])).rowCount) throw new NotFoundException('Shift not found');
-      return usage(db, 'm.shift_id', id);
+      // byPerson=true splits each item by who holds it (the shift panel uses it to offer returns).
+      return usage(db, 'm.shift_id', id, byPerson === 'true');
     });
   }
 }

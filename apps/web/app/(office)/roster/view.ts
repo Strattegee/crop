@@ -251,3 +251,25 @@ export function simpleLine(s: CardShift & { equipment?: unknown[] }, kind: strin
   const extra = s.equipment?.length ? ` +${s.equipment.length}` : '';
   return `${who}${extra}`;
 }
+
+/** An item the shift panel can put on a shift (Items page catalogue, with stock at the shift's site). */
+export type PanelItem = { id: string; name: string; unit: string; tracksStock: boolean };
+export type ItemChoice = { id: string; label: string; disabled: boolean };
+const qtyText = (n: number) => String(Math.round(n * 1000) / 1000);
+
+/**
+ * The item list in the shift panel: counted items say how many the shift's site has ("12 here"), and
+ * are greyed out when it has none; items that aren't counted (fuel bought on a card) are always offered.
+ * Items with stock come first, then the rest, each in name order.
+ */
+export function shiftItemChoices(items: PanelItem[], stockHere: { itemId: string; onHand: number }[]): ItemChoice[] {
+  const here = new Map(stockHere.map(s => [s.itemId, s.onHand]));
+  const choices = items.map(i => {
+    const onHand = here.get(i.id) ?? 0;
+    const none = i.tracksStock && onHand <= 0;
+    const label = `${i.name} (${i.unit})${i.tracksStock ? ` · ${none ? 'none here' : `${qtyText(onHand)} here`}` : ''}`;
+    return { id: i.id, label, disabled: none, name: i.name };
+  });
+  choices.sort((a, b) => Number(a.disabled) - Number(b.disabled) || a.name.localeCompare(b.name));
+  return choices.map(({ id, label, disabled }) => ({ id, label, disabled }));
+}

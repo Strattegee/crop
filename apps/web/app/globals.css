@@ -326,3 +326,9 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .dash-attention .att-kind { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
 .dash-attention .att-kind.person_blocked, .dash-attention .att-kind.equipment_blocked { background: var(--bad); }
 .dash-attention .att-kind.open, .dash-attention .att-kind.cover_gap { background: var(--warn); }
+
+/* Items on a shift (roster panel) */
+.shift-items .inline-form { display: flex; gap: 4px; align-items: center; }
+.use-item { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: flex-end; font-size: 13px; background: #f7f9fa; border-radius: 6px; padding: 8px; }
+.use-item label:not(.inline) { display: flex; flex-direction: column; gap: 2px; }
+.use-item label.inline { display: flex; gap: 6px; align-items: center; }
