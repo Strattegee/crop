@@ -86,7 +86,7 @@ export default async function WorkerPage({ params, searchParams }: {
 
 
       {onboarding && (
-        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} timeZone={settings.timezone || 'Australia/Melbourne'} />
+        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={settings.timezone || 'Australia/Melbourne'} />
       )}
 
       {employment && <EmploymentCard workerId={id} terms={employment} today={today} canEdit={canVerify} />}

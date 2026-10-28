@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { finishOnboarding, startOnboarding, stopOnboarding, tickStep } from './onboarding-actions';
+import { askForItems, finishOnboarding, startOnboarding, stopOnboarding, tickStep } from './onboarding-actions';
 
 type StepState = 'done' | 'waiting' | 'to_do';
 export type Onboarding = {
@@ -7,6 +7,9 @@ export type Onboarding = {
     id: string; checklistName: string; startedAt: string; startedByName: string | null;
     steps: { id: string; title: string; help: string | null; kind: string; required: boolean; state: StepState; detail: string; note: string | null }[];
     summary: { done: number; total: number; ready: boolean; outstanding: string[] };
+    /** What the person can still supply themselves (credentials, right to work), in the words the message uses. */
+    askable?: { label: string; required: boolean }[];
+    lastAskedAt?: string | null;
   };
   history: { id: string; checklistName: string; finishedAt: string; finishedByName: string | null; outcome: 'completed' | 'stopped'; stopReason: string | null }[];
 };
@@ -20,8 +23,9 @@ const COLOUR: Record<StepState, string> = { done: 'var(--ok, #1a7f37)', waiting:
  * The person's onboarding: each step with its state (record steps tick themselves), tick boxes for tasks, and
  * Finish (owners and admins, once every required step is done) or Stop.
  */
-export function OnboardingCard({ workerId, o, checklists, status, canDecide, timeZone }: {
+export function OnboardingCard({ workerId, o, checklists, status, canDecide, contact, timeZone }: {
   workerId: string; o: Onboarding; checklists: Checklist[]; status: string; canDecide: boolean; timeZone: string;
+  contact: { first: string; email: boolean; phone: boolean };
 }) {
   // Dates in the business's time zone, never the server's.
   const day = (s: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(new Date(s));
@@ -61,6 +65,28 @@ export function OnboardingCard({ workerId, o, checklists, status, canDecide, tim
               </li>
             ))}
           </ul>
+          {c.askable && c.askable.length > 0 && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: 'pointer' }}>Ask {contact.first} for what’s still needed ({c.askable.length})</summary>
+              {contact.email || contact.phone ? (
+                <form action={askForItems.bind(null, workerId, c.id)} style={{ marginTop: 6 }}>
+                  <p className="small" style={{ margin: '0 0 6px' }}>
+                    {contact.email ? 'Emails' : 'Texts'} them a list of: {c.askable.map(x => x.label.replace(/ \(for example.*\)$/, '')).join('; ')}.
+                    Things already recorded and waiting to be checked aren’t asked for.
+                  </p>
+                  <label style={{ display: 'block' }}>Add a note (optional)
+                    <textarea name="note" maxLength={500} rows={2} placeholder="e.g. Bring them in on Monday, or call Pat with any questions" style={{ display: 'block', width: '100%' }} />
+                  </label>
+                  {contact.phone && contact.email && <label className="inline"><input type="checkbox" name="sms" /> Also send a text</label>}
+                  {contact.phone && !contact.email && <input type="hidden" name="sms" value="on" />}
+                  <button type="submit" className="btn small" style={{ marginLeft: 8 }}>Send</button>
+                </form>
+              ) : (
+                <p className="muted small" style={{ marginTop: 6 }}>Add an email address or mobile number in their details first.</p>
+              )}
+              {c.lastAskedAt && <p className="muted small" style={{ margin: '6px 0 0' }}>Last asked {day(c.lastAskedAt)}.</p>}
+            </details>
+          )}
           {canDecide ? (
             <div className="form-row" style={{ marginTop: 12 }}>
               <form action={finishOnboarding.bind(null, workerId, c.id)}>

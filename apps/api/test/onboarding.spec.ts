@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { notReadyMessage, stepProgress, stepsFromRequirements, summarise, type OnboardingFacts, type Step } from '../src/workforce/onboarding.js';
+import { askableItems, askMessage, notReadyMessage, stepProgress, stepsFromRequirements, summarise, type OnboardingFacts, type Step } from '../src/workforce/onboarding.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('onboarding: rules', () => {
@@ -51,6 +51,30 @@ describe('onboarding: rules', () => {
     expect(s).toEqual({ done: 1, total: 2, ready: false, outstanding: ['Employment terms set'] });
     expect(notReadyMessage(s)).toBe("Onboarding isn't finished: still to do Employment terms set");
     expect(notReadyMessage({ ...s, outstanding: ['a', 'b', 'c', 'd', 'e'] })).toBe("Onboarding isn't finished: still to do a, b, c and 2 more");
+  });
+
+  it('asks the person only for what they supply and is missing; vaccinations stay "a vaccination record"', () => {
+    const steps = [
+      { ...step('right_to_work', { id: 'r' }) },
+      { ...step('employment', { id: 'e' }) },
+      { ...step('credential', { id: 'v', title: 'Hepatitis B vaccination' }), category: 'vaccination', typeName: 'Hepatitis B vaccination' },
+      { ...step('credential', { id: 'f', title: 'First aid', required: false }), category: 'training', typeName: 'First aid' },
+      { ...step('credential', { id: 'w', title: 'WWC' }), category: 'check', typeName: 'Working with children' },
+      { ...step('task', { id: 't', title: 'Contract signed' }) },
+    ];
+    const p = (st: 'done' | 'waiting' | 'to_do') => ({ state: st, detail: '' });
+    const items = askableItems(steps, [p('to_do'), p('to_do'), p('to_do'), p('to_do'), p('waiting'), p('to_do')]);
+    expect(items.map(i => i.label)).toEqual([
+      'proof of your right to work (for example your passport, citizenship certificate or visa details)', 'a vaccination record', 'First aid']);
+    const m = askMessage({ first: 'Robin', business: 'Demo Cafe', items, note: 'Call Pat if you have questions.' });
+    expect(m.subject).toBe('Demo Cafe: what we still need from you before you start');
+    expect(m.email).toContain('Before you can start work with Demo Cafe, we still need:\n- proof of your right to work');
+    expect(m.email).toContain('It would also help to have:\n- First aid');
+    expect(m.email).toContain('Call Pat if you have questions.');
+    expect(m.email).not.toMatch(/Hepatitis/);
+    expect(m.sms).toBe('Demo Cafe: before you start we still need 3 things from you. Details are in your email.');
+    expect(askMessage({ first: 'R', business: 'B', items: items.slice(0, 2), note: null, emailed: false }).sms)
+      .toBe('B: before you start we still need proof of your right to work and a vaccination record from you. Please send a photo or bring them in.');
   });
 
   it('a starting checklist from the rules: checks first, must-haves required, should-haves not', () => {
@@ -213,6 +237,35 @@ describe('onboarding: API', () => {
     await http().post(`/onboardings/${ho.id}/stop`).set(as('admin')).send({ reason: 'Did not start' }).expect(200);
     expect((await http().get(`/workers/${held.id}`).set(as('alloc')).expect(200)).body.status).toBe('inactive');
     expect((await http().get('/onboardings').set(as('alloc')).expect(200)).body).toEqual([]);
+  });
+
+  it('the office can email (and text) the person what is still needed from them', async () => {
+    const w = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Jo', lastName: 'Example', roles: ['Bartender'], email: 'jo@example.com', phone: '0412 345 678', onboardingChecklistId: checklist.id }).expect(201)).body;
+    let o = (await http().get(`/workers/${w.id}/onboarding`).set(as('alloc')).expect(200)).body.current;
+    expect(o.askable.map((x: { label: string }) => x.label)).toEqual([expect.stringMatching(/^proof of your right to work/), 'RSA', 'Working with children']);
+    expect(o.lastAskedAt).toBeNull();
+    const res = (await http().post(`/onboardings/${o.id}/ask`).set(as('alloc')).send({ sms: true, note: 'Bring them on Monday.' }).expect(200)).body;
+    expect(res.sent).toEqual(['email', 'text']);
+    expect(res.lastAskedAt).not.toBeNull();
+    const sent = (await owner.query<{ channel: string; to_address: string; subject: string | null; body: string }>(
+      `select channel, to_address, subject, body from notifications where template = 'onboarding_request' and worker_id = $1 order by channel`, [w.id])).rows;
+    expect(sent.map(n => [n.channel, n.to_address])).toEqual([['email', 'jo@example.com'], ['sms', '+61412345678']]);
+    expect(sent[0].body).toContain('Hi Jo,');
+    expect(sent[0].body).toContain('- Working with children');
+    expect(sent[0].body).toContain('Bring them on Monday.');
+    // A second press straight away is refused.
+    const again = await http().post(`/onboardings/${o.id}/ask`).set(as('alloc')).send({}).expect(409);
+    expect(again.body.message).toMatch(/asked a few minutes ago/);
+    // Once recorded (even before it's checked) it's no longer asked for.
+    await http().put(`/workers/${w.id}/right-to-work`).set(as('admin')).send({ status: 'citizen', citizenProofType: 'au_passport' }).expect(200);
+    o = (await http().get(`/workers/${w.id}/onboarding`).set(as('alloc')).expect(200)).body.current;
+    expect(o.askable.map((x: { label: string }) => x.label)).toEqual(['RSA', 'Working with children']);
+    // Nobody to send to.
+    const nobody = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Ash', lastName: 'Example', onboardingChecklistId: checklist.id }).expect(201)).body;
+    const no = (await http().get(`/workers/${nobody.id}/onboarding`).set(as('alloc')).expect(200)).body.current;
+    expect((await http().post(`/onboardings/${no.id}/ask`).set(as('alloc')).send({}).expect(400)).body.message).toBe('This person has no email address recorded');
+    await http().post(`/onboardings/${o.id}/ask`).set(as('other')).send({}).expect(404);
+    for (const x of [o.id, no.id]) await http().post(`/onboardings/${x}/stop`).set(as('admin')).send({ reason: 'Test over' }).expect(200);
   });
 
   it('a checklist put away cannot be started, and its name is free again', async () => {
