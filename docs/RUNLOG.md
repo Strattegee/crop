@@ -242,5 +242,6 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-10-29 early morning, 12:40am Melbourne (scheduled run)
 
 - Shipped: the roster speaks each business's own words. Every label and form on the roster and its side strip now uses the words chosen in Settings → Words we use: a café that calls its people Staff, its sites Venues and its shifts Jobs sees "Open jobs", "Add jobs", "All venues", "By staff member", "Cancel job", and so on. Also, the roster's "today" and the times it shows (when a week was published, when a change was asked for or made) now follow the business's own time zone instead of always Melbourne, as does the Messages page, which also names onboarding requests and no longer says "your agency".
-- Next: the same words in the roster's confirmation messages, API errors and notifications, or the worker app once its sign-in is confirmed.
+- Also shipped: the roster's confirmation messages ("Jobs added.", "Job cancelled.", "Published… 3 messages sent to staff with their jobs.") use the same words.
+- Next: the same words in API errors and notifications, or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held).
