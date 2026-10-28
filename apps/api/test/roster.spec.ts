@@ -282,4 +282,58 @@ describe('roster: shift codes, shifts, assignments and employment', () => {
     expect((await http().patch(`/shift-codes/${dayCode}`).set(as('admin')).send({ letter: '' }).expect(200)).body.letter).toBeNull();
     await http().patch(`/shift-codes/${dayCode}`).set(as('other')).send({ letter: 'Z' }).expect(404);
   });
+  it('ends employment: blocks shifts after the last day, lists them, can be undone, and keeps an earlier spell ended', async () => {
+    const eve = (await http().post('/workers').set(as('admin')).send({ firstName: 'Eve', lastName: 'Leaver', roles: ['Barista'] }).expect(201)).body.id;
+    await http().put(`/workers/${eve}/right-to-work`).set(as('admin')).send({ status: 'citizen', citizenProofType: 'au_passport' }).expect(200);
+    await http().post(`/workers/${eve}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
+    const end = (body: object, who = 'admin') => http().post(`/workers/${eve}/employment/end`).set(as(who)).send(body);
+    expect((await end({ lastDay: '2026-12-01', reason: 'resigned' }).expect(400)).body.message).toBe('Record their employment before ending it');
+    await http().post(`/workers/${eve}/employment`).set(as('admin')).send({ employmentType: 'casual', startsOn: '2026-01-01' }).expect(201);
+    const mk = async (date: string) => (await http().post('/shifts').set(as('alloc'))
+      .send({ facilityId: perthSite, role: 'Barista', date, startTime: '08:00', endTime: '14:00' }).expect(201)).body.ids[0] as string;
+    const [a, b, c] = [await mk('2026-11-30'), await mk('2026-12-02'), await mk('2026-12-04')];
+    await http().post(`/shifts/${a}/assign`).set(as('alloc')).send({ workerId: eve }).expect(200);
+    await http().post(`/shifts/${b}/assign`).set(as('alloc')).send({ workerId: eve }).expect(200);
+
+    await end({ lastDay: '2026-12-01', reason: 'resigned' }, 'alloc').expect(403);
+    await end({ lastDay: '2026-12-01', reason: 'sacked' }).expect(400);
+    const ended = (await end({ lastDay: '2026-12-01', reason: 'resigned' }).expect(200)).body;
+    expect(ended.terms).toMatchObject([{ startsOn: '2026-01-01', endsOn: '2026-12-01', endReason: 'resigned' }]);
+    expect(ended.shiftsAfter.map((s: { id: string }) => s.id)).toEqual([b]);
+    await end({ lastDay: '2026-12-10', reason: 'other' }).expect(400);
+
+    // After the last day they can't be put on a shift and drop off the lists and the roster.
+    const refused = await http().post(`/shifts/${c}/assign`).set(as('alloc')).send({ workerId: eve }).expect(409);
+    expect(refused.body.message).toBe("Eve Leaver's employment ended on Tue 1 Dec 2026");
+    const cands = (await http().get(`/shifts/${c}/candidates`).set(as('alloc')).expect(200)).body.candidates;
+    expect(cands.some((x: { workerId: string }) => x.workerId === eve)).toBe(false);
+    const stillOn = (await http().get(`/shifts/${a}/candidates`).set(as('alloc')).expect(200)).body.candidates;
+    expect(stillOn.some((x: { workerId: string }) => x.workerId === eve)).toBe(true);
+    const later = (await http().get('/roster?from=2026-12-07&to=2026-12-13').set(as('alloc')).expect(200)).body.people;
+    expect(later.some((x: { id: string }) => x.id === eve)).toBe(false);
+    const thatWeek = (await http().get('/roster?from=2026-11-30&to=2026-12-06').set(as('alloc')).expect(200)).body.people;
+    expect(thatWeek.some((x: { id: string }) => x.id === eve)).toBe(true);
+
+    // Recorded by mistake: undo it (kept as a corrected entry) and she can work again.
+    await http().post(`/workers/${eve}/employment/end/undo`).set(as('alloc')).expect(403);
+    const undone = (await http().post(`/workers/${eve}/employment/end/undo`).set(as('admin')).expect(200)).body;
+    expect(undone.terms).toMatchObject([{ startsOn: '2026-01-01', endsOn: null, endReason: null }]);
+    await http().post(`/workers/${eve}/employment/end/undo`).set(as('admin')).expect(400);
+    await http().post(`/shifts/${c}/assign`).set(as('alloc')).send({ workerId: eve }).expect(200);
+    const hist = (await http().get(`/workers/${eve}/employment?withdrawn=true`).set(as('alloc')).expect(200)).body;
+    expect(hist[1]).toMatchObject({ withdrawnReason: 'corrected', endReason: 'resigned', endsOn: '2026-12-01' });
+
+    // Someone who left years ago shows as left; coming back later keeps the earlier spell ended.
+    const fay = (await http().post('/workers').set(as('admin')).send({ firstName: 'Fay', lastName: 'Returner', roles: ['Barista'] }).expect(201)).body.id;
+    await http().post(`/workers/${fay}/employment`).set(as('admin')).send({ employmentType: 'part_time', contractedHours: 20, startsOn: '2020-01-01' }).expect(201);
+    await http().post(`/workers/${fay}/employment/end`).set(as('admin')).send({ lastDay: '2021-06-30', reason: 'contract_ended' }).expect(200);
+    const left = (await http().get('/workers?employment=left').set(as('alloc')).expect(200)).body;
+    expect(left.map((x: { id: string }) => x.id)).toEqual([fay]);
+    expect(left[0]).toMatchObject({ leftOn: '2021-06-30', employmentType: null });
+    const none = (await http().get('/workers?employment=none').set(as('alloc')).expect(200)).body;
+    expect(none.some((x: { id: string }) => x.id === fay)).toBe(false);
+    const back = (await http().post(`/workers/${fay}/employment`).set(as('admin')).send({ employmentType: 'casual', startsOn: '2022-01-01' }).expect(201)).body;
+    const withdrawn = (await http().post(`/workers/${fay}/employment/${back.id}/withdraw`).set(as('admin')).expect(200)).body;
+    expect(withdrawn).toMatchObject([{ startsOn: '2020-01-01', endsOn: '2021-06-30', endReason: 'contract_ended' }]);
+  });
 });

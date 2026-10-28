@@ -11,7 +11,7 @@ import { loadSettings } from './settings.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 
 const STATUSES = ['active', 'inactive', 'offboarded'] as const;
-const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none'] as const;
+const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
   w.email, w.phone, w.status, w.roles, w.notes, w.created_at as "createdAt"`;
 const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name as "typeName", t.category,
@@ -27,7 +27,7 @@ type Row = Record<string, unknown>;
 export class WorkersController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  /** Workers with their compliance status and today's employment. Filters: search (name, email, phone), status, compliance, role, employment (a type or `none`). */
+  /** Workers with their compliance status and today's employment. Filters: search (name, email, phone), status, compliance, role, employment (a type, `none` or `left`; `leftOn` is the last day of someone who has left). */
   @Roles(...OFFICE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query() q: Record<string, string | undefined>) {
@@ -38,15 +38,20 @@ export class WorkersController {
       // Employment today in the business's time zone (live terms only; corrected entries are ignored).
       const today = todayIn((await loadSettings(db, t.tenantId)).timezone);
       const workers = (await db.query<Row & { id: string; roles: string[] }>(
-        `select ${WORKER_COLUMNS}, et.employment_type as "employmentType", et.contracted_hours::float8 as "contractedHours"
+        `select ${WORKER_COLUMNS}, et.employment_type as "employmentType", et.contracted_hours::float8 as "contractedHours",
+                to_char(lt.ends_on, 'YYYY-MM-DD') as "leftOn"
            from workers w
+           left join lateral (select case when l.end_reason is not null and l.ends_on < $5 then l.ends_on end as ends_on
+                                from (select ends_on, end_reason from employment_terms e where e.worker_id = w.id and e.withdrawn_at is null
+                                       order by e.starts_on desc limit 1) l) lt on true
            left join lateral (select employment_type, contracted_hours from employment_terms e
                                where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $5 and (e.ends_on is null or e.ends_on >= $5)
                                order by e.starts_on desc limit 1) et on true
           where ($1::text is null or (w.first_name || ' ' || w.last_name || ' ' || coalesce(w.preferred_name,'') || ' ' || coalesce(w.email,'') || ' ' || coalesce(w.phone,'')) ilike '%' || $1 || '%')
             and ($2::worker_status is null or w.status = $2)
             and ($3::text is null or $3 = any(w.roles))
-            and ($4::text is null or ($4 = 'none' and et.employment_type is null) or et.employment_type::text = $4)
+            and ($4::text is null or ($4 = 'none' and et.employment_type is null and lt.ends_on is null) or ($4 = 'left' and lt.ends_on is not null)
+                 or et.employment_type::text = $4)
           order by w.last_name, w.first_name limit 500`,
         [search, status, q.role?.trim() || null, employment, today],
       )).rows;

@@ -2,8 +2,30 @@ import { NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { addDays, type RequirementRule } from '../workforce/compliance.js';
+import type { TermDates } from './employment.js';
 import { PERIODS, type AvailabilityFacts, type LeaveFacts, type Period } from './availability.js';
 import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OperatorNeed, type OtherShift, type ShiftFacts } from './eligibility.js';
+
+/**
+ * SQL: the worker `w` hasn't left by this date, i.e. no live terms recorded, or live terms that haven't all ended
+ * before it. People who have left drop off the roster and the who-can-work lists (asking about them by id still
+ * gives the "employment ended" block).
+ */
+export const EMPLOYED_ON = (dateParam: string) => `(not exists (select 1 from employment_terms e where e.worker_id = w.id and e.withdrawn_at is null)
+  or exists (select 1 from employment_terms e where e.worker_id = w.id and e.withdrawn_at is null and (e.ends_on is null or e.ends_on >= ${dateParam}::date)))`;
+
+/** Each person's live employment terms' dates (within withTenant). */
+export async function termsByWorker(db: PoolClient, workerIds: string[]): Promise<Map<string, TermDates[]>> {
+  const out = new Map<string, TermDates[]>();
+  for (const r of (await db.query<TermDates & { worker_id: string }>(
+    `select worker_id, id, to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"
+       from employment_terms where worker_id = any($1) and withdrawn_at is null`, [workerIds])).rows) {
+    const list = out.get(r.worker_id) ?? [];
+    list.push({ id: r.id, startsOn: r.startsOn, endsOn: r.endsOn });
+    out.set(r.worker_id, list);
+  }
+  return out;
+}
 
 export interface Candidate {
   workerId: string;
@@ -67,7 +89,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
        left join lateral (select employment_type from employment_terms e
                            where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
                            order by e.starts_on desc limit 1) et on true
-      where ${workerIds ? 'w.id = any($1)' : "w.status = 'active' and $1::uuid[] is null"}
+      where ${workerIds ? 'w.id = any($1)' : `w.status = 'active' and $1::uuid[] is null and ${EMPLOYED_ON('$2')}`}
       order by w.last_name, w.first_name`, [workerIds ?? null, shift.localDate])).rows;
   if (!workers.length) return [];
   const ids = workers.map(w => w.id);
@@ -100,6 +122,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
   const dutyRules = await dutyRulesForShift(db, shiftId);
   const availability = await availabilityByWorker(db, ids, shift.localDate);
   const leave = await leaveByWorker(db, ids, shift.localDate);
+  const employment = await termsByWorker(db, ids);
 
   const weekFrom = mondayOf(shift.localDate);
   const weekTo = addDays(weekFrom, 6);
@@ -109,7 +132,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
     const e = shiftEligibility(shift, {
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
-      availability: availability.get(w.id), leave: leave.get(w.id) ?? [],
+      availability: availability.get(w.id), leave: leave.get(w.id) ?? [], employment: employment.get(w.id) ?? [],
     });
     const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
     return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100,

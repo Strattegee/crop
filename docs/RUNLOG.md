@@ -212,3 +212,10 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: the café demo now shows shift duties and cover rules. Its evening shifts (duty manager and waitstaff closing) carry "Serves alcohol", which needs an RSA, so Alex, whose RSA has run out, can work days but not the bar. The café also has a rule that a food safety supervisor must be on whenever anyone is working: the head chef and manager cover weekdays, and the late and weekend shifts show up as cover gaps on the roster and in Needs attention.
 - Next: start and end of employment on the employment record.
 - Waiting on David: nothing new.
+
+## 2026-10-28 midday, 12:15pm Melbourne (scheduled run)
+
+- Shipped: end of employment. On a person's page, the Employment card has "End employment": the last day of work and a reason (resigned, contract ended, terminated, retired, other). After that day they can't be put on a shift (the reason says their employment ended on that date) and they drop off the roster and the lists of who can work. Shifts they're still on after their last day stay put, and the office is told how many need someone else (they also show in Needs attention). A mistake can be undone (kept in History). If someone comes back later, new terms from their return date start a new spell and the old one stays ended. The card shows "Employed since …", and the Workers list shows "Left <date>" with a "Has left" filter.
+- Next: the agency connections design write-up (to hold for David), or words in roster labels and forms.
+- Waiting on David: nothing new.
+

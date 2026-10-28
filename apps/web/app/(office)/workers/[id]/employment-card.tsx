@@ -1,10 +1,13 @@
-import { addEmploymentTerms, correctEmploymentTerms, withdrawEmploymentTerms } from './employment-actions';
+import { addEmploymentTerms, correctEmploymentTerms, endEmployment, undoEmploymentEnd, withdrawEmploymentTerms } from './employment-actions';
 
 export type EmploymentTerms = {
-  id: string; employmentType: string; contractedHours: number | null; startsOn: string; endsOn: string | null;
+  id: string; employmentType: string; contractedHours: number | null; startsOn: string; endsOn: string | null; endReason?: string | null;
   withdrawnAt?: string | null; withdrawnReason?: 'corrected' | 'withdrawn' | null;
 };
 
+export const END_REASON_LABEL: Record<string, string> = {
+  resigned: 'Resigned', contract_ended: 'Contract or engagement ended', terminated: 'Employment terminated', retired: 'Retired', other: 'Other',
+};
 export const EMPLOYMENT_LABEL: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank (relief pool)' };
 const d = (s: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${s}T00:00:00Z`));
 const hrs = (h: number | null) => (h === null ? 'no set hours' : `${Number.isInteger(h) ? h : h.toFixed(2).replace(/0$/, '')} hours a week`);
@@ -22,15 +25,28 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
   const current = terms.find(t => t.startsOn <= today && (t.endsOn === null || t.endsOn >= today)) ?? null;
   const upcoming = terms.filter(t => t.startsOn > today).sort((a, b) => a.startsOn.localeCompare(b.startsOn));
   const latestStart = terms.reduce<string | null>((m, t) => (m === null || t.startsOn > m ? t.startsOn : m), null);
+  // End of employment is recorded on the latest terms; the current spell started after any earlier spell ended.
+  const gapBefore = !!(latest && previous?.endsOn && previous.endsOn < prevDay(latest.startsOn));
+  const ending = latest?.endReason && latest.endsOn ? latest : null;
+  const sinceStart = terms.length ? firstOfSpell(terms) : null;
   return (
     <div className="card">
       <h2>Employment</h2>
+      {ending && (
+        <p style={{ marginTop: 0 }}>
+          <strong>{ending.endsOn! < today ? 'Left' : 'Leaving'} on {d(ending.endsOn!)}</strong>
+          <span className="muted"> · {END_REASON_LABEL[ending.endReason!] ?? ending.endReason} · last day of work</span>
+        </p>
+      )}
+      {sinceStart && !(ending && ending.endsOn! < today) && sinceStart <= today && (
+        <p className="muted small" style={{ marginTop: 0 }}>Employed since {d(sinceStart)}</p>
+      )}
       {current ? (
         <p style={{ marginTop: 0 }}>
           <strong>{EMPLOYMENT_LABEL[current.employmentType] ?? current.employmentType}</strong>, {hrs(current.contractedHours)}
           <span className="muted"> · since {d(current.startsOn)}{current.endsOn ? `, until ${d(current.endsOn)}` : ''}</span>
         </p>
-      ) : (
+      ) : ending && ending.endsOn! < today ? null : (
         <p className="muted" style={{ marginTop: 0 }}>No employment recorded for today. The roster shows their hours without a contract to compare with.</p>
       )}
       {upcoming.map(t => (
@@ -47,7 +63,7 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
               <form action={correctEmploymentTerms.bind(null, workerId, t.id)} className="form-row">
                 {t.id === latest?.id ? (
                   <label>From
-                    <input type="date" name="startsOn" required defaultValue={t.startsOn} min={previous ? nextDay(previous.startsOn) : undefined} />
+                    <input type="date" name="startsOn" required defaultValue={t.startsOn} min={previous ? nextDay(gapBefore ? previous.endsOn! : previous.startsOn) : undefined} />
                   </label>
                 ) : (
                   <span className="muted small" style={{ alignSelf: 'center' }}>{d(t.startsOn)} to {t.endsOn ? d(t.endsOn) : 'now'}</span>
@@ -65,7 +81,7 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
               {t.id === latest?.id && (
                 <form action={withdrawEmploymentTerms.bind(null, workerId, t.id)} style={{ marginTop: 4 }}>
                   <button className="btn small secondary">Withdraw this entry</button>
-                  <span className="muted small"> {previous ? `${EMPLOYMENT_LABEL[previous.employmentType] ?? previous.employmentType} from ${d(previous.startsOn)} carries on.` : 'They will have no employment recorded.'}</span>
+                  <span className="muted small"> {gapBefore ? `Their earlier employment stays ended on ${d(previous!.endsOn!)}.` : previous ? `${EMPLOYMENT_LABEL[previous.employmentType] ?? previous.employmentType} from ${d(previous.startsOn)} carries on.` : 'They will have no employment recorded.'}</span>
                 </form>
               )}
             </div>
@@ -80,7 +96,7 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
             <tbody>
               {terms.map(t => (
                 <tr key={t.id}>
-                  <td>{d(t.startsOn)}</td><td>{t.endsOn ? d(t.endsOn) : '—'}</td>
+                  <td>{d(t.startsOn)}</td><td>{t.endsOn ? d(t.endsOn) : '—'}{t.endReason ? <span className="muted"> (left: {END_REASON_LABEL[t.endReason] ?? t.endReason})</span> : null}</td>
                   <td>{EMPLOYMENT_LABEL[t.employmentType] ?? t.employmentType}</td><td>{t.contractedHours ?? '—'}</td>
                 </tr>
               ))}
@@ -93,6 +109,29 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
               ))}
             </tbody>
           </table>
+        </details>
+      )}
+      {canEdit && ending && (
+        <form action={undoEmploymentEnd.bind(null, workerId)} style={{ marginTop: 12 }}>
+          <button className="btn small secondary">Undo the end of employment</button>
+          <span className="muted small"> If it was recorded by mistake. To take them back after they left, add new terms from the day they return.</span>
+        </form>
+      )}
+      {canEdit && latest && !latest.endsOn && (
+        <details style={{ marginTop: 12 }}>
+          <summary className="muted" style={{ cursor: 'pointer' }}>End employment</summary>
+          <form action={endEmployment.bind(null, workerId)} className="form-row" style={{ marginTop: 8 }}>
+            <label>Last day of work
+              <input type="date" name="lastDay" required defaultValue={today >= latest.startsOn ? today : latest.startsOn} min={latest.startsOn} />
+            </label>
+            <label>Reason
+              <select name="reason" defaultValue="resigned">
+                {Object.entries(END_REASON_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <button className="btn small">End employment</button>
+          </form>
+          <p className="muted small" style={{ marginBottom: 0 }}>After their last day they can't be put on shifts and drop off the roster. Shifts they are already on after that day stay on the roster and show in Needs attention until someone else takes them. Nothing is deleted.</p>
         </details>
       )}
       {canEdit ? (
@@ -120,4 +159,19 @@ export function EmploymentCard({ workerId, terms: all, today, canEdit }: { worke
 
 function nextDay(s: string) {
   return new Date(Date.parse(`${s}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+function prevDay(s: string) {
+  return new Date(Date.parse(`${s}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Start of the latest unbroken run of terms (after any gap, such as leaving and coming back). */
+function firstOfSpell(terms: EmploymentTerms[]): string {
+  const list = [...terms].sort((a, b) => b.startsOn.localeCompare(a.startsOn));
+  let start = list[0].startsOn;
+  for (const t of list.slice(1)) {
+    if (t.endsOn !== prevDay(start)) break;
+    start = t.startsOn;
+  }
+  return start;
 }

@@ -8,13 +8,13 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
-import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
+import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
 import { actorOf } from './publishing.js';
-import { correctionPlan, withdrawalPlan, type TermDates } from './employment.js';
+import { END_REASONS, correctionPlan, endPlan, withdrawalPlan, type TermDates } from './employment.js';
 
 const TERM_COLS = `id, employment_type as "employmentType", contracted_hours::float8 as "contractedHours",
-  to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"`;
+  to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn", end_reason as "endReason"`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'bank'] as const;
@@ -209,8 +209,9 @@ export class EmploymentController {
     const startsOn = date(body, 'startsOn');
     return withTenant(this.pool, t.tenantId, async db => {
       const live = await this.liveTerms(db, workerId);
-      const term = (await db.query<{ id: string; employment_type: string; contracted_hours: number | null; withdrawn_at: Date | null; starts_on: string; ends_on: string | null }>(
-        `select id, employment_type, contracted_hours::float8 as contracted_hours, withdrawn_at,
+      const term = (await db.query<{ id: string; employment_type: string; contracted_hours: number | null; withdrawn_at: Date | null; starts_on: string; ends_on: string | null;
+          end_reason: string | null; ended_by: string | null; ended_at: Date | null }>(
+        `select id, employment_type, contracted_hours::float8 as contracted_hours, withdrawn_at, end_reason, ended_by, ended_at,
                 to_char(starts_on, 'YYYY-MM-DD') as starts_on, to_char(ends_on, 'YYYY-MM-DD') as ends_on
            from employment_terms where id = $1 and worker_id = $2`, [id, workerId])).rows[0];
       if (!term) throw new NotFoundException('Employment terms not found');
@@ -223,9 +224,10 @@ export class EmploymentController {
       await db.query(`update employment_terms set withdrawn_at = now(), withdrawn_by = $2, withdrawn_reason = 'corrected' where id = $1`, [id, auth.userId]);
       if (plan.previousId) await db.query('update employment_terms set ends_on = $2 where id = $1', [plan.previousId, plan.previousEndsOn]);
       return (await db.query(
-        `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, ends_on, created_by, replaces_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${TERM_COLS}`,
-        [t.tenantId, workerId, employmentType, contractedHours, newStart, term.ends_on, auth.userId, id],
+        `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, ends_on, created_by, replaces_id,
+                                      end_reason, ended_by, ended_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${TERM_COLS}`,
+        [t.tenantId, workerId, employmentType, contractedHours, newStart, term.ends_on, auth.userId, id, term.end_reason, term.ended_by, term.ended_at],
       )).rows[0];
     });
   }
@@ -244,7 +246,12 @@ export class EmploymentController {
       const plan = withdrawalPlan(live, id);
       if (!plan.ok) throw new BadRequestException(plan.message);
       await db.query(`update employment_terms set withdrawn_at = now(), withdrawn_by = $2, withdrawn_reason = 'withdrawn' where id = $1`, [id, auth.userId]);
-      if (plan.previousId) await db.query('update employment_terms set ends_on = $2 where id = $1', [plan.previousId, plan.previousEndsOn]);
+      // The terms before carry on to the withdrawn ones' end, including an end of employment recorded on them.
+      if (plan.previousId) {
+        await db.query(
+          `update employment_terms p set ends_on = $2, end_reason = w.end_reason, ended_by = w.ended_by, ended_at = w.ended_at
+             from employment_terms w where p.id = $1 and w.id = $3`, [plan.previousId, plan.previousEndsOn, id]);
+      }
       return (await db.query(
         `select ${TERM_COLS} from employment_terms where worker_id = $1 and withdrawn_at is null order by starts_on desc`, [workerId])).rows;
     });
@@ -254,8 +261,59 @@ export class EmploymentController {
   private async liveTerms(db: PoolClient, workerId: string): Promise<TermDates[]> {
     if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
     return (await db.query<TermDates>(
-      `select id, to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn"
+      `select id, to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn", end_reason as "endReason"
          from employment_terms where worker_id = $1 and withdrawn_at is null`, [workerId])).rows;
+  }
+
+  /**
+   * Ends employment: the latest terms get `lastDay` as their end and the reason. Shifts they are on after that day
+   * stay as they are but come back in `shiftsAfter` (and show in Needs attention), so the office can find cover.
+   */
+  @Roles('owner', 'admin')
+  @Post('end')
+  @HttpCode(200)
+  end(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('workerId', ParseUUIDPipe) workerId: string, @Body() body: Record<string, unknown>) {
+    const lastDay = date(body, 'lastDay', { required: true })!;
+    const reason = oneOf(body, 'reason', END_REASONS, { required: true })!;
+    return withTenant(this.pool, t.tenantId, async db => {
+      const plan = endPlan(await this.liveTerms(db, workerId), lastDay);
+      if (!plan.ok) throw new BadRequestException(plan.message);
+      await db.query('update employment_terms set ends_on = $2, end_reason = $3, ended_by = $4, ended_at = now() where id = $1',
+        [plan.id, lastDay, reason, auth.userId]);
+      return { terms: await this.live(db, workerId), shiftsAfter: await this.shiftsAfter(db, workerId, lastDay) };
+    });
+  }
+
+  /** Undoes an end of employment recorded by mistake (a correction: the row is kept, marked corrected). */
+  @Roles('owner', 'admin')
+  @Post('end/undo')
+  @HttpCode(200)
+  undoEnd(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('workerId', ParseUUIDPipe) workerId: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const latest = (await this.liveTerms(db, workerId)).sort((a, b) => b.startsOn.localeCompare(a.startsOn))[0];
+      if (!latest?.endReason) throw new BadRequestException('Their employment has no end recorded');
+      await db.query(`update employment_terms set withdrawn_at = now(), withdrawn_by = $2, withdrawn_reason = 'corrected' where id = $1`, [latest.id, auth.userId]);
+      await db.query(
+        `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, created_by, replaces_id)
+         select tenant_id, worker_id, employment_type, contracted_hours, starts_on, $2, id from employment_terms where id = $1`, [latest.id, auth.userId]);
+      return { terms: await this.live(db, workerId) };
+    });
+  }
+
+  private async live(db: PoolClient, workerId: string) {
+    return (await db.query(`select ${TERM_COLS} from employment_terms where worker_id = $1 and withdrawn_at is null order by starts_on desc`, [workerId])).rows;
+  }
+
+  /** Shifts the person is on (assigned or confirmed, not cancelled) after a local date. */
+  private async shiftsAfter(db: PoolClient, workerId: string, lastDay: string) {
+    return (await db.query(
+      `select s.id, s.role, f.name as "facilityName",
+              to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
+              to_char(s.starts_at at time zone f.timezone, 'Dy DD Mon HH24:MI') || '–' || to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as label
+         from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
+        where sa.worker_id = $1 and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
+          and (s.starts_at at time zone f.timezone)::date > $2
+        order by s.starts_at`, [workerId, lastDay])).rows;
   }
 
   /** Starts new terms from a date; the current terms end the day before. */
@@ -271,7 +329,8 @@ export class EmploymentController {
         throw new BadRequestException('Employment terms already start on or after that date');
       }
       await db.query(
-        `update employment_terms set ends_on = $2::date - 1 where worker_id = $1 and withdrawn_at is null and (ends_on is null or ends_on >= $2)`,
+        `update employment_terms set ends_on = $2::date - 1, end_reason = null, ended_by = null, ended_at = null
+          where worker_id = $1 and withdrawn_at is null and (ends_on is null or ends_on >= $2)`,
         [workerId, startsOn]);
       return (await db.query(
         `insert into employment_terms(tenant_id, worker_id, employment_type, contracted_hours, starts_on, created_by)
@@ -411,7 +470,7 @@ export class ShiftsController {
            left join lateral (select employment_type, contracted_hours from employment_terms e
                                where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $1 and (e.ends_on is null or e.ends_on >= $1)
                                order by e.starts_on desc limit 1) et on true
-          where w.status = 'active'
+          where w.status = 'active' and ${EMPLOYED_ON('$1')}
           order by w.last_name, w.first_name`, [from, to])).rows;
       // Equipment rows on the roster (backlog item 4): everything not retired, with hours booked in the period.
       const equipment = (await db.query(
