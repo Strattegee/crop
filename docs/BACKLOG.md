@@ -89,7 +89,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [x] (26 Oct, scheduled run) Shift types per business: letter, name, standard hours (D / Day shift / 7:00–3:30; AM/PM/NS for nursing). Settings → Shift types (add, change, switch off); roster cards show the type's letter, falling back to A/P/N from the start time; industry templates come with letters. Still to do: shifts that cross pay rates (Release 2, with pay rules).
 - [x] (27 Oct, scheduled run) Roster templates: the ideal week as a template; apply a template or copy the previous (or any) week, with the usual people and equipment where they can work. Copying a whole month done 27 Oct.
 - [ ] After publishing: changes only as logged, requested and approved changes by authorised people; option to lock the roster; optional worker-to-worker shift swaps in the app. All as client settings. Logging done 26 Oct (every change after publishing is marked). Setting and lock done 27 Oct (open / owners and admins only / turned off). Requesting and approving done 27 Oct (scheduled run); emails about requests 27 Oct. Still to do: swaps (worker app).
-- [ ] Cover line ("T"): the person being covered, set when a shift covers someone's leave.
+- [x] Cover line ("T"): the person being covered, set when a shift covers someone's leave. Done 29 Oct (scheduled run, migration 0035): the shift panel has "Covering" (people away on the shift's date first, approved leave then requested, then everyone else); the card shows "Covering <name>" under the person; setting or clearing it is logged ("Covering Sandra Example" / "No longer covering …") and follows the after-publishing rule, but never messages anyone; putting the covered person back on the shift clears it. Steve's example said "Sick leave – Sandra Harrison"; CROP leaves out the kind of leave (CLAUDE.md rule), so it says "Covering Sandra Harrison". Question for Steve: is that enough, or should the office be able to type a short reason? Still to do: possibly set it automatically when a shift is created from the leave screen's "shifts that need cover".
 - [ ] Document visibility: every document type with who can see it (agency roles, client roles); clients see everything except contracts and agreements.
 - [ ] Agency fill timing by urgency, client-set, with defaults (defaults per agency: starts within 2 hours 10 minutes; later the same day 1 hour; next day or later 2 hours; confirmed by David 26 Oct).
 - [ ] Agency nominations: client setting, book automatically or approve first (pink "accepted" stage).
@@ -106,6 +106,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Date and number formats per country (US month-first dates), and spelling (UI stays Australian English for now).
 
 ## Questions for David and Steve (new, 26 Oct night)
+- Steve (29 Oct): the covering line says "Covering Sandra Harrison" without the kind of leave (we never show leave kinds, since personal leave can mean health). Is that enough, or should the office be able to add a short note?
 - (Answered 27 Oct: yes, and built.) When a week is published staff get their shifts by email and text; after changes, publishing again tells the people affected.
 
 ## Questions for David and Steve (sent 26 Oct; answered the same evening, see docs/decisions/2026-10-26-steve-answers.md; all answered)

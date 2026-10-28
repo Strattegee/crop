@@ -27,7 +27,9 @@ export async function assignWorker(db: PoolClient, tenantId: string, by: string 
   const [check] = await eligibilityForShift(db, tenantId, shiftId, [workerId]);
   if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
   await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1,$2,$3,$4)`, [tenantId, shiftId, workerId, by]);
-  await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [shiftId]);
+  // If the shift was covering this person (migration 0035), they are back on it themselves, so it no longer covers them.
+  await db.query(`update shifts set status = 'assigned', updated_at = now(),
+                    covering_worker_id = case when covering_worker_id = $2 then null else covering_worker_id end where id = $1`, [shiftId, workerId]);
   await closePendingOffers(db, shiftId, 'filled', by); // filled directly, so any bank-fill offers close
   return check.warnings.map(w => w.message);
 }
