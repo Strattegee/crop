@@ -11,7 +11,10 @@ export async function addWorker(f: FormData) {
   try {
     id = (await api<{ id: string }>('/workers', {
       method: 'POST',
-      body: { firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), email: str(f, 'email'), phone: str(f, 'phone'), roles: roles(f) },
+      body: {
+        firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), email: str(f, 'email'), phone: str(f, 'phone'), roles: roles(f),
+        onboardingChecklistId: str(f, 'onboardingChecklistId'),
+      },
     })).id;
   } catch (err) {
     failTo('/workers', err);
@@ -30,7 +33,8 @@ export async function addWorker(f: FormData) {
       redirect(`/workers/${id}?error=${encodeURIComponent(`Worker added, but their employment wasn't saved: ${why}`)}`);
     }
   }
-  redirect(`/workers/${id}?done=${encodeURIComponent('Worker added. Now add their credentials.')}`);
+  const done = str(f, 'onboardingChecklistId') ? 'Worker added and onboarding started. They can be rostered once it’s finished.' : 'Worker added. Now add their credentials.';
+  redirect(`/workers/${id}?done=${encodeURIComponent(done)}`);
 }
 
 export async function updateWorker(id: string, f: FormData) {

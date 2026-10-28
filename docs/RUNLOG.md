@@ -225,3 +225,10 @@ Newest first. One entry per working session or scheduled run.
 - Also written: the design for agency connections and agency fill (how an employer and an agency link up, how a request escalates from agency 1 to 2 to 3, how an agency's people are checked against the employer's rules without either business seeing the other's records, and how a booked agency worker appears on the employer's roster). It is in `docs/decisions/2026-10-28-agency-connections-design.md` with four questions. Nothing of it is built.
 - Next: words in roster labels and forms (backlog), or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions.
+
+## 2026-10-28 evening, 6:30pm Melbourne (scheduled run)
+
+- Shipped: onboarding checklists (first slice of recruitment and onboarding, backlog item 11). Settings now has "Onboarding checklists": a business lists what a new person needs before they can work, in order, each step required or optional. Some steps are tasks the office ticks (contract signed, induction done); others tick themselves when the person's record is complete (a credential checked and current, right to work checked, employment terms set). "Start from our credential rules" builds a checklist from the credentials the business already requires. When adding a person the office can pick a checklist; they then stay off the roster until an owner or admin presses "Finish onboarding and make active", which only works once every required step is done. The person's page shows the progress and each step in plain words ("Recorded, waiting to be checked"), and the Dashboard shows who is being onboarded and who is ready to finish. Onboarding can also be stopped with a reason.
+- Next: words in roster labels and forms, or requesting documents by email as part of onboarding. Applying online (a public form) is held for David because it opens CROP to the public.
+- Waiting on David: approval of the agency connections design and its four questions (unchanged). The worker app is the next big item; its sign-in setup in Zitadel still needs David to confirm the app's client ID.
+

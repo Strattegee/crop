@@ -9,8 +9,9 @@ import { APP_POOL } from '../database/database.module.js';
 import { credentialStatus, todayIn } from './compliance.js';
 import { loadSettings } from './settings.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
+import { beginOnboarding } from './onboarding.controller.js';
 
-const STATUSES = ['active', 'inactive', 'offboarded'] as const;
+const STATUSES = ['active', 'onboarding', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
   w.email, w.phone, w.status, w.roles, w.notes, w.created_at as "createdAt"`;
@@ -66,9 +67,12 @@ export class WorkersController {
     });
   }
 
+  /** Adds a worker. `onboardingChecklistId` starts onboarding them at once and keeps them off the roster until it's finished. */
   @Roles(...OFFICE_ROLES)
   @Post()
-  create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
+  create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
+    const checklistId = text(body, 'onboardingChecklistId', { max: 40 });
+    if (checklistId && !/^[0-9a-f-]{36}$/i.test(checklistId)) throw new BadRequestException('Choose a checklist');
     const values = [
       t.tenantId,
       text(body, 'firstName', { required: true, max: 100 }),
@@ -81,10 +85,13 @@ export class WorkersController {
     ];
     return withTenant(this.pool, t.tenantId, async db => {
       try {
-        return (await db.query(
+        const row = (await db.query<{ id: string }>(
           `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes)
            values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${WORKER_COLUMNS}`, values,
         )).rows[0];
+        if (!checklistId) return row;
+        await beginOnboarding(db, t.tenantId, auth, row.id, checklistId, true);
+        return (await db.query(`select ${WORKER_COLUMNS} from workers w where w.id = $1`, [row.id])).rows[0];
       } catch (err) {
         if ((err as { code?: string }).code === '23505') throw new BadRequestException('A worker with that email already exists');
         throw err;

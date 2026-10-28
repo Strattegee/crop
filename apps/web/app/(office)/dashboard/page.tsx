@@ -16,6 +16,7 @@ type Attention = {
 };
 type ChangeRequest = { id: string; weekStart: string; shiftId: string };
 type Leave = { id: string };
+type Onboarding = { id: string; workerId: string; workerName: string; summary: { done: number; total: number; ready: boolean } };
 
 /** How many lines of Needs attention the Dashboard shows; the roster has the rest. */
 const SHOWN = 5;
@@ -25,11 +26,12 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The office's first screen: what needs them in the coming week, decisions waiting, then their people. */
 export default async function Dashboard() {
   const tw = await words();
-  const [facilities, s, types, attention, leave, requests] = await Promise.all([
+  const [facilities, s, types, attention, leave, requests, onboarding] = await Promise.all([
     api<unknown[]>('/facilities'), api<Summary>('/compliance/summary'), api<unknown[]>('/credential-types'),
     api<Attention>('/roster/attention').catch(() => null),
     api<Leave[]>('/leave?status=requested').catch(() => [] as Leave[]),
     api<ChangeRequest[]>('/roster/change-requests').catch(() => [] as ChangeRequest[]),
+    api<Onboarding[]>('/onboardings').catch(() => [] as Onboarding[]),
   ]);
   const shiftsWord = tw.lower(T.shift, true);
   const kinds: { kind: Kind; text: (n: number) => string }[] = [
@@ -100,6 +102,17 @@ export default async function Dashboard() {
             ? <Link href={`/roster?week=${firstRequest.weekStart}&shift=${firstRequest.shiftId}`}>See the first one</Link>
             : <Link href="/roster">{tw.one(T.roster)}</Link>}
         </div>
+        {onboarding.length > 0 && (() => {
+          const ready = onboarding.filter(o => o.summary.ready);
+          const first = ready[0] ?? onboarding[0];
+          return (
+            <div className="card">
+              <div className="muted">Being onboarded</div><div className="stat">{onboarding.length}</div>
+              {ready.length > 0 && <div className="muted small">{plural(ready.length, 'ready to finish', 'ready to finish')}</div>}
+              <Link href={`/workers/${first.workerId}`}>{ready.length ? `Finish ${first.workerName}` : `${first.workerName}: ${first.summary.done} of ${first.summary.total} steps`}</Link>
+            </div>
+          );
+        })()}
         <div className="card"><div className="muted">{tw.many(T.credential)} waiting for checking</div><div className="stat">{s.verificationQueue.length}</div><Link href="/compliance">Review</Link></div>
       </div>
 
