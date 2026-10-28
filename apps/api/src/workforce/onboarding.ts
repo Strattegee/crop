@@ -139,3 +139,47 @@ export function stepsFromRequirements(
     ...creds.map(([id, c]): StepInput => ({ title: c.typeName, help: null, kind: 'credential', credentialTypeId: id, required: c.hard })),
   ];
 }
+
+/** What a step asks of the person themselves, for the "ask for what's still needed" message. */
+export interface AskableStep extends Step { category?: string | null; typeName?: string | null }
+
+/**
+ * The things the person can supply that are still outstanding: credentials not yet recorded (or run out or
+ * rejected) and right to work not yet recorded. Steps already recorded and waiting for the office to check them,
+ * tasks the office ticks and employment terms are not the person's to supply, so they aren't asked for.
+ * Vaccinations are only ever "a vaccination record" (no health details in messages).
+ */
+export function askableItems(steps: AskableStep[], progress: StepProgress[]): { label: string; required: boolean }[] {
+  const out: { label: string; required: boolean }[] = [];
+  const seen = new Set<string>();
+  steps.forEach((s, i) => {
+    if (progress[i]?.state !== 'to_do') return;
+    let label: string | null = null;
+    if (s.kind === 'credential') label = s.category === 'vaccination' ? 'a vaccination record' : (s.typeName ?? s.title);
+    if (s.kind === 'right_to_work') label = 'proof of your right to work (for example your passport, citizenship certificate or visa details)';
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    out.push({ label, required: s.required });
+  });
+  return out;
+}
+
+/** The email (and short text) asking a new person for what's still needed. Plain words; no numbers or health details. */
+export function askMessage(o: { first: string; business: string; items: { label: string; required: boolean }[]; note: string | null; emailed?: boolean }) {
+  const needed = o.items.filter(x => x.required);
+  const optional = o.items.filter(x => !x.required);
+  const subject = `${o.business}: what we still need from you before you start`;
+  const lines = [`Hi ${o.first},`, ''];
+  if (needed.length) {
+    lines.push(`Before you can start work with ${o.business}, we still need:`, ...needed.map(x => `- ${x.label}`));
+  }
+  if (optional.length) {
+    if (needed.length) lines.push('');
+    lines.push(needed.length ? 'It would also help to have:' : `${o.business} would also like to have:`, ...optional.map(x => `- ${x.label}`));
+  }
+  if (o.note) lines.push('', o.note);
+  lines.push('', `Please send a clear photo or scan of each to ${o.business}, or bring them in. If you have already sent something, thank you: we will check it soon.`);
+  const shortList = o.items.length <= 2 ? o.items.map(x => x.label.replace(/ \(for example.*\)$/, '')).join(' and ') : `${o.items.length} things`;
+  const sms = `${o.business}: before you start we still need ${shortList} from you. ${o.emailed === false ? `Please send a photo or bring them in.` : 'Details are in your email.'}`;
+  return { subject, email: lines.join('\n'), sms };
+}

@@ -25,3 +25,11 @@ export async function finishOnboarding(workerId: string, onboardingId: string) {
 export async function stopOnboarding(workerId: string, onboardingId: string, f: FormData) {
   await attempt(back(workerId), () => api(`/onboardings/${onboardingId}/stop`, { method: 'POST', body: { reason: str(f, 'reason') } }), 'Onboarding stopped.');
 }
+
+export async function askForItems(workerId: string, onboardingId: string, f: FormData) {
+  let sent: string[] = [];
+  const note = str(f, 'note');
+  await attempt(back(workerId), async () => {
+    sent = (await api<{ sent: string[] }>(`/onboardings/${onboardingId}/ask`, { method: 'POST', body: { note: note || undefined, sms: f.get('sms') === 'on' } })).sent;
+  }, () => (sent.length ? `Sent by ${sent.join(' and ')}.` : 'Not sent: check their email address and mobile number.'));
+}

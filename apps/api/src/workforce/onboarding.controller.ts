@@ -9,15 +9,19 @@ import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import {
-  defaultTitle, notReadyMessage, STEP_KINDS, stepProgress, stepsFromRequirements, summarise,
+  askableItems, askMessage, defaultTitle, notReadyMessage, STEP_KINDS, stepProgress, stepsFromRequirements, summarise,
   type Step, type StepInput, type StepKind, type Tick,
 } from './onboarding.js';
 import { loadSettings } from './settings.js';
+import { queueNotification } from '../notifications/notify.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_STEPS = 40;
+const ASK_TEMPLATE = 'onboarding_request';
+/** Asking again this soon is almost always a double press. */
+const ASK_AGAIN_AFTER_MINUTES = 10;
 
-const STEP_COLS = `s.id, s.title, s.help, s.kind, s.credential_type_id as "credentialTypeId", ct.name as "typeName", s.required`;
+const STEP_COLS = `s.id, s.title, s.help, s.kind, s.credential_type_id as "credentialTypeId", ct.name as "typeName", ct.category, s.required`;
 
 const nameOf = (auth: AuthContext) => auth.displayName || auth.email;
 
@@ -88,7 +92,7 @@ async function setSteps(db: PoolClient, tenantId: string, checklistId: string, s
 }
 
 async function stepsOf(db: PoolClient, checklistId: string) {
-  return (await db.query<Step & { typeName: string | null }>(
+  return (await db.query<Step & { typeName: string | null; category: string | null }>(
     `select ${STEP_COLS} from onboarding_steps s left join credential_types ct on ct.id = s.credential_type_id
       where s.checklist_id = $1 and s.removed_at is null order by s.position, s.created_at`, [checklistId])).rows;
 }
@@ -107,7 +111,7 @@ const duplicate = (err: unknown, name: string | null) =>
 
 /** Progress of one live or finished onboarding (steps in checklist order, each with its state). */
 export async function onboardingProgress(db: PoolClient, tenantId: string, onboardingId: string) {
-  const o = (await db.query<{ id: string; workerId: string; checklistId: string; checklistName: string; finishedAt: string | null; roles: string[] }>(
+  const o = (await db.query<{ id: string; workerId: string; checklistId: string; checklistName: string; startedAt: string; finishedAt: string | null; roles: string[] }>(
     `select o.id, o.worker_id as "workerId", o.checklist_id as "checklistId", c.name as "checklistName",
             o.started_at as "startedAt", o.started_by_name as "startedByName", o.finished_at as "finishedAt",
             o.finished_by_name as "finishedByName", o.outcome, o.stop_reason as "stopReason", w.roles
@@ -129,8 +133,13 @@ export async function onboardingProgress(db: PoolClient, tenantId: string, onboa
   };
   const progress = steps.map(s => stepProgress(s, facts));
   const { roles: _roles, ...rest } = o;
+  const lastAsked = (await db.query<{ at: string }>(
+    `select max(created_at) as at from notifications where worker_id = $1 and template = $2 and created_at >= $3`,
+    [o.workerId, ASK_TEMPLATE, o.startedAt])).rows[0]?.at ?? null;
   return {
     ...rest,
+    askable: askableItems(steps, progress),
+    lastAskedAt: lastAsked,
     steps: steps.map((s, i) => ({ ...s, ...progress[i], tickedAt: ticks.get(s.id)?.done ? ticks.get(s.id)!.at : null, note: ticks.get(s.id)?.note ?? null })),
     summary: summarise(steps, progress),
   };
@@ -304,6 +313,43 @@ export class WorkerOnboardingController {
       await db.query('insert into onboarding_ticks(tenant_id, onboarding_id, step_id, done, note, by_user, by_name) values ($1,$2,$3,$4,$5,$6,$7)',
         [t.tenantId, id, stepId, done, note, auth.userId, nameOf(auth)]);
       return onboardingProgress(db, t.tenantId, id);
+    });
+  }
+
+  /**
+   * Emails the person (and texts them when `sms` is true) a list of what's still needed from them: credentials not
+   * recorded yet (or run out or rejected) and right to work. `note` adds a line from the office. Things already
+   * recorded and waiting to be checked, tasks and employment terms aren't asked for.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('onboardings/:id/ask')
+  @HttpCode(200)
+  ask(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const note = text(body, 'note', { max: 500 });
+    const sms = bool(body, 'sms') ?? false;
+    return withTenant(this.pool, t.tenantId, async db => {
+      const o = (await db.query<{ worker_id: string; finished_at: string | null }>('select worker_id, finished_at from worker_onboardings where id = $1 for update', [id])).rows[0];
+      if (!o) throw new NotFoundException('Onboarding not found');
+      if (o.finished_at) throw new ConflictException('This onboarding is finished');
+      const p = await onboardingProgress(db, t.tenantId, id);
+      if (!p.askable.length) throw new BadRequestException('There is nothing to ask them for: everything they supply has been recorded');
+      if (p.lastAskedAt && Date.now() - Date.parse(p.lastAskedAt) < ASK_AGAIN_AFTER_MINUTES * 60_000) {
+        throw new ConflictException(`They were asked a few minutes ago. You can ask again after ${ASK_AGAIN_AFTER_MINUTES} minutes`);
+      }
+      const c = (await db.query<{ first: string; email: string | null; phone: string | null }>(
+        'select coalesce(preferred_name, first_name) as first, email, phone from workers where id = $1', [o.worker_id])).rows[0];
+      if (!c.email && !(sms && c.phone)) throw new BadRequestException(sms ? 'This person has no email address or mobile number recorded' : 'This person has no email address recorded');
+      const m = askMessage({ first: c.first, business: t.tenantName, items: p.askable, note, emailed: !!c.email });
+      const sent: string[] = [];
+      if (c.email) {
+        await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: ASK_TEMPLATE, subject: m.subject, body: m.email, workerId: o.worker_id, createdBy: auth.userId });
+        sent.push('email');
+      }
+      if (sms && c.phone) {
+        const r = await queueNotification(db, t.tenantId, { channel: 'sms', to: c.phone, template: ASK_TEMPLATE, body: m.sms, workerId: o.worker_id, createdBy: auth.userId });
+        if (r.status === 'queued') sent.push('text');
+      }
+      return { ...(await onboardingProgress(db, t.tenantId, id)), sent };
     });
   }
 

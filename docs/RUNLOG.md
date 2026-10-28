@@ -232,3 +232,9 @@ Newest first. One entry per working session or scheduled run.
 - Next: words in roster labels and forms, or requesting documents by email as part of onboarding. Applying online (a public form) is held for David because it opens CROP to the public.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged). The worker app is the next big item; its sign-in setup in Zitadel still needs David to confirm the app's client ID.
 
+
+## 2026-10-28 night, 9:15pm Melbourne (scheduled run)
+
+- Shipped: asking a new person for what's still needed (onboarding). On a person's page, the Onboarding card has "Ask <name> for what's still needed": it emails them (and texts them, if ticked) a plain list of the credentials and right to work details still missing, with an optional note from the office ("Bring them in on Monday"). Anything already recorded and waiting to be checked isn't asked for again, and vaccinations are only ever "a vaccination record". Pressing it twice by mistake doesn't send twice, and the card shows when they were last asked.
+- Next: words in roster labels and forms, or the worker app once its sign-in is confirmed.
+- Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held).
