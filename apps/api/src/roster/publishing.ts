@@ -1,5 +1,6 @@
 import type { Actor } from '@crop/db';
 import type { AuthContext } from '../auth/auth.types.js';
+import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 import { addDays } from '../workforce/compliance.js';
 
 /**
@@ -77,23 +78,25 @@ const hm = (t: string) => t.replace(/^0(\d)/, '$1');
  */
 export function rosterMessage(o: {
   first: string; business: string; site: string; weekStart: string; shifts: MyShift[]; updated: boolean;
-}) {
+}, w: Words = DEFAULT_WORDS) {
   const week = dayLabel(o.weekStart);
+  const shifts = w.lower(T.shift, true);
+  const roster = w.lower(T.roster);
   const lines = o.shifts.map(s => `- ${dayLabel(s.localDate)}, ${hm(s.localStart)}–${hm(s.localEnd)}: ${s.role}${s.areaName ? ` (${s.areaName})` : ''}${s.confirmed ? '' : ' (please confirm with the office)'}`);
   const subject = o.updated
-    ? `Your shifts at ${o.site} for the week of ${week} have changed`
-    : `Your shifts at ${o.site} for the week of ${week}`;
+    ? `Your ${shifts} at ${o.site} for the week of ${week} have changed`
+    : `Your ${shifts} at ${o.site} for the week of ${week}`;
   const intro = o.updated
-    ? `${o.business} has changed the roster for ${o.site}, week of ${week}.`
-    : `${o.business} has published the roster for ${o.site}, week of ${week}.`;
+    ? `${o.business} has changed the ${roster} for ${o.site}, week of ${week}.`
+    : `${o.business} has published the ${roster} for ${o.site}, week of ${week}.`;
   const body = o.shifts.length
-    ? `${o.updated ? 'Your shifts that week are now' : 'Your shifts'}:\n${lines.join('\n')}`
-    : `You no longer have any shifts at ${o.site} that week.`;
+    ? `${o.updated ? `Your ${shifts} that week are now` : `Your ${shifts}`}:\n${lines.join('\n')}`
+    : `You no longer have any ${shifts} at ${o.site} that week.`;
   const email = [`Hi ${o.first},`, '', intro, '', body, '', `If you can't work any of these, contact ${o.business} as soon as you can.`].join('\n');
   const listed = o.shifts.slice(0, 5).map(s => `${shortDay(s.localDate)} ${hm(s.localStart)}-${hm(s.localEnd)}`).join(', ');
   const more = o.shifts.length > 5 ? ` +${o.shifts.length - 5} more (see email)` : '';
   const sms = o.shifts.length
-    ? `${o.business}: ${o.updated ? 'your shifts have changed. Now' : 'your shifts'} at ${o.site}, wk of ${week}: ${listed}${more}.`
-    : `${o.business}: you no longer have shifts at ${o.site} in the week of ${week}.`;
+    ? `${o.business}: ${o.updated ? `your ${shifts} have changed. Now` : `your ${shifts}`} at ${o.site}, wk of ${week}: ${listed}${more}.`
+    : `${o.business}: you no longer have ${shifts} at ${o.site} in the week of ${week}.`;
   return { subject, email, sms };
 }

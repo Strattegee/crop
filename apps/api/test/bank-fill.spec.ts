@@ -259,6 +259,26 @@ describe('bank fill: offers, first to accept is booked', () => {
     }
   });
 
+  it("uses the business's words in the messages", async () => {
+    await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1040, singular: 'Job', plural: 'Jobs' }] }).expect(200);
+    try {
+      const s = await shift('2026-11-19');
+      await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, ben] }).expect(201);
+      const sent = (await owner.query<{ channel: string; subject: string | null; body: string }>(
+        `select channel, subject, body from notifications where template = 'shift_offer' and body like '%Thu 19 Nov%' order by channel, to_address`)).rows;
+      expect(sent[0].subject).toBe('Job available: Thu 19 Nov 07:00–15:30');
+      expect(sent.find(m => m.channel === 'sms')!.body).toContain('Demo Cafe has a job for you');
+      const offer = (await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body.offers.find((x: { workerId: string }) => x.workerId === ana).id;
+      await http().post(`/offers/${offer}/accept`).set(as('alloc')).expect(200);
+      const booked = (await owner.query<{ body: string }>(`select body from notifications where template = 'shift_booked' and channel = 'email' and body like '%Thu 19 Nov%'`)).rows[0];
+      expect(booked.body).toContain("You're booked for this job:");
+      const filled = (await owner.query<{ subject: string }>(`select subject from notifications where template = 'shift_filled' and body like '%Thu 19 Nov%'`)).rows[0];
+      expect(filled.subject).toBe('Job filled: Thu 19 Nov 07:00–15:30');
+    } finally {
+      await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1040, singular: '' }] }).expect(200);
+    }
+  });
+
   it('keeps offers to the business and never deletes them', async () => {
     const s = await shift('2026-11-11');
     const o = (await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;

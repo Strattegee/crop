@@ -5,6 +5,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
 import { queueNotification } from './notify.js';
+import { T, wordsFor } from '../terms/words.js';
 
 const WORKER_STAGES = [7, 30, 60]; // days before expiry
 const OFFICE_STAGE = 30;
@@ -81,6 +82,7 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
     const today = todayIn(settings.timezone, now);
     const horizon = addDays(today, Math.max(...WORKER_STAGES));
     const items = await this.expiring(db, today, horizon);
+    const words = await wordsFor(db);
     let queued = 0;
     const q = async (n: Parameters<typeof queueNotification>[2]) => {
       const r = await queueNotification(db, tenantId, n);
@@ -93,7 +95,7 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
       const stage = WORKER_STAGES.find(s => days <= s);
       if (!stage) continue;
       const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `on ${longDate(it.expiry)}`;
-      const text = `Hi ${it.firstName}, your ${it.what} expires ${when}. Please send your renewal to ${agency} so you can keep being booked for shifts.`;
+      const text = `Hi ${it.firstName}, your ${it.what} expires ${when}. Please send your renewal to ${agency} so you can keep being booked for ${words.lower(T.shift, true)}.`;
       if (it.email) {
         await q({ channel: 'email', to: it.email, template: 'credential_expiry', workerId: it.workerId, dedupeKey: `${it.key}:${stage}:email`,
           subject: `Your ${it.what} expires ${when}`, body: `${text}\n\nThanks,\n${agency}` });
@@ -126,7 +128,7 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
 
     // Equipment dates: the same stages as people (30 days, due day, overdue in the last week).
     const equipLines: string[] = [];
-    const booked = (e: EquipmentDue) => e.bookedAfter ? `; booked on ${e.bookedAfter} shift${e.bookedAfter === 1 ? '' : 's'} after that date` : '';
+    const booked = (e: EquipmentDue) => e.bookedAfter ? `; booked on ${words.count(e.bookedAfter, T.shift)} after that date` : '';
     for (const e of await this.equipmentDue(db, today, addDays(today, -7), addDays(today, OFFICE_STAGE))) {
       const days = daysBetween(today, e.due);
       const k = `${e.key}:office:${days < 0 ? 'expired' : days === 0 ? 'expiry' : OFFICE_STAGE}`;
@@ -144,7 +146,7 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
         sections.push(`${equipLines.length ? 'People:\n' : ''}${lines.join('\n')}\n\n${appUrl ? `See the compliance page: ${appUrl}/compliance` : 'See the Compliance page in CROP.'}`);
       }
       if (equipLines.length) {
-        sections.push(`Equipment:\n${equipLines.join('\n')}\n\nRecord the new date against the equipment in CROP once it's done.`);
+        sections.push(`${words.one(T.equipment)}:\n${equipLines.join('\n')}\n\nRecord the new date against the ${words.lower(T.equipment)} in CROP once it's done.`);
       }
       const body = `These need attention at ${agency}:\n\n${sections.join('\n\n')}`;
       const offices = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;

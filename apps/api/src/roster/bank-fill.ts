@@ -6,6 +6,7 @@
  * The first to accept is booked. Messages never include health information or document numbers.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 import { fmtDate } from './eligibility.js';
 
 export const BANK_FILL_TYPES = ['bank', 'casual'] as const;
@@ -28,21 +29,22 @@ export function shiftLabel(s: OfferShift): string {
  * The offer message. With `link`, the person can accept or decline from it without signing in (decided 26 Oct);
  * without one (no APP_URL set), they contact the business and the office records the reply.
  */
-export function offerMessage(firstName: string, business: string, s: OfferShift, expiresLabel: string | null, link: string | null = null) {
+export function offerMessage(firstName: string, business: string, s: OfferShift, expiresLabel: string | null, link: string | null = null, w: Words = DEFAULT_WORDS) {
   const what = shiftLabel(s);
   const until = expiresLabel ? ` The offer is open until ${expiresLabel}.` : '';
-  const subject = `Shift available: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`;
+  const subject = `${w.one(T.shift)} available: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`;
+  const aShift = w.a(T.shift);
   if (link) {
     return {
       subject,
-      email: `Hi ${firstName},\n\n${business} has a shift available:\n\n${what}\n\nAccept or decline here: ${link}\n\nThe first person to accept is booked.${until} This link is just for you, so please don't forward it.\n\nThanks,\n${business}`,
-      sms: `Hi ${firstName}, ${business} has a shift for you: ${what}. Accept or decline: ${link} (first to accept gets it).${until}`,
+      email: `Hi ${firstName},\n\n${business} has ${aShift} available:\n\n${what}\n\nAccept or decline here: ${link}\n\nThe first person to accept is booked.${until} This link is just for you, so please don't forward it.\n\nThanks,\n${business}`,
+      sms: `Hi ${firstName}, ${business} has ${aShift} for you: ${what}. Accept or decline: ${link} (first to accept gets it).${until}`,
     };
   }
-  const sms = `Hi ${firstName}, ${business} has a shift for you: ${what}. Contact ${business} if you'd like it; the first to accept gets it.${until}`;
+  const sms = `Hi ${firstName}, ${business} has ${aShift} for you: ${what}. Contact ${business} if you'd like it; the first to accept gets it.${until}`;
   return {
     subject,
-    email: `Hi ${firstName},\n\n${business} has a shift available:\n\n${what}\n\nContact ${business} if you'd like it. The first person to accept is booked.${until}\n\nThanks,\n${business}`,
+    email: `Hi ${firstName},\n\n${business} has ${aShift} available:\n\n${what}\n\nContact ${business} if you'd like it. The first person to accept is booked.${until}\n\nThanks,\n${business}`,
     sms,
   };
 }
@@ -56,19 +58,19 @@ export function newOfferLink() {
 }
 export const offerLinkUrl = (appUrl: string, token: string) => `${appUrl.replace(/\/$/, '')}/offer/${token}`;
 
-export function bookedMessage(firstName: string, business: string, s: OfferShift) {
+export function bookedMessage(firstName: string, business: string, s: OfferShift, w: Words = DEFAULT_WORDS) {
   const what = shiftLabel(s);
   return {
     subject: `You're booked: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`,
-    email: `Hi ${firstName},\n\nYou're booked for this shift:\n\n${what}\n\nThanks,\n${business}`,
+    email: `Hi ${firstName},\n\nYou're booked for this ${w.lower(T.shift)}:\n\n${what}\n\nThanks,\n${business}`,
     sms: `Hi ${firstName}, you're booked: ${what}. Thanks, ${business}`,
   };
 }
 
-export function filledMessage(firstName: string, business: string, s: OfferShift) {
+export function filledMessage(firstName: string, business: string, s: OfferShift, w: Words = DEFAULT_WORDS) {
   return {
-    subject: `Shift filled: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`,
-    email: `Hi ${firstName},\n\nThe shift we offered you has now been filled:\n\n${shiftLabel(s)}\n\nThanks for your time,\n${business}`,
+    subject: `${w.one(T.shift)} filled: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`,
+    email: `Hi ${firstName},\n\nThe ${w.lower(T.shift)} we offered you has now been filled:\n\n${shiftLabel(s)}\n\nThanks for your time,\n${business}`,
   };
 }
 
