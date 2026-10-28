@@ -6,6 +6,8 @@ export type OfferView = {
   firstName: string;
   status: 'pending' | 'expired' | 'accepted' | 'declined' | 'withdrawn' | 'filled';
   expiresAt: string | null;
+  /** The business's word for a shift, e.g. { one: 'Job', lower: 'job' }; older APIs may not send it. */
+  word?: { one: string; lower: string };
   shift: { label: string; role: string; date: string; start: string; end: string; site: string; area: string | null; timezone: string; cancelled: boolean };
 };
 

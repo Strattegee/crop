@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic';
 // The link is the person's key to this offer: keep it out of search engines and other sites' logs.
 export const metadata: Metadata = { title: 'Shift offer · CROP', robots: { index: false, follow: false }, referrer: 'no-referrer' };
 
-const DONE: Record<string, string> = {
-  accepted: "You're booked. We've sent you a confirmation.",
-  declined: "Thanks for letting us know. You've said no to this shift.",
+const DONE: Record<string, (shift: string) => string> = {
+  accepted: () => "You're booked. We've sent you a confirmation.",
+  declined: shift => `Thanks for letting us know. You've said no to this ${shift}.`,
 };
+
+const word = (v: OfferView) => v.word ?? { one: 'Shift', lower: 'shift' };
 
 function untilLabel(v: OfferView) {
   if (!v.expiresAt) return null;
@@ -23,12 +25,13 @@ function longDate(date: string) {
 }
 
 function closedText(v: OfferView) {
+  const shift = word(v).lower;
   switch (v.status) {
-    case 'accepted': return "You're booked for this shift.";
-    case 'declined': return "You've said no to this shift.";
-    case 'expired': return `This offer has expired. Contact ${v.business} if you'd still like the shift.`;
-    case 'filled': return 'This shift has been filled. Thanks for your time.';
-    default: return v.shift.cancelled ? 'This shift has been cancelled.' : 'This offer has been withdrawn.';
+    case 'accepted': return `You're booked for this ${shift}.`;
+    case 'declined': return `You've said no to this ${shift}.`;
+    case 'expired': return `This offer has expired. Contact ${v.business} if you'd still like the ${shift}.`;
+    case 'filled': return `This ${shift} has been filled. Thanks for your time.`;
+    default: return v.shift.cancelled ? `This ${shift} has been cancelled.` : 'This offer has been withdrawn.';
   }
 }
 
@@ -63,14 +66,14 @@ export default async function OfferPage({ params, searchParams }: {
       ) : (
         <section className="card">
           <p className="muted" style={{ margin: 0 }}>{r.view.business}</p>
-          <h1>Hi {r.view.firstName}, {r.view.status === 'pending' ? 'would you like this shift?' : 'about this shift'}</h1>
+          <h1>Hi {r.view.firstName}, {r.view.status === 'pending' ? `would you like this ${word(r.view).lower}?` : `about this ${word(r.view).lower}`}</h1>
           <dl className="offer-shift">
             <dt>Date</dt><dd>{longDate(r.view.shift.date)}</dd>
             <dt>Time</dt><dd>{r.view.shift.start}–{r.view.shift.end}</dd>
             <dt>Role</dt><dd>{r.view.shift.role}</dd>
             <dt>Where</dt><dd>{r.view.shift.site}{r.view.shift.area ? ` (${r.view.shift.area})` : ''}</dd>
           </dl>
-          {done && DONE[done] && <p className="notice success" role="status">{DONE[done]}</p>}
+          {done && DONE[done] && <p className="notice success" role="status">{DONE[done](word(r.view).lower)}</p>}
           {error && <p className="notice error" role="alert">{error}</p>}
           {r.view.status === 'pending' ? (
             <>
@@ -78,7 +81,7 @@ export default async function OfferPage({ params, searchParams }: {
                 The first person to accept is booked.{untilLabel(r.view) ? ` This offer is open until ${untilLabel(r.view)}.` : ''}
               </p>
               <form action={reply} className="offer-actions">
-                <button className="btn" type="submit" name="reply" value="accept">Accept shift</button>
+                <button className="btn" type="submit" name="reply" value="accept">Accept {word(r.view).lower}</button>
                 <button className="btn secondary" type="submit" name="reply" value="decline">No thanks</button>
               </form>
             </>
