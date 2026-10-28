@@ -175,4 +175,33 @@ describe('workers, credentials and compliance', () => {
     const w = await http().get(`/workers/${who}`).set(as('alloc')).expect(200);
     expect(w.body.credentials[0]).toHaveProperty('issuedBy', null);
   });
+
+  it('edits a credential with the same rules as adding, and saving without changes records nothing', async () => {
+    const who = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Ned', lastName: 'Example', roles: ['RN'] }).expect(201)).body.id;
+    const base = `/workers/${who}/credentials`;
+    const c = (await http().post(base).set(as('alloc'))
+      .send({ credentialTypeId: types['National Police Check'], number: 'NPC-7', issueDate: addDays(today, -10), expiryDate: addDays(today, 300) }).expect(201)).body;
+    await http().post(`${base}/${c.id}/verify`).set(as('admin')).send({}).expect(201);
+    // A police check has a number and an expiry date, so neither can be cleared.
+    const noExpiry = await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ expiryDate: null }).expect(400);
+    expect(noExpiry.body.message).toMatch(/Expiry date is required/);
+    await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ number: '' }).expect(400);
+    await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ expiryDate: addDays(today, -20) }).expect(400); // before issue date
+    // The whole form sent back unchanged keeps it checked and adds nothing to its history.
+    const same = await http().patch(`${base}/${c.id}`).set(as('alloc'))
+      .send({ number: 'NPC-7', issuedBy: null, issueDate: addDays(today, -10), expiryDate: addDays(today, 300), notes: null }).expect(200);
+    expect(same.body.verification).toBe('verified');
+    let history = await http().get(`${base}/${c.id}/history`).set(as('alloc')).expect(200);
+    expect(history.body.map((e: { action: string }) => e.action)).toEqual(['created', 'verified']);
+    // A note alone is recorded but keeps it checked.
+    const noted = await http().patch(`${base}/${c.id}`).set(as('alloc'))
+      .send({ number: 'NPC-7', issuedBy: null, issueDate: addDays(today, -10), expiryDate: addDays(today, 300), notes: 'Original sighted' }).expect(200);
+    expect(noted.body).toMatchObject({ verification: 'verified', notes: 'Original sighted' });
+    // A new number sends it back for checking; workers can't edit.
+    const renumbered = await http().patch(`${base}/${c.id}`).set(as('alloc')).send({ number: 'NPC-8' }).expect(200);
+    expect(renumbered.body).toMatchObject({ verification: 'unverified', number: 'NPC-8', notes: 'Original sighted' });
+    await http().patch(`${base}/${c.id}`).set(as('wk')).send({ number: 'NPC-9' }).expect(403);
+    history = await http().get(`${base}/${c.id}/history`).set(as('alloc')).expect(200);
+    expect(history.body.map((e: { action: string }) => e.action)).toEqual(['created', 'verified', 'updated', 'updated', 'verification_reset']);
+  });
 });

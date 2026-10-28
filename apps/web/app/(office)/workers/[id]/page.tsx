@@ -6,11 +6,12 @@ import { Notices } from '../../notices';
 import { formatDate as fmt } from '../../../../lib/format';
 import { PROOF_LABEL, RTW_ISSUE, RTW_STATUS } from '../../../../lib/right-to-work';
 import {
-  addCredential, rejectCredential, rejectRightToWork, removeDocument, removeRightToWorkDocument, saveRightToWork, updateWorker,
+  addCredential, rejectCredential, rejectRightToWork, removeDocument, removeRightToWorkDocument, saveRightToWork, updateCredential, updateWorker,
   uploadDocument, uploadRightToWorkDocument, verifyCredential, verifyRightToWork,
 } from '../actions';
 import { DocLink } from '../../../../lib/doc-link';
 import { AddCredentialForm } from './add-credential-form';
+import { EditCredentialForm } from './edit-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
 import { AvailabilityCard } from './availability-card';
 import { EmploymentCard, type EmploymentTerms } from './employment-card';
@@ -20,7 +21,7 @@ import { T, words } from '../../../../lib/terms';
 export const dynamic = 'force-dynamic';
 
 type Credential = {
-  id: string; typeName: string; number: string | null; issuedBy?: string | null; issueDate: string | null; expiryDate: string | null;
+  id: string; credentialTypeId: string; typeName: string; number: string | null; notes?: string | null; issuedBy?: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
   documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
@@ -60,6 +61,7 @@ export default async function WorkerPage({ params, searchParams }: {
   const r = rtw.current;
   const canVerify = agency?.role === 'owner' || agency?.role === 'admin';
   const activeTypes = types.filter(t => t.active);
+  const typeById = new Map(types.map(t => [t.id, t]));
 
   return (
     <>
@@ -158,7 +160,16 @@ export default async function WorkerPage({ params, searchParams }: {
             <tbody>
               {w.credentials.map(c => (
                 <tr key={c.id}>
-                  <td>{c.typeName}</td>
+                  <td>
+                    {c.typeName}
+                    {c.notes && <div className="muted small">{c.notes}</div>}
+                    <EditCredentialForm
+                      c={c}
+                      hasNumber={typeById.get(c.credentialTypeId)?.hasNumber ?? false}
+                      hasExpiry={typeById.get(c.credentialTypeId)?.hasExpiry ?? false}
+                      action={updateCredential.bind(null, w.id, c.id)}
+                    />
+                  </td>
                   <td>{c.number ?? '—'}{c.issuedBy && <div className="muted small">Issued by {c.issuedBy}</div>}</td>
                   <td>{formatDate(c.expiryDate)}</td>
                   <td><Badge label={CREDENTIAL_STATUS_LABEL[c.status]} /></td>

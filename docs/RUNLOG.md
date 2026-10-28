@@ -259,3 +259,9 @@ Newest first. One entry per working session or scheduled run.
 - Also shipped: who issued a credential. Adding a credential on a person's page has an optional "Issued by" (the licensing body or training provider), shown under the number; changing it on a checked credential sends it back for checking.
 - Next: an edit form for credentials on the person's page, or requirement levels (recorded but never warns), or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held). New question for Steve: is "Covering <name>" enough without the reason?
+
+## 2026-10-29 morning, 9:10am Melbourne (scheduled run)
+
+- Shipped: correcting a credential. Each credential on a person's page now has Edit: number, who issued it, dates and notes, with the same required fields as adding. If a checked credential gets a new number, issuer or dates, the page says it needs checking again before it counts; saving without changing anything leaves it (and its history) alone. Notes now show under the credential's name.
+- Next: requirement levels (recorded but never warns), or the worker app once its sign-in is confirmed.
+- Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held).
