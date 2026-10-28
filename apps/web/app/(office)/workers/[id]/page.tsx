@@ -14,6 +14,7 @@ import { AddCredentialForm } from './add-credential-form';
 import { RightToWorkForm } from './right-to-work-form';
 import { AvailabilityCard } from './availability-card';
 import { EmploymentCard, type EmploymentTerms } from './employment-card';
+import { OnboardingCard, type Onboarding } from './onboarding-card';
 import { T, words } from '../../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
@@ -46,11 +47,13 @@ export default async function WorkerPage({ params, searchParams }: {
 }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [w, types, agency, rtw, avail, employment, settings] = await Promise.all([
+  const [w, types, agency, rtw, avail, employment, settings, onboarding, checklists] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
     api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),
     api<EmploymentTerms[]>(`/workers/${id}/employment?withdrawn=true`).catch(() => null),
     api<{ timezone?: string }>('/settings').catch(() => ({} as { timezone?: string })),
+    api<Onboarding>(`/workers/${id}/onboarding`).catch(() => null),
+    api<Parameters<typeof OnboardingCard>[0]['checklists']>('/onboarding-checklists').catch(() => []),
   ]);
   // "Today" in the business's time zone, never the server's.
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone || 'Australia/Melbourne' }).format(new Date());
@@ -81,6 +84,10 @@ export default async function WorkerPage({ params, searchParams }: {
         </div>
       )}
 
+
+      {onboarding && (
+        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} timeZone={settings.timezone || 'Australia/Melbourne'} />
+      )}
 
       {employment && <EmploymentCard workerId={id} terms={employment} today={today} canEdit={canVerify} />}
 
@@ -223,6 +230,7 @@ export default async function WorkerPage({ params, searchParams }: {
           <label>Status
             <select name="status" defaultValue={w.status}>
               <option value="active">Active</option>
+              <option value="onboarding">Onboarding (not rostered yet)</option>
               <option value="inactive">Inactive</option>
               <option value="offboarded">Offboarded</option>
             </select>

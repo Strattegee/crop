@@ -26,6 +26,7 @@ import { AttentionController } from './roster/attention.controller.js';
 import { ShiftDutiesController } from './roster/duties.controller.js';
 import { CoverRulesController } from './roster/cover-rules.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
+import { OnboardingChecklistsController, WorkerOnboardingController } from './workforce/onboarding.controller.js';
 
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
@@ -35,6 +36,7 @@ import { WorkersController } from './workforce/workers.controller.js';
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController, AttentionController, ShiftDutiesController, CoverRulesController,
+    OnboardingChecklistsController, WorkerOnboardingController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }],
 })

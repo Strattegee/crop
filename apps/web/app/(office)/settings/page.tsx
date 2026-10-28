@@ -76,6 +76,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Link href="/settings/cover-rules" className="btn small secondary">Cover rules</Link>
       </div>
 
+      <div className="card">
+        <h2>Onboarding checklists</h2>
+        <p className="muted" style={{ marginTop: 0 }}>What a new {tw.lower(T.worker)} needs before they can work: tasks the office ticks, and checks that tick themselves when their record is complete.</p>
+        <Link href="/settings/onboarding" className="btn small secondary">Onboarding checklists</Link>
+      </div>
+
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Words we use</h2>
         <p className="muted" style={{ marginTop: 0 }}>Call things what your business calls them. Menus, page titles and the {tw.lower(T.roster)} use these words. Leave a word blank to go back to the standard one.</p>

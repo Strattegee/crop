@@ -23,7 +23,10 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   if (p.compliance) qs.set('compliance', p.compliance);
   if (p.status) qs.set('status', p.status);
   if (p.employment) qs.set('employment', p.employment);
-  const [workers, agency] = await Promise.all([api<Worker[]>(`/workers?${qs}`), currentAgency()]);
+  const [workers, agency, checklists] = await Promise.all([
+    api<Worker[]>(`/workers?${qs}`), currentAgency(),
+    api<{ id: string; name: string }[]>('/onboarding-checklists').catch(() => [] as { id: string; name: string }[]),
+  ]);
   // Employment terms are set by owners and admins.
   const canSetEmployment = agency?.role === 'owner' || agency?.role === 'admin';
 
@@ -50,6 +53,14 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             </label>
             <label>Hours a week<input name="contractedHours" type="number" min={0} max={80} step={0.25} placeholder="If set" /></label>
           </>}
+          {checklists.length > 0 && (
+            <label>Onboarding
+              <select name="onboardingChecklistId" defaultValue="">
+                <option value="">None: can be rostered now</option>
+                {checklists.map(c => <option key={c.id} value={c.id}>{c.name} (rostered once finished)</option>)}
+              </select>
+            </label>
+          )}
           <button type="submit" className="btn">Add worker</button>
         </form>
       </details>
@@ -68,6 +79,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           <select name="status" defaultValue={p.status ?? ''}>
             <option value="">Any</option>
             <option value="active">Active</option>
+            <option value="onboarding">Onboarding</option>
             <option value="inactive">Inactive</option>
             <option value="offboarded">Offboarded</option>
           </select>
