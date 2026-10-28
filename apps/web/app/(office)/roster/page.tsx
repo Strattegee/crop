@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
-import { T, words } from '../../../lib/terms';
+import { T, words, type Words } from '../../../lib/terms';
+import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setDuties, unassign, useItem,
@@ -51,7 +52,6 @@ type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' 
 type ChangeRequest = { id: string; shiftId: string; kind: string; status: string; summary: string; reason: string | null; requestedByName: string | null; createdAt: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string; canDecide: boolean; canWithdraw: boolean };
 type Change = { id: string; kind: string; summary: string; afterPublish: boolean; actorName: string | null; via: string; at: string; shiftId: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string };
 const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
-const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(t));
 const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
 /** A saved usual week for one site (migration 0023). */
 type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
@@ -66,17 +66,14 @@ const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 
  * darker yellow allocated (waiting for them), pink accepted (when the business approves first; not used yet),
  * purple the person pulled out, green booked, red cancelled.
  */
-function stage(s: Shift): { cls: string; label: string } {
+function stage(s: Shift, tw: Words): { cls: string; label: string } {
   if (s.status === 'cancelled') return { cls: 'cancelled', label: 'Cancelled' };
-  if (s.equipmentOnly) return s.status === 'open' ? { cls: 'unfilled', label: 'Needs equipment' } : { cls: 'booked', label: 'Equipment booked' };
+  if (s.equipmentOnly) return s.status === 'open' ? { cls: 'unfilled', label: `Needs ${tw.lower(T.equipment)}` } : { cls: 'booked', label: `${tw.one(T.equipment)} booked` };
   if (s.status === 'booked') return { cls: 'booked', label: 'Booked' };
   if (s.status === 'assigned') return { cls: 'allocated', label: 'Allocated' };
   if (s.pulledOutName) return { cls: 'pulled', label: 'Pulled out' };
   if (s.offersPending) return { cls: 'offered', label: `Offered to ${s.offersPending}` };
   return { cls: 'unfilled', label: 'Unfilled' };
-}
-function todayMelbourne() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
 }
 const dayLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
 const fullDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
@@ -102,7 +99,10 @@ export default async function RosterPage({ searchParams }: {
 }) {
   const tw = await words();
   const sp = await searchParams;
-  const today = todayMelbourne();
+  // Today and times on screen are in the business's time zone (Settings), never the server's.
+  const zone = await businessZone();
+  const today = todayIn(zone);
+  const when = whenIn(zone);
   // Day, week or month (state in the URL: span = day|month, date = the day or any date in the month; week view keeps `week`).
   const span = parseSpan(sp.span);
   const range = rangeFor(span, anchorOf(sp, today), today);
@@ -136,7 +136,7 @@ export default async function RosterPage({ searchParams }: {
     showLog ? api<Change[]>(`/roster/changes?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     Promise.all(monthWeeks.map(w => api<Week[]>(`/roster/weeks?weekStart=${w[0]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as Week[]))),
     span === 'month' ? Promise.resolve([] as Template[]) : api<Template[]>(`/roster/templates${site ? `?facilityId=${site}` : ''}`).catch(() => [] as Template[]),
-    api<{ publishedChanges?: PublishedChanges }>('/settings').catch(() => ({} as { publishedChanges?: PublishedChanges })),
+    businessSettings(),
     span === 'month' ? Promise.resolve([] as ChangeRequest[]) : api<ChangeRequest[]>(`/roster/change-requests?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as ChangeRequest[]),
     // Needs attention (backlog item 12): the next seven days from now, whatever period is on screen.
     api<Attention>(`/roster/attention${site ? `?facilityId=${site}` : ''}`).catch(() => null),
@@ -184,11 +184,11 @@ export default async function RosterPage({ searchParams }: {
     };
   };
   const openRow = (key: string, list: Shift[]): Row => ({
-    key: `open-${key}`, label: 'Open shifts', kind: 'open', sub: `${list.filter(s => !s.workerId && !s.equipmentOnly).length} to fill`,
+    key: `open-${key}`, label: `Open ${tw.lower(T.shift, true)}`, kind: 'open', sub: `${list.filter(s => !s.workerId && !s.equipmentOnly).length} to fill`,
     cells: cellsFor(s => !s.workerId && !s.equipmentOnly, list),
   });
   const equipOnlyRow = (key: string, list: Shift[]): Row | null => list.some(s => s.equipmentOnly)
-    ? { key: `eq-${key}`, label: 'Equipment only', kind: 'equipment', sub: 'dry hire', cells: cellsFor(s => !!s.equipmentOnly, list) }
+    ? { key: `eq-${key}`, label: `${tw.one(T.equipment)} only`, kind: 'equipment', sub: 'dry hire', cells: cellsFor(s => !!s.equipmentOnly, list) }
     : null;
 
   const groups: { key: string; title: string; sub?: string; rows: Row[] }[] = [];
@@ -207,15 +207,15 @@ export default async function RosterPage({ searchParams }: {
       if (eq) rows.push(eq);
       const gone = cancelled.filter(c => `${c.facilityName}|||${c.areaName ?? ''}` === k);
       if (gone.length) rows.push({ key: `x-${k}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this ${periodWord}`, cells: cellsFor(() => true, gone) });
-      groups.push({ key: k, title: fac, sub: area || 'No area', rows });
+      groups.push({ key: k, title: fac, sub: area || `No ${tw.lower(T.area)}`, rows });
     }
   } else {
-    groups.push({ key: 'people', title: 'People', rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
+    groups.push({ key: 'people', title: tw.many(T.worker), rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
       ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this ${periodWord}`, cells: cellsFor(() => true, cancelled) }] : [])] });
   }
   if (equipment.length) {
     groups.push({
-      key: 'equipment', title: 'Equipment', sub: `${fmtHours(equipHours)} hours booked this ${periodWord}`,
+      key: 'equipment', title: tw.many(T.equipment), sub: `${fmtHours(equipHours)} hours booked this ${periodWord}`,
       rows: equipment.map(e => ({
         key: e.id, label: e.name, sub: `${e.typeName}${e.status !== 'active' ? ' · out of service' : ''}`, kind: 'equipment' as const,
         cells: cellsFor(s => !!s.equipment?.some(x => x.id === e.id), shifts),
@@ -286,10 +286,10 @@ export default async function RosterPage({ searchParams }: {
     title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}`,
   });
   const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
-    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s).label}</span></span>
+    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
   ) : (<>
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-    <span className="st">{stage(s).label}</span>
+    <span className="st">{stage(s, tw).label}</span>
     <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
     {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
     {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
@@ -307,7 +307,7 @@ export default async function RosterPage({ searchParams }: {
       {shiftItems?.lines.map(l => (
         <div key={`${l.itemId}:${l.workerId ?? ''}`} className="panel-row">
           <span>
-            {l.quantity} × {l.name} <span className="muted">({l.unit}) · {l.workerName ? `with ${l.workerName}` : 'used on the shift'} · {money(l.costCents)}{l.chargeCents !== null ? `, charge ${money(l.chargeCents)}` : ''}</span>
+            {l.quantity} × {l.name} <span className="muted">({l.unit}) · {l.workerName ? `with ${l.workerName}` : `used on the ${tw.lower(T.shift)}`} · {money(l.costCents)}{l.chargeCents !== null ? `, charge ${money(l.chargeCents)}` : ''}</span>
           </span>
           {l.quantity > 0 && (
             <form action={returnItem.bind(null, liveShift.id, l.itemId, l.workerId)} className="inline-form">
@@ -336,7 +336,7 @@ export default async function RosterPage({ searchParams }: {
           {liveShift.workerId && !liveShift.equipmentOnly && (
             <label className="inline"><input type="checkbox" name="toPerson" defaultChecked /> Give to {liveShift.workerName}</label>
           )}
-          <button className="btn small secondary">Add to shift</button>
+          <button className="btn small secondary">Add to {tw.lower(T.shift)}</button>
           <p className="muted small" style={{ margin: 0 }}>Stock comes from {liveShift.facilityName}.</p>
         </form>
       )}
@@ -365,17 +365,17 @@ export default async function RosterPage({ searchParams }: {
             {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <input type="hidden" name="view" value={view} />
             {look !== 'cards' && <input type="hidden" name="look" value={look} />}
-            <label className="inline">Site
+            <label className="inline">{tw.one(T.site)}
               <select name="site" defaultValue={site}>
-                <option value="">All sites</option>
+                <option value="">All {tw.lower(T.site, true)}</option>
                 {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </label>
             <button type="submit" className="btn small secondary">Show</button>
           </form>
           {span !== 'month' && <div className="seg" role="group" aria-label="View">
-            <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By area</Link>
-            <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By person</Link>
+            <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By {tw.lower(T.area)}</Link>
+            <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By {tw.lower(T.worker)}</Link>
           </div>}
           {span === 'week' && <div className="seg" role="group" aria-label="Cards show">
             {LOOKS.map(l => <Link key={l.id} href={url({ look: l.id === 'cards' ? undefined : l.id })} aria-current={look === l.id ? 'true' : undefined}>{l.label}</Link>)}
@@ -414,7 +414,7 @@ export default async function RosterPage({ searchParams }: {
               <input type="hidden" name="back" value={here} />
               <input type="hidden" name="week" value={week} />
               <input type="hidden" name="site" value={site} />
-              <label className="inline small" title="Email and text each person their shifts for the week (after changes: only the people affected)"><input type="checkbox" name="notify" defaultChecked />Tell staff</label>
+              <label className="inline small" title="Email and text each person their shifts for the week (after changes: only the people affected)"><input type="checkbox" name="notify" defaultChecked />Tell {tw.lower(T.worker, true)}</label>
               <button className="btn small" title="Marks the week as live. Changes after this are logged.">
                 {drafts.length ? 'Publish week' : `Publish ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'}`}
               </button>
@@ -453,7 +453,7 @@ export default async function RosterPage({ searchParams }: {
             ))}
           </ol>
           {attention.total > ATTENTION_SHOWN && <p className="muted small">And {attention.total - ATTENTION_SHOWN} more; the most pressing are shown first.</p>}
-          {attention.truncated && <p className="muted small">Only the first few hundred shifts were checked. Choose a site to see the rest.</p>}
+          {attention.truncated && <p className="muted small">Only the first few hundred {tw.lower(T.shift, true)} were checked. Choose a {tw.lower(T.site)} to see the rest.</p>}
         </AttentionPanel>
         );
       })()}
@@ -530,11 +530,11 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
-        <div><span>Shifts</span><strong>{peopleShifts.length}</strong></div>
+        <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
         <div><span>Filled</span><strong className="ok">{filled}</strong></div>
         <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
         <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
-        <div><span>Equipment hours</span><strong>{fmtHours(equipHours)}</strong></div>
+        <div><span>{tw.one(T.equipment)} hours</span><strong>{fmtHours(equipHours)}</strong></div>
       </section>
 
       {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
@@ -556,24 +556,24 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <details className="card" open={shifts.length === 0}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add shifts</summary>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
         {activeFacilities.length === 0 ? (
-          <p className="muted">Add a site first, under <Link href="/facilities">Facilities</Link>.</p>
+          <p className="muted">Add a {tw.lower(T.site)} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
         ) : (
           <form action={createShifts} className="form-row" style={{ marginTop: 12 }}>
             <input type="hidden" name="back" value={here} />
-            <label>Site
+            <label>{tw.one(T.site)}
               <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
                 {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </label>
-            <label>Area <span className="muted">(optional)</span>
+            <label>{tw.one(T.area)} <span className="muted">(optional)</span>
               <select name="areaId" defaultValue="">
-                <option value="">No area</option>
+                <option value="">No {tw.lower(T.area)}</option>
                 {details.flatMap(d => d.areas.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{d.name} · {a.name}</option>))}
               </select>
             </label>
-            <label>Role
+            <label>{tw.one(T.role)}
               <input name="role" placeholder="e.g. Barista" maxLength={60} list="known-roles" />
               <datalist id="known-roles">
                 {[...new Set(roster.people.flatMap(p => p.roles))].sort().map(r => <option key={r} value={r} />)}
@@ -596,7 +596,7 @@ export default async function RosterPage({ searchParams }: {
               ))}
             </fieldset>
             <label style={{ flex: '0 1 110px' }}>People<input name="quantity" type="number" min={1} max={20} defaultValue={1} /></label>
-            <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />Equipment only</label>
+            <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />{tw.one(T.equipment)} only</label>
             {duties.some(d => d.active) && (
               <fieldset className="weekdays">
                 <legend>Duties <Link href="/settings/shift-duties" className="muted small">(change duties)</Link></legend>
@@ -615,21 +615,21 @@ export default async function RosterPage({ searchParams }: {
       {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
         <details className="card roster-templates" open={shifts.length === 0 && templates.length > 0}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
-          <p className="muted small">Save a site&apos;s usual week as a template, then fill any week from it, or copy last week. Each shift gets its usual person where they can work it (waiting for them to confirm) and its usual equipment where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
+          <p className="muted small">Save a {tw.lower(T.site)}&apos;s usual week as a template, then fill any week from it, or copy last week. Each {tw.lower(T.shift)} gets its usual person where they can work it (waiting for them to confirm) and its usual {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
           <div className="template-forms">
             <form action={copyWeek} className="form-row">
               <input type="hidden" name="back" value={here} />
               <input type="hidden" name="week" value={week} />
               <h3>Copy a week into this one</h3>
-              <label>Site
+              <label>{tw.one(T.site)}
                 <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
                   {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </label>
               <label>Copy from the week of<input name="fromWeek" type="date" defaultValue={addDaysIso(week, -7)} /></label>
               <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
-              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same equipment</label>
-              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same {tw.lower(T.equipment)}</label>
+              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
               <button className="btn small">Copy week</button>
             </form>
             <form action={applyTemplate} className="form-row">
@@ -639,12 +639,12 @@ export default async function RosterPage({ searchParams }: {
               {templates.length === 0 ? <p className="muted small">No templates yet. Save a week below.</p> : <>
                 <label>Template
                   <select name="templateId" required>
-                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}{!site ? ` (${t.facilityName})` : ''} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}</option>)}
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}{!site ? ` (${t.facilityName})` : ''} · {tw.count(t.shifts, T.shift)}</option>)}
                   </select>
                 </label>
                 <label className="inline"><input type="checkbox" name="people" defaultChecked />With the usual people</label>
-                <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the usual equipment</label>
-                <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+                <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the usual {tw.lower(T.equipment)}</label>
+                <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
                 <button className="btn small">Fill week</button>
               </>}
             </form>
@@ -652,14 +652,14 @@ export default async function RosterPage({ searchParams }: {
               <input type="hidden" name="back" value={here} />
               <input type="hidden" name="week" value={week} />
               <h3>Save this week as a template</h3>
-              <label>Site
+              <label>{tw.one(T.site)}
                 <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
                   {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </label>
               <label>Name<input name="name" required maxLength={80} placeholder="e.g. Usual week" /></label>
-              <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each shift</label>
-              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />Remember the equipment on each shift</label>
+              <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each {tw.lower(T.shift)}</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />Remember the {tw.lower(T.equipment)} on each {tw.lower(T.shift)}</label>
               <button className="btn small secondary">Save template</button>
             </form>
           </div>
@@ -667,7 +667,7 @@ export default async function RosterPage({ searchParams }: {
             <ul className="template-list">
               {templates.map(t => (
                 <li key={t.id}>
-                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {t.shifts} {t.shifts === 1 ? 'shift' : 'shifts'}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.equipmentBookings ? `, ${t.equipmentBookings} equipment ${t.equipmentBookings === 1 ? 'booking' : 'bookings'}` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
+                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {tw.count(t.shifts, T.shift)}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.equipmentBookings ? `, ${t.equipmentBookings} ${tw.lower(T.equipment)} ${t.equipmentBookings === 1 ? 'booking' : 'bookings'}` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
                   <form action={archiveTemplate}>
                     <input type="hidden" name="back" value={here} />
                     <input type="hidden" name="templateId" value={t.id} />
@@ -699,13 +699,13 @@ export default async function RosterPage({ searchParams }: {
                       const sum = daySummary(d, allShifts, roster.leave ?? []);
                       return (
                         <td key={d} className={[inMonth(d) ? '' : 'other', d === today ? 'today' : '', sum.open ? 'has-open' : ''].join(' ').trim() || undefined}>
-                          <Link href={url({ ...at('day', d), shift: undefined })} className="mday" aria-label={`${fullDate(d)}: ${sum.shifts ? `${sum.filled} of ${sum.shifts} shifts filled` : 'no shifts'}`}>
+                          <Link href={url({ ...at('day', d), shift: undefined })} className="mday" aria-label={`${fullDate(d)}: ${sum.shifts ? `${sum.filled} of ${tw.count(sum.shifts, T.shift)} filled` : `no ${tw.lower(T.shift, true)}`}`}>
                             <span className="dnum">{Number(d.slice(8))}</span>
                             {sum.shifts ? (<>
                               <span className={sum.open ? 'warn' : 'ok'}>{sum.filled} of {sum.shifts} filled</span>
                               <span>{fmtHours(sum.hours)} h</span>
                               {sum.open > 0 && <strong className="warn">{sum.open} open</strong>}
-                            </>) : <span className="muted">No shifts</span>}
+                            </>) : <span className="muted">No {tw.lower(T.shift, true)}</span>}
                             {sum.onLeave > 0 && <span className="muted">{sum.onLeave} on leave</span>}
                             {sum.cancelled > 0 && <span className="muted">{sum.cancelled} cancelled</span>}
                           </Link>
@@ -729,23 +729,23 @@ export default async function RosterPage({ searchParams }: {
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Copy this month</summary>
             <p className="muted small">
               Copies the {mondays.length} weeks starting in {monthLabel(range.anchor)} ({longDate(mondays[0])} to {longDate(last)}) into the {mondays.length} weeks
-              from the date you choose, on the same weekdays and times. As with copying a week, each shift gets the same person where they can work it
-              (waiting for them to confirm) and the same equipment where it can be booked; anything that can&apos;t is left off and you&apos;re told why.
-              Nothing is copied if any of those weeks is over or already has shifts, unless you tick &quot;Add to the shifts already there&quot;.
+              from the date you choose, on the same weekdays and times. As with copying a week, each {tw.lower(T.shift)} gets the same person where they can work it
+              (waiting for them to confirm) and the same {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.
+              Nothing is copied if any of those weeks is over or already has {tw.lower(T.shift, true)}, unless you tick &quot;Add to the {tw.lower(T.shift, true)} already there&quot;.
             </p>
             <form action={copyMonth} className="form-row">
               <input type="hidden" name="back" value={here} />
               <input type="hidden" name="fromWeek" value={mondays[0]} />
               <input type="hidden" name="weeks" value={mondays.length} />
-              <label>Site
+              <label>{tw.one(T.site)}
                 <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
                   {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </label>
               <label>Into the weeks starting<input name="toWeek" type="date" required defaultValue={nextWeek} /></label>
               <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
-              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same equipment</label>
-              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the shifts already there</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same {tw.lower(T.equipment)}</label>
+              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
               <button className="btn small">Copy {mondays.length} weeks</button>
             </form>
           </details>
@@ -755,12 +755,12 @@ export default async function RosterPage({ searchParams }: {
       {span !== 'month' && (
       <div className="roster-layout">
         <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag
-          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role) }} />
+          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), sites: tw.many(T.site) }} />
         <DropZone back={here}>
           <table className={`ribbon ${span === 'day' ? 'day' : ''} look-${cardLook}`}>
             <thead>
               <tr>
-                <th className="who">{view === 'area' ? 'Site · area · person' : 'Person'}</th>
+                <th className="who">{view === 'area' ? `${tw.one(T.site)} · ${tw.lower(T.area)} · ${tw.lower(T.worker)}` : tw.one(T.worker)}</th>
                 {days.map(d => {
                   const ds = peopleShifts.filter(s => s.localDate === d);
                   const f = ds.filter(s => s.status !== 'open').length;
@@ -782,7 +782,7 @@ export default async function RosterPage({ searchParams }: {
               </tr>
             </thead>
             {groups.length === 0 && (
-              <tbody><tr><td colSpan={days.length + 2} className="muted" style={{ padding: 24 }}>No shifts this {periodWord}. Use <strong>Add shifts</strong> above.</td></tr></tbody>
+              <tbody><tr><td colSpan={days.length + 2} className="muted" style={{ padding: 24 }}>No {tw.lower(T.shift, true)} this {periodWord}. Use <strong>Add {tw.lower(T.shift, true)}</strong> above.</td></tr></tbody>
             )}
             {groups.map(g => (
               <tbody key={g.key}>
@@ -807,7 +807,7 @@ export default async function RosterPage({ searchParams }: {
                               {cell.map(s => {
                                 const pos = barPosition(s, win);
                                 return (
-                                  <Link key={s.id} {...cardAttrs(s)} className={`rcard bar ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}
+                                  <Link key={s.id} {...cardAttrs(s)} className={`rcard bar ${stage(s, tw).cls} ${selected?.id === s.id ? 'sel' : ''}`}
                                     style={{ left: `${pos.left}%`, width: `${pos.width}%`, top: (ln.lane.get(s.id) ?? 0) * LANE_PX }}>
                                     {cardBody(s, r.kind)}
                                   </Link>
@@ -821,7 +821,7 @@ export default async function RosterPage({ searchParams }: {
                         <td key={i} className={days[i] === today ? 'today' : ''}>
                           {leaveLine}
                           {cell.map(s => (
-                            <Link key={s.id} {...cardAttrs(s)} className={`rcard ${stage(s).cls} ${selected?.id === s.id ? 'sel' : ''}`}>
+                            <Link key={s.id} {...cardAttrs(s)} className={`rcard ${stage(s, tw).cls} ${selected?.id === s.id ? 'sel' : ''}`}>
                               {cardBody(s, r.kind)}
                             </Link>
                           ))}
@@ -865,7 +865,7 @@ export default async function RosterPage({ searchParams }: {
             ) : panelRefusal ? (<>
               <section>
                 {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.status === 'booked' ? 'booked' : 'waiting to confirm'}</span></p>}
-                {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>Equipment: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
+                {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>{tw.one(T.equipment)}: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
                 <p className="notice" style={{ margin: '0 0 8px' }}>{panelRefusal}</p>
                 {pendingForShift ? (
                   <p style={{ margin: 0 }}>Waiting for approval: <strong>{pendingForShift.summary}</strong> <span className="muted small">(asked by {pendingForShift.requestedByName ?? 'someone'})</span></p>
@@ -879,7 +879,7 @@ export default async function RosterPage({ searchParams }: {
                         {selected.workerId && selected.status === 'assigned' && <option value="confirm">{selected.workerName} has agreed (confirm)</option>}
                         {selected.workerId && <option value="remove">Take {selected.workerName} off</option>}
                         {selected.workerId && <option value="pulled_out">{selected.workerName} pulled out</option>}
-                        <option value="cancel">Cancel the shift</option>
+                        <option value="cancel">Cancel the {tw.lower(T.shift)}</option>
                         <option value="other">Something else (say what)</option>
                       </select>
                     </label>
@@ -965,7 +965,7 @@ export default async function RosterPage({ searchParams }: {
                         <form action={assign.bind(null, selected.id, c.workerId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Assign</button></form>
                       </div>
                     ))}
-                    {candidates.filter(c => c.eligible).length === 0 && <p className="muted">Nobody on your staff can work this shift.</p>}
+                    {candidates.filter(c => c.eligible).length === 0 && <p className="muted">Nobody on your staff can work this {tw.lower(T.shift)}.</p>}
                     {candidates.some(c => !c.eligible) && (
                       <details>
                         <summary className="muted" style={{ cursor: 'pointer' }}>Can&apos;t work it ({candidates.filter(c => !c.eligible).length})</summary>
@@ -974,7 +974,7 @@ export default async function RosterPage({ searchParams }: {
                         ))}
                       </details>
                     )}
-                    <p className="muted small" style={{ marginTop: 10 }}>Agency fill comes next: send the shift to your agencies when your own staff can&apos;t cover it.</p>
+                    <p className="muted small" style={{ marginTop: 10 }}>{tw.one(T.agency)} fill comes next: send the {tw.lower(T.shift)} to your {tw.lower(T.agency, true)} when your own staff can&apos;t cover it.</p>
                   </>
                 )}
               </section>
@@ -997,7 +997,7 @@ export default async function RosterPage({ searchParams }: {
             )}
 
             <section>
-              <h3>Equipment</h3>
+              <h3>{tw.many(T.equipment)}</h3>
               {(selected.equipment ?? []).map(e => (
                 <div key={e.id} className="panel-row">
                   <span>{e.name} <span className="muted">· {e.typeName}</span></span>
@@ -1010,7 +1010,7 @@ export default async function RosterPage({ searchParams }: {
                   <form action={bookEquipment.bind(null, selected.id, c.equipmentId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Book</button></form>
                 </div>
               ))}
-              {equipCandidates.length === 0 && !(selected.equipment ?? []).length && <p className="muted">No equipment registered yet.</p>}
+              {equipCandidates.length === 0 && !(selected.equipment ?? []).length && <p className="muted">No {tw.lower(T.equipment)} registered yet.</p>}
               {equipCandidates.some(c => !c.eligible) && (
                 <details>
                   <summary className="muted" style={{ cursor: 'pointer' }}>Unavailable ({equipCandidates.filter(c => !c.eligible).length})</summary>
@@ -1026,8 +1026,8 @@ export default async function RosterPage({ searchParams }: {
             <section>
               <form action={cancelShift.bind(null, selected.id)} className="form-row">
                 <input type="hidden" name="back" value={url({ shift: undefined })} />
-                <label>Cancel shift: reason<input name="reason" required maxLength={300} placeholder="e.g. Function cancelled" /></label>
-                <button className="btn small secondary">Cancel shift</button>
+                <label>Cancel {tw.lower(T.shift)}: reason<input name="reason" required maxLength={300} placeholder="e.g. Function cancelled" /></label>
+                <button className="btn small secondary">Cancel {tw.lower(T.shift)}</button>
               </form>
             </section>
             </>)}
