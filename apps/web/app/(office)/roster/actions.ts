@@ -4,6 +4,7 @@ import { api, ApiError } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
 import { fillOpenShifts } from '../demo-tools';
+import { T, words } from '../../../lib/terms';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -12,6 +13,7 @@ const back = (f: FormData) => {
 };
 
 export async function createShifts(f: FormData) {
+  const tw = await words();
   const weekdays = f.getAll('weekdays').map(Number).filter(n => n >= 1 && n <= 7);
   const single = !str(f, 'endDate') || str(f, 'endDate') === str(f, 'startDate');
   const equipmentOnly = f.get('equipmentOnly') === 'on';
@@ -25,7 +27,7 @@ export async function createShifts(f: FormData) {
       quantity: Number(str(f, 'quantity') ?? 1), notes: str(f, 'notes'),
       dutyIds: f.getAll('dutyIds').map(String).filter(Boolean),
     },
-  }), 'Shifts added.');
+  }), `${tw.many(T.shift)} added.`);
 }
 
 export async function assign(shiftId: string, workerId: string, f: FormData) {
@@ -37,23 +39,26 @@ export async function confirm(shiftId: string, f: FormData) {
 }
 
 export async function unassign(shiftId: string, f: FormData) {
+  const tw = await words();
   const pulledOut = f.get('pulledOut') === '1';
   await attempt(back(f), () => api(`/shifts/${shiftId}/unassign`, { method: 'POST', body: { pulledOut } }),
-    pulledOut ? 'Marked as pulled out. The shift shows purple until it is filled again.' : 'Removed from the shift. It is open again.');
+    pulledOut ? `Marked as pulled out. The ${tw.lower(T.shift)} shows purple until it is filled again.` : `Removed from the ${tw.lower(T.shift)}. It is open again.`);
 }
 
 export async function cancelShift(shiftId: string, f: FormData) {
-  await attempt(back(f), () => api(`/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason: str(f, 'reason') } }), 'Shift cancelled.');
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason: str(f, 'reason') } }), `${tw.one(T.shift)} cancelled.`);
 }
 
 /** Draft → Live: publishes the week for the site shown (or every site). Changes after this are logged. */
 export async function publishWeek(f: FormData) {
   const site = str(f, 'site');
+  const tw = await words();
   const notify = f.get('notify') === 'on';
   let messages = 0;
   await attempt(back(f), async () => {
     messages = (await api<{ messages: number }>('/roster/publish', { method: 'POST', body: { weekStart: str(f, 'week'), notify, ...(site ? { facilityId: site } : {}) } })).messages;
-  }, () => `Published. The week is live; changes from now on are logged.${notify ? (messages ? ` ${messages} message${messages === 1 ? '' : 's'} sent to staff with their shifts.` : ' Nobody needed a message.') : ' No messages sent.'}`);
+  }, () => `Published. The week is live; changes from now on are logged.${notify ? (messages ? ` ${messages} message${messages === 1 ? '' : 's'} sent to ${tw.lower(T.worker, true)} with their ${tw.lower(T.shift, true)}.` : ' Nobody needed a message.') : ' No messages sent.'}`);
 }
 
 export async function offer(shiftId: string, f: FormData) {
@@ -70,22 +75,25 @@ export async function recordReply(offerId: string, reply: 'accept' | 'decline', 
 }
 
 export async function bookEquipment(shiftId: string, equipmentId: string, f: FormData) {
-  await attempt(back(f), () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId } }), 'Equipment booked.');
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId } }), `${tw.one(T.equipment)} booked.`);
 }
 
 export async function removeEquipment(shiftId: string, equipmentId: string, f: FormData) {
-  await attempt(back(f), () => api(`/shifts/${shiftId}/equipment/${equipmentId}/remove`, { method: 'POST' }), 'Equipment removed from the shift.');
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/equipment/${equipmentId}/remove`, { method: 'POST' }), `${tw.one(T.equipment)} removed from the ${tw.lower(T.shift)}.`);
 }
 
 /** Sets the duties on a shift (Settings → Shift duties); says if the person on it no longer meets them. */
 /** Puts an item on the shift: issued to the person on it, or used on the shift. Stock comes from the shift's site. */
 export async function useItem(shiftId: string, workerId: string | null, f: FormData) {
+  const tw = await words();
   const itemId = str(f, 'itemId');
   const toPerson = !!workerId && f.get('toPerson') === 'on';
   await attempt(back(f), async () => {
-    if (!itemId) throw new ApiError(400, 'Choose an item');
+    if (!itemId) throw new ApiError(400, `Choose ${/^[aeiou]/i.test(tw.one(T.item)) ? 'an' : 'a'} ${tw.lower(T.item)}`);
     await api(`/items/${itemId}/issue`, { method: 'POST', body: { shiftId, workerId: toPerson ? workerId : null, quantity: Number(str(f, 'quantity') ?? 'NaN'), notes: str(f, 'notes') } });
-  }, toPerson ? 'Issued for this shift.' : 'Recorded as used on this shift.');
+  }, toPerson ? `Issued for this ${tw.lower(T.shift)}.` : `Recorded as used on this ${tw.lower(T.shift)}.`);
 }
 
 /** Items coming back from the shift (or the person on it, for this shift) into the site's stock. */
@@ -121,10 +129,11 @@ export async function fillWeekDemo(f: FormData) {
 /** From the ribbon strip: a person or piece of equipment dropped onto a shift card. */
 export async function dropOnShift(kind: 'person' | 'equipment', shiftId: string, id: string, backTo: string) {
   const to = backTo.startsWith('/roster') ? backTo : '/roster';
+  const tw = await words();
   if (kind === 'person') {
     await attempt(to, () => api(`/shifts/${shiftId}/assign`, { method: 'POST', body: { workerId: id } }), 'Assigned. Confirm once they have agreed.');
   } else {
-    await attempt(to, () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId: id } }), 'Equipment booked.');
+    await attempt(to, () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId: id } }), `${tw.one(T.equipment)} booked.`);
   }
 }
 
@@ -186,12 +195,13 @@ export async function requestChange(shiftId: string, f: FormData) {
 }
 
 export async function decideChange(requestId: string, decision: 'approve' | 'decline' | 'withdraw', f: FormData) {
+  const tw = await words();
   let r: { applied?: boolean; warnings?: string[] } = {};
   await attempt(back(f), async () => {
     r = await api<{ applied?: boolean; warnings?: string[] }>(`/change-requests/${requestId}/${decision}`, {
       method: 'POST', body: decision === 'withdraw' ? undefined : { note: str(f, 'note') },
     });
   }, () => decision === 'approve'
-    ? (r.applied === false ? 'Approved. Make the change on the shift now.' : `Approved and changed.${r.warnings?.length ? ` Note: ${r.warnings.join('. ')}` : ''}`)
+    ? (r.applied === false ? `Approved. Make the change on the ${tw.lower(T.shift)} now.` : `Approved and changed.${r.warnings?.length ? ` Note: ${r.warnings.join('. ')}` : ''}`)
     : decision === 'decline' ? 'Declined.' : 'Request withdrawn.');
 }

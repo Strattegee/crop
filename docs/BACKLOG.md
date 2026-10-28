@@ -67,7 +67,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## Words and codes (26 Oct, Steve and David)
 - [x] Term codes and function codes; one set of words per business; Settings → Words we use; menu and page titles use them (docs/CODES.md).
-- [ ] Use the words in roster labels, forms, API errors, notifications and the worker app. Roster labels and forms done 28 Oct (scheduled run): the roster page and its side strip (site picker, by area / by person, open shifts, add shifts, templates and copying, the shift panel, equipment, cancel, empty states, summary) use the business's words; `tw.count(n, T.shift)` counts in them. Still to do: roster success messages (`roster/actions.ts`), API errors, notifications and the worker app.
+- [ ] Use the words in roster labels, forms, API errors, notifications and the worker app. Roster labels and forms done 28 Oct (scheduled run): the roster page and its side strip (site picker, by area / by person, open shifts, add shifts, templates and copying, the shift panel, equipment, cancel, empty states, summary) use the business's words; `tw.count(n, T.shift)` counts in them. The roster's confirmation messages (`roster/actions.ts`: shifts added, cancelled, equipment booked, published…) done the same night. Still to do: API errors, notifications and the worker app.
 
 ## Ribbon roster (26 Oct)
 - [x] The ribbon: coloured stage line on every shift (booked green, assigned yellow, open grey, cancelled pink); cancelled shifts stay visible.
