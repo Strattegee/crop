@@ -143,7 +143,7 @@ const ms=T.filter(t=>t.lane==='ms');
 const nextMs=ms.find(m=>d(m.start)>=asAt);
 
 document.getElementById('headline').textContent=
-  `Updated ${fmt(DATA.asAt,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}. Ahead of plan: the sign-in, staff records and credential work planned for late November is already running on the test site.`;
+  `Updated ${fmt(DATA.asAt,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}. Well ahead of plan: the sign-in, staff records and credentials planned for late November, and most of the roster planned for December, are already running on the test site.`;
 
 const tiles=[
   ['Overall progress',`${pct}%`,`<div class="meter" role="img" aria-label="${pct}% complete"><span style="width:${pct}%"></span></div><div class="small">Weighted by the days of work in each piece</div>`],
