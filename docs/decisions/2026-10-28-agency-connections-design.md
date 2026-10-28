@@ -1,6 +1,6 @@
 # Agency connections and agency fill: design for David to approve
 
-Status: **proposal, held for David; answers to questions 1–3 recorded 29 Oct (see the end), question 4 open** (backlog item 7 says write it up and hold before building, because it crosses tenants). Written 28 Oct 2026 by a scheduled run. Nothing here is built yet.
+Status: **proposal, held for David; all four questions answered 29 Oct (see the end); waiting for David's go-ahead to build** (backlog item 7 says write it up and hold before building, because it crosses tenants). Written 28 Oct 2026 by a scheduled run. Nothing here is built yet.
 
 Sources: the 25 Oct meeting (`2026-10-25-roster-meeting.md`), Steve and David's answers (`2026-10-26-steve-answers.md`, items 7–11), CLAUDE.md (tenancy and security rules).
 
@@ -112,7 +112,7 @@ First slice: name, role, the agency, and "meets your criteria" yes/no with any w
 
 ## David's answers (29 Oct)
 
-Still held: question 4 is open and the design isn't approved for building yet.
+All four answered. Still held until David gives the go-ahead to build.
 
 1. **Credential matching is set up when the link is made, not when a shift comes in.** "For the relationship between an agency and an employer to work effectively they need to be set up properly from the beginning. The agency need to understand the requirements and match their pool of staff to them. I think it needs to be checked off prior to shifts being required."
    What this changes: linking gets a setup step. The agency sees the employer's requirements and confirms a match for every one (shared codes suggest matches, and the agency checks them and maps the rest). The link can't take requests until every requirement is matched. The agency can see which of its people meet this employer's requirements before any shift arrives. If the employer adds or changes a requirement later, the agency is asked to match it again.
@@ -120,4 +120,5 @@ Still held: question 4 is open and the design isn't approved for building yet.
    What this changes: each link has a list of document types (per credential type) that the agency agrees to share with that employer. The employer opens shared documents for agency workers booked on its shifts through short-lived links issued after a check. Contracts and agreements are never shared (Steve, item 9). The employer still keeps only name, role and agency in its own records; documents are always read from the agency's side, never copied.
 3. **Self-service linking from the start.** "I think it should be self service from the beginning, a shared link by the employer as they are giving access to shifts required. This should be confirmed by the agency."
    What this changes: the employer's owner or admin creates an invitation link (one-off, expiring, only its hash stored, like offer links) and sends it to the agency. The agency's owner or admin opens it while signed in to CROP and confirms; the link is active only after that (and after the matching in answer 1). Either side can end it. Every step is logged.
-4. Open: David has a question about agencies that aren't on CROP.
+4. **Agencies not on CROP get an email listing the requirements; they reply outside CROP (Release 1).** "If employers need staff and are using non crop agencies, the agency should be sent an email that lists all requirements. All standard requirements for the position are noted with a section of special requirements if any. The email should also note on each requirement what is optional or ideal." On how they reply, David chose option 1: the agency replies by email or phone as now, and the office adds the person to the shift by name, marked as an unchecked agency worker. A reply link (the agency puts someone forward and ticks each must-have) can come later.
+   What this changes: the employer can keep non-CROP agencies (name, email) on its agency list. Agency fill emails them the shift (site, local date and times, role, area) and its requirements in sections: standard requirements for the role (from role rules) and special requirements for this shift (from its duties), each marked "Must have", "Ideal" (today's warning level) or "Optional" (a new third level: listed, never checked or warned about; see the backlog's requirement levels item). The email contains no people's names or private details. An unchecked agency worker on the roster is clearly labelled, and CROP doesn't check their credentials.
