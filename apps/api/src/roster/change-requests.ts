@@ -2,19 +2,22 @@
  * Requested changes to a published roster (migration 0025). Pure helpers: the kinds of change, and how a
  * request reads in the roster's list. Never mentions leave kinds or credential details.
  */
+import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
+
 export type ChangeRequestKind = 'assign' | 'confirm' | 'remove' | 'pulled_out' | 'cancel' | 'other';
 export const CHANGE_REQUEST_KINDS: ChangeRequestKind[] = ['assign', 'confirm', 'remove', 'pulled_out', 'cancel', 'other'];
 export type ChangeRequestStatus = 'pending' | 'approved' | 'declined' | 'withdrawn';
 
 /** What the request asks for, in plain words. */
-export function requestSummary(r: { kind: ChangeRequestKind; workerName: string | null; currentName?: string | null; reason: string | null }): string {
+export function requestSummary(r: { kind: ChangeRequestKind; workerName: string | null; currentName?: string | null; reason: string | null }, w: Words = DEFAULT_WORDS): string {
+  const sh = w.lower(T.shift);
   const current = r.currentName ?? 'the person on it';
   switch (r.kind) {
-    case 'assign': return `Put ${r.workerName ?? 'someone'} on the shift`;
+    case 'assign': return `Put ${r.workerName ?? 'someone'} on the ${sh}`;
     case 'confirm': return `Confirm ${current} (they have agreed)`;
-    case 'remove': return `Take ${current} off the shift`;
+    case 'remove': return `Take ${current} off the ${sh}`;
     case 'pulled_out': return `Record that ${current} pulled out`;
-    case 'cancel': return r.reason ? `Cancel the shift: ${r.reason}` : 'Cancel the shift';
+    case 'cancel': return r.reason ? `Cancel the ${sh}: ${r.reason}` : `Cancel the ${sh}`;
     case 'other': return r.reason ?? 'Another change';
   }
 }
@@ -23,17 +26,18 @@ export function requestSummary(r: { kind: ChangeRequestKind; workerName: string 
  * Whether a request can be made for this shift as it is now; a plain reason when it can't.
  * `hasPerson`: someone is on it (assigned or confirmed).
  */
-export function requestProblem(kind: ChangeRequestKind, shift: { status: string; equipmentOnly: boolean; hasPerson: boolean }): string | null {
-  if (shift.status === 'cancelled') return 'This shift is cancelled';
+export function requestProblem(kind: ChangeRequestKind, shift: { status: string; equipmentOnly: boolean; hasPerson: boolean }, w: Words = DEFAULT_WORDS): string | null {
+  const sh = w.lower(T.shift);
+  if (shift.status === 'cancelled') return `This ${sh} is cancelled`;
   switch (kind) {
     case 'assign':
-      if (shift.equipmentOnly) return 'This shift is for equipment only, so nobody can be put on it';
-      return shift.hasPerson ? 'Someone is already on this shift. Ask for them to be taken off first.' : null;
+      if (shift.equipmentOnly) return `This ${sh} is for equipment only, so nobody can be put on it`;
+      return shift.hasPerson ? `Someone is already on this ${sh}. Ask for them to be taken off first.` : null;
     case 'confirm':
-      return shift.status === 'assigned' ? null : 'There is nobody waiting to confirm on this shift';
+      return shift.status === 'assigned' ? null : `There is nobody waiting to confirm on this ${sh}`;
     case 'remove':
     case 'pulled_out':
-      return shift.hasPerson ? null : 'Nobody is on this shift';
+      return shift.hasPerson ? null : `Nobody is on this ${sh}`;
     default:
       return null;
   }
@@ -71,7 +75,9 @@ export function rosterLink(appUrl: string, r: Pick<RequestForEmail, 'weekStart' 
 }
 
 /** To owners and admins when a request arrives. */
-export function requestArrivedEmail(r: RequestForEmail, appUrl: string) {
+export function requestArrivedEmail(r: RequestForEmail, appUrl: string, w: Words = DEFAULT_WORDS) {
+  const sh = w.lower(T.shift);
+  const roster = w.lower(T.roster);
   const who = r.requestedByName ?? 'Someone in the office';
   const link = rosterLink(appUrl, r);
   // For cancel and other, the reason is already the summary; for the rest it is extra context.
@@ -79,13 +85,13 @@ export function requestArrivedEmail(r: RequestForEmail, appUrl: string) {
   return {
     subject: `Change requested: ${r.facilityName}, ${shiftLine(r).split(',')[0]}`,
     body: [
-      `${who} has asked for a change to the published roster at ${r.facilityName}.`,
+      `${who} has asked for a change to the published ${roster} at ${r.facilityName}.`,
       ``,
-      `Shift: ${shiftLine(r)}`,
+      `${w.one(T.shift)}: ${shiftLine(r)}`,
       `Change: ${r.summary}`,
       ...(why ? [why] : []),
       ``,
-      link ? `To approve or decline it, open the shift on the roster: ${link}` : `To approve or decline it, open the shift on the roster in CROP.`,
+      link ? `To approve or decline it, open the ${sh} on the ${roster}: ${link}` : `To approve or decline it, open the ${sh} on the ${roster} in CROP.`,
       ``,
       `CROP Workforce Management`,
     ].join('\n'),
@@ -93,23 +99,25 @@ export function requestArrivedEmail(r: RequestForEmail, appUrl: string) {
 }
 
 /** To the person who asked, once the request is approved, declined or withdrawn by someone else. */
-export function requestDecidedEmail(r: RequestForEmail, outcome: 'approved' | 'declined' | 'withdrawn', decidedByName: string | null, note: string | null, appUrl: string) {
+export function requestDecidedEmail(r: RequestForEmail, outcome: 'approved' | 'declined' | 'withdrawn', decidedByName: string | null, note: string | null, appUrl: string, w: Words = DEFAULT_WORDS) {
+  const sh = w.lower(T.shift);
+  const roster = w.lower(T.roster);
   const who = decidedByName ?? 'An owner or admin';
   const link = rosterLink(appUrl, r);
   const what = outcome === 'approved'
-    ? (r.kind === 'other' ? `${who} approved it and will make the change on the shift.` : `${who} approved it, and the change has been made.`)
-    : outcome === 'declined' ? `${who} declined it, so the shift stays as it was.` : `${who} withdrew it, so the shift stays as it was.`;
+    ? (r.kind === 'other' ? `${who} approved it and will make the change on the ${sh}.` : `${who} approved it, and the change has been made.`)
+    : outcome === 'declined' ? `${who} declined it, so the ${sh} stays as it was.` : `${who} withdrew it, so the ${sh} stays as it was.`;
   return {
     subject: `Change ${outcome}: ${r.facilityName}, ${shiftLine(r).split(',')[0]}`,
     body: [
-      `Your request for a change to the roster at ${r.facilityName} has been ${outcome}.`,
+      `Your request for a change to the ${roster} at ${r.facilityName} has been ${outcome}.`,
       ``,
-      `Shift: ${shiftLine(r)}`,
+      `${w.one(T.shift)}: ${shiftLine(r)}`,
       `Change: ${r.summary}`,
       ``,
       what,
       ...(note ? [`Their note: ${note}`] : []),
-      ...(link ? [``, `See the shift: ${link}`] : []),
+      ...(link ? [``, `See the ${sh}: ${link}`] : []),
       ``,
       `CROP Workforce Management`,
     ].join('\n'),

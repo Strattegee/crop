@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bookedMessage, filledMessage, offerMessage } from '../src/roster/bank-fill.js';
+import { requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary } from '../src/roster/change-requests.js';
 import { rosterMessage } from '../src/roster/publishing.js';
 import { DEFAULT_WORDS, makeWords, T } from '../src/terms/words.js';
 
@@ -42,5 +43,25 @@ describe('the business\'s words in messages', () => {
     const gone = rosterMessage({ first: 'Ana', business: 'Demo Cafe', site: 'Harbour Kitchen', weekStart: '2026-11-09', updated: true, shifts: [] }, jobs);
     expect(gone.email).toContain('You no longer have any jobs at Harbour Kitchen that week.');
     expect(gone.email).toContain('has changed the schedule for');
+  });
+
+  it('words change requests and their emails with them', () => {
+    expect(requestSummary({ kind: 'assign', workerName: 'Ana Example', reason: null }, jobs)).toBe('Put Ana Example on the job');
+    expect(requestSummary({ kind: 'cancel', workerName: null, reason: 'Quiet day' }, jobs)).toBe('Cancel the job: Quiet day');
+    expect(requestProblem('remove', { status: 'open', equipmentOnly: false, hasPerson: false }, jobs)).toBe('Nobody is on this job');
+    expect(requestProblem('assign', { status: 'cancelled', equipmentOnly: false, hasPerson: false }, jobs)).toBe('This job is cancelled');
+    const r = {
+      summary: 'Put Ana Example on the job', reason: null, kind: 'assign' as const, requestedByName: 'Sam Allocator',
+      facilityName: 'Harbour Kitchen', areaName: null, role: 'Chef', localDate: '2031-03-04', localStart: '07:00', localEnd: '15:00',
+      weekStart: '2031-03-03', facilityId: 'f1', shiftId: 's1',
+    };
+    const a = requestArrivedEmail(r, '', jobs);
+    expect(a.body).toContain('asked for a change to the published schedule at Harbour Kitchen.');
+    expect(a.body).toContain('Job: Tuesday 4 March, 07:00–15:00, Chef, Harbour Kitchen');
+    expect(a.body).toContain('open the job on the schedule in CROP');
+    const d = requestDecidedEmail(r, 'declined', 'Olive Owner', null, 'https://crop.test', jobs);
+    expect(d.body).toContain('Your request for a change to the schedule at Harbour Kitchen has been declined.');
+    expect(d.body).toContain('so the job stays as it was.');
+    expect(d.body).toContain('See the job: https://crop.test/roster?');
   });
 });

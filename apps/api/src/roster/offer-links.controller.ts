@@ -6,6 +6,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { hashLinkToken, LINK_TOKEN, offerState, shiftLabel } from './bank-fill.js';
 import { acceptOffer, declineOffer } from './offer-replies.js';
 import { shiftById } from './roster.controller.js';
+import { T, wordsFor } from '../terms/words.js';
 
 const NOT_VALID = "This link isn't valid. Check you've used the whole link from your message.";
 
@@ -38,8 +39,11 @@ export class OfferLinksController {
       `select o.shift_id, o.status, o.expires_at, coalesce(w.preferred_name, w.first_name) as first, t.name as business
          from shift_offers o join workers w on w.id = o.worker_id join tenants t on t.id = o.tenant_id where o.id = $1`, [offerId])).rows[0];
     const s = await shiftById(db, o.shift_id);
+    const w = await wordsFor(db);
     return {
       business: o.business,
+      // The business's word for a shift (Settings → Words we use), for the page's wording.
+      word: { one: w.one(T.shift), lower: w.lower(T.shift) },
       firstName: o.first,
       status: offerState(o.status, o.expires_at),
       expiresAt: o.expires_at,

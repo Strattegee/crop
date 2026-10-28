@@ -249,5 +249,6 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-10-29 early morning, 3:15am Melbourne (scheduled run)
 
 - Shipped: messages to staff use the business's own words. Shift offers, "you're booked", "it's been filled", the email and text people get when a week's roster is published, and the credential expiry reminder now say what the business calls things: a café that calls shifts Jobs and its roster a Schedule sends "Demo Cafe has a job for you" and "Your jobs at Harbour Kitchen for the week of …". The office's daily email does the same ("booked on 2 jobs after that date"). Businesses that haven't chosen words get exactly the messages they had before.
-- Next: the same words in the office's change-request emails, the offer link page and error messages, or the worker app once its sign-in is confirmed.
+- Next: the same words in the remaining error messages, or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held).
+- Also shipped: the same words in roster change requests (what was asked, why it can't be asked, and the emails to owners and admins and back to the person who asked), and on the page staff open from an offer link ("Hi Ana, would you like this job?", "Accept job"), including the replies it gives.

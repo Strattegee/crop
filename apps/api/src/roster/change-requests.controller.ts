@@ -8,6 +8,7 @@ import { date, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
 import { queueNotification } from '../notifications/notify.js';
+import { wordsFor, type Words } from '../terms/words.js';
 import { CHANGE_REQUEST_KINDS, requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary, type ChangeRequestKind, type ChangeRequestStatus, type RequestForEmail } from './change-requests.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { rosterChangeRefusal } from './offers-data.js';
@@ -35,12 +36,12 @@ const FROM = `roster_change_requests r join shifts s on s.id = r.shift_id join f
 
 type Row = Record<string, unknown> & { kind: ChangeRequestKind; status: ChangeRequestStatus; requestedBy: string; workerName: string | null; currentName: string | null; reason: string | null };
 
-function present(rows: Row[], auth: AuthContext) {
+function present(rows: Row[], auth: AuthContext, w: Words) {
   const decider = DECIDERS.has(auth.tenant?.role ?? '');
   return rows.map(r => ({
     ...r,
     // While it waits, describe it against who is on the shift now; afterwards the shift has changed, so stay general.
-    summary: requestSummary({ ...r, currentName: r.status === 'pending' ? r.currentName : null }),
+    summary: requestSummary({ ...r, currentName: r.status === 'pending' ? r.currentName : null }, w),
     canDecide: r.status === 'pending' && decider,
     canWithdraw: r.status === 'pending' && (decider || r.requestedBy === auth.userId),
   }));
@@ -54,17 +55,18 @@ async function oneRequest(db: PoolClient, id: string, lock = false) {
 }
 
 /** The request as an email describes it, worded against the shift as it is now (call before changing the shift). */
-async function forEmail(db: PoolClient, id: string): Promise<{ r: RequestForEmail; email: string | null; requestedBy: string }> {
+async function forEmail(db: PoolClient, id: string): Promise<{ r: RequestForEmail; email: string | null; requestedBy: string; words: Words }> {
+  const words = await wordsFor(db);
   const row = (await db.query<Row & RequestForEmail & { requestedByEmail: string | null }>(
     `select ${COLS}, r.requested_by_email as "requestedByEmail" from ${FROM} where r.id = $1`, [id])).rows[0];
-  return { r: { ...row, summary: requestSummary(row) }, email: row.requestedByEmail, requestedBy: row.requestedBy };
+  return { r: { ...row, summary: requestSummary(row, words) }, email: row.requestedByEmail, requestedBy: row.requestedBy, words };
 }
 
 /** Tells the person who asked how their request was decided, unless they decided it themselves. */
 async function tellAsker(db: PoolClient, tenantId: string, id: string, before: Awaited<ReturnType<typeof forEmail>>,
   outcome: 'approved' | 'declined' | 'withdrawn', auth: AuthContext, decidedByName: string | null, note: string | null) {
   if (!before.email || before.requestedBy === auth.userId) return;
-  const m = requestDecidedEmail(before.r, outcome, decidedByName, note, process.env.APP_URL ?? '');
+  const m = requestDecidedEmail(before.r, outcome, decidedByName, note, process.env.APP_URL ?? '', before.words);
   await queueNotification(db, tenantId, {
     channel: 'email', to: before.email, template: 'change_request_decided', subject: m.subject, body: m.body,
     createdBy: auth.userId, dedupeKey: `change-request:${id}:${outcome}`,
@@ -107,7 +109,7 @@ export class ChangeRequestsController {
       if (weekState(week, true, todayIn(s.timezone)) === 'history') throw new ConflictException('This week is over, so its roster can no longer be changed');
       const refusal = await rosterChangeRefusal(db, id);
       if (!refusal) throw new ConflictException('You can make this change yourself.');
-      const problem = requestProblem(kind, { status: s.status, equipmentOnly: !s.needs_person, hasPerson: s.has_person });
+      const problem = requestProblem(kind, { status: s.status, equipmentOnly: !s.needs_person, hasPerson: s.has_person }, await wordsFor(db));
       if (problem) throw new ConflictException(problem);
       if (workerId) {
         const w = (await db.query<{ status: string; name: string }>(
@@ -123,8 +125,8 @@ export class ChangeRequestsController {
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
           [t.tenantId, id, s.facility_id, week, kind, workerId, reason, auth.userId, actor.name, auth.email || null])).rows[0].id;
         // Owners and admins hear about it straight away (not the asker, if they are one).
-        const { r } = await forEmail(db, newId);
-        const m = requestArrivedEmail(r, process.env.APP_URL ?? '');
+        const { r, words } = await forEmail(db, newId);
+        const m = requestArrivedEmail(r, process.env.APP_URL ?? '', words);
         const mine = (auth.email ?? '').trim().toLowerCase();
         for (const o of (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows) {
           if (!o.email || o.email.trim().toLowerCase() === mine) continue;
@@ -133,7 +135,7 @@ export class ChangeRequestsController {
             createdBy: auth.userId, dedupeKey: `change-request:${newId}:arrived:${o.email.trim().toLowerCase()}`,
           });
         }
-        return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [newId])).rows, auth)[0];
+        return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [newId])).rows, auth, await wordsFor(db))[0];
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new ConflictException('A change to this shift is already waiting for approval');
         throw e;
@@ -156,7 +158,7 @@ export class ChangeRequestsController {
     return withTenant(this.pool, t.tenantId, async db => present((await db.query<Row>(
       `select ${COLS} from ${FROM}
         where ($1::date is null or r.week_start = $1) and ($2::uuid is null or r.facility_id = $2) and ($3 = 'all' or r.status = $3)
-        order by ${anyWeek ? 'r.week_start, ' : ''}r.created_at desc limit 200`, [weekStart, facilityId, status])).rows, auth));
+        order by ${anyWeek ? 'r.week_start, ' : ''}r.created_at desc limit 200`, [weekStart, facilityId, status])).rows, auth, await wordsFor(db)));
   }
 
   /** Every request made for one shift, oldest first. */
@@ -165,7 +167,7 @@ export class ChangeRequestsController {
   forShift(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       await shiftById(db, id);
-      return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.shift_id = $1 order by r.created_at`, [id])).rows, auth);
+      return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.shift_id = $1 order by r.created_at`, [id])).rows, auth, await wordsFor(db));
     });
   }
 
@@ -196,7 +198,7 @@ export class ChangeRequestsController {
         `update roster_change_requests set status = 'approved', decided_by = $2, decided_by_name = $3, decided_at = now(), decision_note = $4 where id = $1`,
         [id, auth.userId, actor.name, note]);
       await tellAsker(db, t.tenantId, id, before, 'approved', auth, actor.name ?? null, note);
-      const [row] = present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth);
+      const [row] = present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth, await wordsFor(db));
       return { ...row, warnings, applied: r.kind !== 'other' };
     }, actor);
   }
@@ -229,7 +231,7 @@ export class ChangeRequestsController {
         `update roster_change_requests set status = $2, decided_by = $3, decided_by_name = $4, decided_at = now(), decision_note = $5 where id = $1`,
         [id, status, auth.userId, actor.name, note]);
       await tellAsker(db, t.tenantId, id, await forEmail(db, id), status, auth, actor.name ?? null, note);
-      return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth)[0];
+      return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [id])).rows, auth, await wordsFor(db))[0];
     }, actor);
   }
 }

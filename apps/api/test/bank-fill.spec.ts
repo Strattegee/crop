@@ -274,6 +274,20 @@ describe('bank fill: offers, first to accept is booked', () => {
       expect(booked.body).toContain("You're booked for this job:");
       const filled = (await owner.query<{ subject: string }>(`select subject from notifications where template = 'shift_filled' and body like '%Thu 19 Nov%'`)).rows[0];
       expect(filled.subject).toBe('Job filled: Thu 19 Nov 07:00–15:30');
+      // The offer link page gets the word, and link replies use it.
+      process.env.APP_URL = 'https://crop.test';
+      try {
+        const s2 = await shift('2026-11-20');
+        await http().post(`/shifts/${s2}/offers`).set(as('alloc')).send({ workerIds: [ben] }).expect(201);
+        const body = (await owner.query<{ body: string }>(
+          `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 20 Nov%'`)).rows[0].body;
+        const token = /\/offer\/([A-Za-z0-9_-]{43})/.exec(body)![1];
+        expect((await http().get(`/offer-links/${token}`).expect(200)).body.word).toEqual({ one: 'Job', lower: 'job' });
+        await http().post(`/offer-links/${token}/decline`).expect(200);
+        expect((await http().post(`/offer-links/${token}/decline`).expect(409)).body.message).toBe("You've already said no to this job");
+      } finally {
+        delete process.env.APP_URL;
+      }
     } finally {
       await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1040, singular: '' }] }).expect(200);
     }
