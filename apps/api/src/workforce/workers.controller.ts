@@ -191,9 +191,14 @@ export class WorkersController {
     const fields = credentialFields(body);
     const has = (k: string) => Boolean(body && k in body);
     return withTenant(this.pool, t.tenantId, async db => {
-      const before = (await db.query<{ number: string | null; issuedBy: string | null; issue: string | null; expiry: string | null; verification: string }>(
-        `select number, issued_by as "issuedBy", to_char(issue_date,'YYYY-MM-DD') as issue, to_char(expiry_date,'YYYY-MM-DD') as expiry, verification
-           from worker_credentials where id = $1 and worker_id = $2`, [credentialId, workerId],
+      const before = (await db.query<{
+        number: string | null; issuedBy: string | null; issue: string | null; expiry: string | null; verification: string; notes: string | null;
+        hasNumber: boolean; hasExpiry: boolean;
+      }>(
+        `select c.number, c.issued_by as "issuedBy", to_char(c.issue_date,'YYYY-MM-DD') as issue, to_char(c.expiry_date,'YYYY-MM-DD') as expiry,
+                c.verification, c.notes, t.has_number as "hasNumber", t.has_expiry as "hasExpiry"
+           from worker_credentials c join credential_types t on t.id = c.credential_type_id
+          where c.id = $1 and c.worker_id = $2 for update of c`, [credentialId, workerId],
       )).rows[0];
       if (!before) throw new NotFoundException('credential not found');
       const next = {
@@ -203,7 +208,13 @@ export class WorkersController {
         expiryDate: has('expiryDate') ? fields.expiryDate : before.expiry,
       };
       if (next.issueDate && next.expiryDate && next.expiryDate < next.issueDate) throw new BadRequestException('Expiry date must be on or after the issue date');
+      // The same rules as adding: a credential type that has a number or an expiry date can't have it taken away.
+      if (before.hasExpiry && !next.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
+      if (before.hasNumber && !next.number) throw new BadRequestException('Number is required for this credential');
       const factsChanged = next.number !== before.number || next.issuedBy !== before.issuedBy || next.issueDate !== before.issue || next.expiryDate !== before.expiry;
+      const notesChanged = has('notes') && fields.notes !== before.notes;
+      // Saving the form without changing anything leaves the credential and its history alone.
+      if (!factsChanged && !notesChanged) return getCredential(db, workerId, credentialId);
       const reset = factsChanged && before.verification !== 'unverified';
       await db.query(
         `update worker_credentials set number = $3, issue_date = $4, expiry_date = $5, issued_by = $9,

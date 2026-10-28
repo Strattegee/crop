@@ -57,6 +57,23 @@ export async function addCredential(workerId: string, f: FormData) {
   }), 'Credential added. It needs verifying before it counts.');
 }
 
+/** Sends every field, so a cleared box clears it; the API leaves the credential alone if nothing changed. */
+export async function updateCredential(workerId: string, credentialId: string, f: FormData) {
+  let after: { verification?: string } | undefined;
+  const before = str(f, 'verificationBefore');
+  await attempt(`/workers/${workerId}`, async () => {
+    after = await api<{ verification?: string }>(`/workers/${workerId}/credentials/${credentialId}`, {
+      method: 'PATCH',
+      body: {
+        number: str(f, 'number') ?? null, issuedBy: str(f, 'issuedBy') ?? null,
+        issueDate: str(f, 'issueDate') ?? null, expiryDate: str(f, 'expiryDate') ?? null, notes: str(f, 'notes') ?? null,
+      },
+    });
+  }, () => before && before !== 'unverified' && after?.verification === 'unverified'
+    ? 'Credential saved. It needs checking again before it counts.'
+    : 'Credential saved.');
+}
+
 export async function verifyCredential(workerId: string, credentialId: string, f: FormData) {
   await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/credentials/${credentialId}/verify`, {
     method: 'POST', body: { note: str(f, 'note') },
