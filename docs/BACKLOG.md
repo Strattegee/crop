@@ -58,7 +58,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 ## Waiting on David or others
 
 
-- Agency connections design (backlog item 7): read `docs/decisions/2026-10-28-agency-connections-design.md` and answer its four questions before agency connections and agency fill are built (28 Oct).
+- Agency connections design (backlog item 7): read `docs/decisions/2026-10-28-agency-connections-design.md` and answer its four questions before agency connections and agency fill are built (28 Oct). David answered 1–3 on 29 Oct (matching set up and checked when linking; documents shared by agreement per link; self-service link from the employer, confirmed by the agency; recorded at the end of the design note). Question 4 (agencies not on CROP) still open, so still held.
 - Open questions from the 25 Oct meeting (see `docs/decisions/2026-10-25-roster-meeting.md`).
 - ~~ClickSend~~ Done 27 Oct: number, username and API key set; test text received.
 - Apple developer verification.
