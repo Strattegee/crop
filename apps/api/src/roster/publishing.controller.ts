@@ -10,6 +10,7 @@ import { todayIn } from '../workforce/compliance.js';
 import { actorOf, changeSummary, mondayOf, rosterMessage, weekState, type ChangeKind, type MyShift } from './publishing.js';
 import { contacts } from './offer-replies.js';
 import { queueNotification } from '../notifications/notify.js';
+import { wordsFor } from '../terms/words.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -58,12 +59,13 @@ async function tellStaff(db: PoolClient, t: Membership, userId: string, w: { fac
         and sa.worker_id = any($3) and date_trunc('week', s.starts_at at time zone f.timezone)::date = $2
       order by s.starts_at`, [w.facilityId, weekStart, ids])).rows;
   const who = await contacts(db, ids);
+  const words = await wordsFor(db);
   let n = 0;
   for (const id of ids) {
     const c = who.get(id);
     if (!c) continue;
     const m = rosterMessage({ first: c.first, business: t.tenantName, site: w.facilityName, weekStart, updated: w.version !== null,
-      shifts: shifts.filter(s => s.workerId === id) });
+      shifts: shifts.filter(s => s.workerId === id) }, words);
     const key = `publish:${w.facilityId}:${weekStart}:v${version}:${id}`;
     if (c.email) { await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'roster_published', subject: m.subject, body: m.email, workerId: id, dedupeKey: `${key}:email`, createdBy: userId }); n++; }
     if (c.phone) { await queueNotification(db, t.tenantId, { channel: 'sms', to: c.phone, template: 'roster_published', body: m.sms, workerId: id, dedupeKey: `${key}:sms`, createdBy: userId }); n++; }
