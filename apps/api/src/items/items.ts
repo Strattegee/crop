@@ -60,6 +60,9 @@ export interface MovementLine {
   quantity: number;
   unitCostCents: number;
   chargeCents: number | null;
+  /** Who it was issued to (null when used on the shift itself); only read when splitting by person. */
+  workerId?: string | null;
+  workerName?: string | null;
 }
 
 export interface UsageLine {
@@ -71,23 +74,30 @@ export interface UsageLine {
   costCents: number;
   /** Null when the item isn't charged to the client. */
   chargeCents: number | null;
+  /** With `byPerson`: who holds it (null = used on the shift itself), so a return can say where it comes from. */
+  workerId?: string | null;
+  workerName?: string | null;
 }
 
 /**
  * Net use per item from a shift's (or person's) movements: issues and uses count, returns take them back.
  * Each movement keeps the cost and charge it was recorded with, so price changes don't rewrite history.
  */
-export function summariseUsage(lines: MovementLine[]): { lines: UsageLine[]; totalCostCents: number; totalChargeCents: number } {
+export function summariseUsage(lines: MovementLine[], opts: { byPerson?: boolean } = {}): { lines: UsageLine[]; totalCostCents: number; totalChargeCents: number } {
   const byItem = new Map<string, UsageLine>();
   for (const m of lines) {
-    const u = byItem.get(m.itemId) ?? { itemId: m.itemId, name: m.name, unit: m.unit, quantity: 0, costCents: 0, chargeCents: null };
+    const key = opts.byPerson ? `${m.itemId}:${m.workerId ?? ''}` : m.itemId;
+    const u = byItem.get(key) ?? {
+      itemId: m.itemId, name: m.name, unit: m.unit, quantity: 0, costCents: 0, chargeCents: null,
+      ...(opts.byPerson ? { workerId: m.workerId ?? null, workerName: m.workerName ?? null } : {}),
+    };
     const sign = m.quantity < 0 ? 1 : -1; // going out adds to use, coming back takes it away
     u.quantity = roundQty(u.quantity - m.quantity);
     u.costCents += sign * lineCents(m.quantity, m.unitCostCents);
     if (m.chargeCents !== null) u.chargeCents = (u.chargeCents ?? 0) + sign * lineCents(m.quantity, m.chargeCents);
-    byItem.set(m.itemId, u);
+    byItem.set(key, u);
   }
-  const out = [...byItem.values()].filter(u => u.quantity !== 0 || u.costCents !== 0).sort((a, b) => a.name.localeCompare(b.name));
+  const out = [...byItem.values()].filter(u => u.quantity !== 0 || u.costCents !== 0).sort((a, b) => a.name.localeCompare(b.name) || (a.workerName ?? '').localeCompare(b.workerName ?? ''));
   return {
     lines: out,
     totalCostCents: out.reduce((s, u) => s + u.costCents, 0),

@@ -52,6 +52,16 @@ describe('items and consumables', () => {
     expect(summariseUsage([line({ quantity: -1 }), line({ quantity: 1 })]).lines).toEqual([]);
   });
 
+  it('can split use by who holds it', () => {
+    const r = summariseUsage([
+      line({ quantity: -2, workerId: 'ana', workerName: 'Ana Example' }),
+      line({ quantity: -3 }),
+      line({ quantity: 1, workerId: 'ana', workerName: 'Ana Example' }),
+    ], { byPerson: true });
+    expect(r.lines.map(l => [l.workerName, l.quantity])).toEqual([[null, 3], ['Ana Example', 1]]);
+    expect(summariseUsage([line({ quantity: -2, workerId: 'ana' }), line({ quantity: -3 })]).lines).toHaveLength(1);
+  });
+
   it('shows low stock at or below the reorder level', () => {
     expect(isLow(5, 5)).toBe(true);
     expect(isLow(6, 5)).toBe(false);

@@ -78,6 +78,21 @@ export async function removeEquipment(shiftId: string, equipmentId: string, f: F
 }
 
 /** Sets the duties on a shift (Settings → Shift duties); says if the person on it no longer meets them. */
+/** Puts an item on the shift: issued to the person on it, or used on the shift. Stock comes from the shift's site. */
+export async function useItem(shiftId: string, workerId: string | null, f: FormData) {
+  const itemId = str(f, 'itemId');
+  const toPerson = !!workerId && f.get('toPerson') === 'on';
+  await attempt(back(f), async () => {
+    if (!itemId) throw new ApiError(400, 'Choose an item');
+    await api(`/items/${itemId}/issue`, { method: 'POST', body: { shiftId, workerId: toPerson ? workerId : null, quantity: Number(str(f, 'quantity') ?? 'NaN'), notes: str(f, 'notes') } });
+  }, toPerson ? 'Issued for this shift.' : 'Recorded as used on this shift.');
+}
+
+/** Items coming back from the shift (or the person on it, for this shift) into the site's stock. */
+export async function returnItem(shiftId: string, itemId: string, workerId: string | null, f: FormData) {
+  await attempt(back(f), () => api(`/items/${itemId}/return`, { method: 'POST', body: { shiftId, workerId, quantity: Number(str(f, 'quantity') ?? 'NaN') } }), 'Returned to stock.');
+}
+
 export async function setDuties(shiftId: string, f: FormData) {
   const dutyIds = f.getAll('dutyIds').filter((x): x is string => typeof x === 'string');
   let problems: string[] = [];

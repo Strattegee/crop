@@ -4,13 +4,13 @@ import { Notices } from '../notices';
 import { T, words } from '../../../lib/terms';
 import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, saveTemplate, setDuties, unassign,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setDuties, unassign, useItem,
 } from './actions';
 import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +55,9 @@ const when = (t: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', m
 const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
 /** A saved usual week for one site (migration 0023). */
 type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
+/** What a shift used, one line per item and holder (`GET /shifts/:id/items?byPerson=true`). */
+type ShiftItems = { lines: { itemId: string; name: string; unit: string; quantity: number; costCents: number; chargeCents: number | null; workerId: string | null; workerName: string | null }[]; totalCostCents: number; totalChargeCents: number };
+const money = (c: number) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(c / 100);
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -230,10 +233,15 @@ export default async function RosterPage({ searchParams }: {
   let equipCandidates: EquipCandidate[] = [];
   let panelError: string | null = null;
   // Duties are needed by the shift panel and the Add shifts form.
-  const [shiftHistory, duties] = await Promise.all([
+  const liveShift = selected && selected.status !== 'cancelled' ? selected : null;
+  const [shiftHistory, duties, shiftItems, stockHere] = await Promise.all([
     selected ? api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     api<Duty[]>('/shift-duties').catch(() => [] as Duty[]),
+    // Items on the shift (backlog item 5): what it used, and stock at its site for the item list.
+    liveShift ? api<ShiftItems>(`/shifts/${liveShift.id}/items?byPerson=true`).catch(() => null) : Promise.resolve(null),
+    liveShift ? api<{ itemId: string; onHand: number }[]>(`/stock?facilityId=${liveShift.facilityId}`).catch(() => []) : Promise.resolve([]),
   ]);
+  const itemChoices = liveShift ? shiftItemChoices(itemList, stockHere) : [];
   if (selected && selected.status !== 'cancelled') {
     try {
       const [bank, all, eq] = await Promise.all([
@@ -291,6 +299,49 @@ export default async function RosterPage({ searchParams }: {
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
   const pendingOffers = offers.filter(o => o.status === 'pending');
   const declinedOffers = offers.filter(o => o.status === 'declined');
+
+  // Items used on the shift or given to the person on it (backlog item 5). Not a shift change, so shown on live weeks too.
+  const itemsSection = liveShift && (itemChoices.length > 0 || !!shiftItems?.lines.length) ? (
+    <section className="shift-items">
+      <h3>{tw.many(T.item)}</h3>
+      {shiftItems?.lines.map(l => (
+        <div key={`${l.itemId}:${l.workerId ?? ''}`} className="panel-row">
+          <span>
+            {l.quantity} × {l.name} <span className="muted">({l.unit}) · {l.workerName ? `with ${l.workerName}` : 'used on the shift'} · {money(l.costCents)}{l.chargeCents !== null ? `, charge ${money(l.chargeCents)}` : ''}</span>
+          </span>
+          {l.quantity > 0 && (
+            <form action={returnItem.bind(null, liveShift.id, l.itemId, l.workerId)} className="inline-form">
+              <input type="hidden" name="back" value={here} />
+              <input name="quantity" type="number" min="0.001" step="0.001" max={l.quantity} defaultValue={l.quantity} aria-label={`How many ${l.name} came back`} style={{ width: 64 }} />
+              <button className="btn small secondary">Return</button>
+            </form>
+          )}
+        </div>
+      ))}
+      {!!shiftItems?.lines.length && (
+        <p className="muted small" style={{ margin: '4px 0 8px' }}>
+          Cost {money(shiftItems.totalCostCents)}{shiftItems.totalChargeCents ? ` · charge to the client ${money(shiftItems.totalChargeCents)}` : ''}
+        </p>
+      )}
+      {itemChoices.length > 0 && (
+        <form action={useItem.bind(null, liveShift.id, liveShift.workerId)} className="use-item">
+          <input type="hidden" name="back" value={here} />
+          <label>{tw.one(T.item)}
+            <select name="itemId" required defaultValue="">
+              <option value="" disabled>Choose…</option>
+              {itemChoices.map(c => <option key={c.id} value={c.id} disabled={c.disabled}>{c.label}</option>)}
+            </select>
+          </label>
+          <label>How many<input name="quantity" type="number" min="0.001" step="0.001" defaultValue="1" required style={{ width: 80 }} /></label>
+          {liveShift.workerId && !liveShift.equipmentOnly && (
+            <label className="inline"><input type="checkbox" name="toPerson" defaultChecked /> Give to {liveShift.workerName}</label>
+          )}
+          <button className="btn small secondary">Add to shift</button>
+          <p className="muted small" style={{ margin: 0 }}>Stock comes from {liveShift.facilityName}.</p>
+        </form>
+      )}
+    </section>
+  ) : null;
 
   return (
     <div className="roster-page">
@@ -811,7 +862,7 @@ export default async function RosterPage({ searchParams }: {
             {panelError && <div className="notice error">{panelError}</div>}
             {selected.status === 'cancelled' ? (
               <section><h3>Cancelled</h3><p style={{ margin: 0 }}>{selected.cancelledReason || 'No reason recorded.'}</p></section>
-            ) : panelRefusal ? (
+            ) : panelRefusal ? (<>
               <section>
                 {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.status === 'booked' ? 'booked' : 'waiting to confirm'}</span></p>}
                 {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>Equipment: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
@@ -845,7 +896,8 @@ export default async function RosterPage({ searchParams }: {
                   </form>
                 )}
               </section>
-            ) : (<>
+              {itemsSection}
+            </>) : (<>
 
             {!selected.equipmentOnly && (
               <section>
@@ -968,6 +1020,8 @@ export default async function RosterPage({ searchParams }: {
                 </details>
               )}
             </section>
+
+            {itemsSection}
 
             <section>
               <form action={cancelShift.bind(null, selected.id)} className="form-row">

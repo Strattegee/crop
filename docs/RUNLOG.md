@@ -219,3 +219,9 @@ Newest first. One entry per working session or scheduled run.
 - Next: the agency connections design write-up (to hold for David), or words in roster labels and forms.
 - Waiting on David: nothing new.
 
+## 2026-10-28 afternoon, 3:20pm Melbourne (scheduled run)
+
+- Shipped: items on the roster. The shift panel now has an Items section: what the shift used and what the person on it was given for it, with the cost and the charge to the client and a total, and a Return button on each line. "Add to shift" picks an item (it says how many the shift's site has, and greys out ones it has none of), how many, and whether it goes to the person on the shift or is used on the shift itself. It shows on published weeks too, because handing out gloves isn't a roster change.
+- Also written: the design for agency connections and agency fill (how an employer and an agency link up, how a request escalates from agency 1 to 2 to 3, how an agency's people are checked against the employer's rules without either business seeing the other's records, and how a booked agency worker appears on the employer's roster). It is in `docs/decisions/2026-10-28-agency-connections-design.md` with four questions. Nothing of it is built.
+- Next: words in roster labels and forms (backlog), or the worker app once its sign-in is confirmed.
+- Waiting on David: approval of the agency connections design and its four questions.

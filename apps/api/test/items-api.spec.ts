@@ -119,6 +119,14 @@ describe('items and consumables API', () => {
       ],
       totalCostCents: 9560, totalChargeCents: 10125,
     });
+    // Split by who holds it, for returns from the roster's shift panel.
+    const split = await http().get(`/shifts/${shift}/items?byPerson=true`).set(as('alloc')).expect(200);
+    expect(split.body.lines).toEqual([
+      expect.objectContaining({ itemId: diesel, quantity: 40.5, workerId: null, workerName: null }),
+      expect.objectContaining({ itemId: gloves, quantity: 2, workerId: null, workerName: null }),
+      expect.objectContaining({ itemId: gloves, quantity: 1, workerId: ana, workerName: 'Ana Example' }),
+    ]);
+    expect(split.body.totalCostCents).toBe(9560);
     const w = await http().get(`/workers/${ana}/items`).set(as('alloc')).expect(200);
     expect(w.body.lines).toEqual([{ itemId: gloves, name: 'Safety gloves', unit: 'pair', quantity: 2, costCents: 1000, chargeCents: null }]);
     await http().post(`/items/${gloves}/issue`).set(as('alloc')).send({ quantity: 1, shiftId: shift }).expect(201);
