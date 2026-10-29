@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { DbRulesInterceptor } from './common/db-rules.interceptor.js';
 import { AgencyLinksController } from './agencies/agency-links.controller.js';
 import { AgencyEscalator, AgencyFillController } from './agencies/agency-fill.controller.js';
+import { AgencyOfferLinksController, AgencyOffersController } from './agencies/agency-offers.controller.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClientsController } from './clients/clients.controller.js';
 import { DatabaseModule } from './database/database.module.js';
@@ -38,7 +39,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController, AttentionController, ShiftDutiesController, CoverRulesController,
-    OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController,
+    OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController, AgencyOffersController, AgencyOfferLinksController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator],
 })

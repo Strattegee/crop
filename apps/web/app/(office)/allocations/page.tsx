@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { businessZone, whenIn } from '../../../lib/business';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
-import { pullOut, putForward } from './actions';
+import { offerToPeople, pullOut, putForward, recordYes, withdrawOffers } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +18,8 @@ type Request = {
 type Reason = { code: string; message: string };
 type Person = { workerId: string; name: string; roles: string[]; weekHours: number; available: boolean; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 type People = { ready: number; unmatched: { name: string; severity: string }[]; people: Person[] };
+type Offer = { id: string; workerId: string; workerName: string; state: string; expiresAt: string | null; respondedVia: string | null };
+const OFFER_STATE: Record<string, string> = { pending: 'waiting for a reply', expired: 'expired', accepted: 'accepted', declined: 'said no', withdrawn: 'withdrawn', filled: 'filled' };
 
 const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
@@ -34,6 +36,8 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   // Each open request's people, checked against the employer's requirements as matched to this business's credentials.
   const people = new Map(await Promise.all(open.map(async r =>
     [r.id, await api<People>(`/agency-requests/${r.id}/people`).catch(() => null)] as const)));
+  const offers = new Map(await Promise.all(open.map(async r =>
+    [r.id, await api<Offer[]>(`/agency-requests/${r.id}/offers`).catch(() => [])] as const)));
   const closed = list.filter(r => r.status !== 'open');
   const shift = tw.lower(T.shift);
   const now = Date.now();
@@ -43,7 +47,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
         Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
-        Put someone forward and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose). If they can&apos;t go after all, pull them out before the {shift} starts; you&apos;re emailed when the employer approves, declines or takes them off.
+        Put someone forward, or offer it to several and the first to accept goes, and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose). If they can&apos;t go after all, pull them out before the {shift} starts; you&apos;re emailed when the employer approves, declines or takes them off.
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className="card">
@@ -85,6 +89,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
                   {ready.slice(0, 8).map(x => (
                     <div key={x.workerId} className="small panel-row" style={{ alignItems: 'center' }}>
                       <span>
+                        <input type="checkbox" name="workerId" value={x.workerId} form={`offer-${r.id}`} aria-label={`Offer to ${x.name}`} style={{ marginRight: 6 }} />
                         <Link href={`/workers/${x.workerId}`}>{x.name}</Link> <span className="muted">· {x.roles.join(', ') || 'no role'} · {x.weekHours} h that week</span>
                         {x.warnings.map(w => <span key={w.message} className="warnline"> ⚠ {w.message}</span>)}
                       </span>
@@ -94,6 +99,39 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
                     </div>
                   ))}
                   {ready.length > 8 && <p className="muted small" style={{ margin: 0 }}>and {ready.length - 8} more</p>}
+                  {ready.length > 0 && (
+                    <form id={`offer-${r.id}`} action={offerToPeople.bind(null, r.id)} className="small" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '4px 0' }}>
+                      <span className="muted">Or tick several and</span>
+                      <button className="btn small">Offer to ticked</button>
+                      <label className="muted">open for{' '}
+                        <select name="expiresInMinutes" defaultValue="0" aria-label="Offer open for">
+                          <option value="0">until it starts</option><option value="30">30 minutes</option><option value="60">1 hour</option>
+                          <option value="120">2 hours</option><option value="240">4 hours</option>
+                        </select>
+                      </label>
+                      <span className="muted">· each gets an email and text with a link; the first to accept goes.</span>
+                    </form>
+                  )}
+                  {(offers.get(r.id) ?? []).length > 0 && (
+                    <div className="small" style={{ margin: '4px 0' }}>
+                      <strong>Offered</strong>{' '}
+                      {(offers.get(r.id) ?? []).map((o, i) => (
+                        <span key={o.id}>
+                          {i > 0 && ' · '}{o.workerName} <span className="muted">({OFFER_STATE[o.state] ?? o.state})</span>
+                          {o.state === 'pending' && (
+                            <form action={recordYes.bind(null, o.id, o.workerName)} style={{ display: 'inline' }}>
+                              {' '}<button className="btn small secondary" title={`${o.workerName} told you yes: put them forward`}>They said yes</button>
+                            </form>
+                          )}
+                        </span>
+                      ))}
+                      {(offers.get(r.id) ?? []).some(o => o.state === 'pending') && (
+                        <form action={withdrawOffers.bind(null, r.id)} style={{ display: 'inline' }}>
+                          {' '}<button className="btn small secondary">Withdraw offers</button>
+                        </form>
+                      )}
+                    </div>
+                  )}
                   {cant.length > 0 && (
                     <details className="small">
                       <summary className="muted" style={{ cursor: 'pointer' }}>Can&apos;t go ({cant.length})</summary>

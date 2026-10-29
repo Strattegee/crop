@@ -16,21 +16,21 @@ import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
 
-const INBOX_COLS = `id, connection_id as "connectionId", employer_name as "employerName", site_name as "siteName", site_region as "siteRegion",
+export const INBOX_COLS = `id, connection_id as "connectionId", employer_name as "employerName", site_name as "siteName", site_region as "siteRegion",
   site_timezone as "siteTimezone", area_name as "areaName", role, starts_at as "startsAt", ends_at as "endsAt", break_minutes as "breakMinutes",
   duties, requirements, note, status, received_at as "receivedAt", closed_at as "closedAt", closed_reason as "closedReason",
   placed_worker_id as "placedWorkerId", placed_name as "placedName", placed_by_name as "placedByName", placed_at as "placedAt", placement, placement_at as "placementAt"`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type InboxRow = InboxShift & { id: string; connectionId: string; siteRegion: string | null; breakMinutes: number; status: string; receivedAt: Date; closedAt: Date | null; closedReason: string | null;
+export type InboxRow = InboxShift & { id: string; connectionId: string; siteRegion: string | null; breakMinutes: number; status: string; receivedAt: Date; closedAt: Date | null; closedReason: string | null;
   placedWorkerId: string | null; placedName: string | null; placedByName: string | null; placedAt: Date | null; placement: Placement | null; placementAt: Date | null };
 
 /**
  * Agency side: this business's people (or just `workerIds`) for one request it was sent, checked against the
  * employer's requirements as matched to this business's credentials and its own rules for each person. Ranked.
  */
-async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[]) {
+export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[]) {
   const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
     requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
     `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
@@ -52,7 +52,7 @@ async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: strin
 }
 
 /** Emails the employer's owners and admins that an agency put someone forward. Runs in the employer's own business. */
-async function tellEmployer(pool: Pool, employerTenantId: string, placementId: string) {
+export async function tellEmployer(pool: Pool, employerTenantId: string, placementId: string) {
   await withTenant(pool, employerTenantId, async db => {
     const p = (await db.query<{ agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
       siteTimezone: string; status: string; shiftId: string; weekStart: string }>(
