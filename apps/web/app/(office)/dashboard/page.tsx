@@ -76,7 +76,7 @@ export default async function Dashboard() {
                     <span>
                       <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
                       <br />
-                      <Link href={`/roster?week=${mondayOf(i.shift.localDate)}&shift=${i.shiftId}`}>
+                      <Link href={`/roster?week=${mondayOf(i.shift.localDate)}&shift=${i.shiftId}#shift-panel`} target="_blank" rel="noopener" title="Opens in a new tab">
                         {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
                       </Link>
                       <span className="muted"> · {i.shift.facilityName}</span>
