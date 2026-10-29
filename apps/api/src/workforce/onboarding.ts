@@ -121,12 +121,14 @@ export function defaultTitle(kind: StepKind, typeName?: string): string {
 /**
  * A starting checklist from the business's own rules: right to work, employment terms, then every credential that
  * must be held (by everyone, or by one of the given roles), then those that should be held (not required).
+ * Optional requirements are left out.
  */
 export function stepsFromRequirements(
-  rules: { credentialTypeId: string; typeName: string; scope: 'all_workers' | 'role'; role: string | null; severity: 'hard' | 'warning' }[],
+  rules: { credentialTypeId: string; typeName: string; scope: 'all_workers' | 'role'; role: string | null; severity: 'hard' | 'warning' | 'optional' }[],
   roles: string[],
 ): StepInput[] {
-  const applies = rules.filter(r => r.scope === 'all_workers' || (r.role !== null && roles.includes(r.role)));
+  // Optional requirements are listed, never checked, so they don't become steps.
+  const applies = rules.filter(r => r.severity !== 'optional' && (r.scope === 'all_workers' || (r.role !== null && roles.includes(r.role))));
   const byType = new Map<string, { typeName: string; hard: boolean }>();
   for (const r of applies) {
     const prev = byType.get(r.credentialTypeId);

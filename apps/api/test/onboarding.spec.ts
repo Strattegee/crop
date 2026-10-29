@@ -83,6 +83,7 @@ describe('onboarding: rules', () => {
       { credentialTypeId: 'fa', typeName: 'First aid', scope: 'all_workers', role: null, severity: 'warning' },
       { credentialTypeId: 'rsa', typeName: 'RSA', scope: 'role', role: 'Bartender', severity: 'hard' },
       { credentialTypeId: 'fa', typeName: 'First aid', scope: 'role', role: 'Bartender', severity: 'hard' },
+      { credentialTypeId: 'cpr', typeName: 'CPR', scope: 'all_workers', role: null, severity: 'optional' },
     ], ['Waiter']);
     expect(steps.map(s => [s.kind, s.title, s.required])).toEqual([
       ['right_to_work', 'Right to work recorded and checked', true], ['employment', 'Employment terms set', true],

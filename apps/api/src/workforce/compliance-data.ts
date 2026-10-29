@@ -1,11 +1,11 @@
 import type { PoolClient } from 'pg';
-import { todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts } from './compliance.js';
+import { todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts, type RuleLevel } from './compliance.js';
 import { loadSettings } from './settings.js';
 
 /** Loads what's needed to work out compliance for many workers at once (within withTenant). */
 export async function complianceContext(db: PoolClient, tenantId: string) {
   const settings = await loadSettings(db, tenantId);
-  const rules = (await db.query<{ credential_type_id: string; name: string; scope: 'all_workers' | 'role'; role: string | null; severity: 'hard' | 'warning' }>(
+  const rules = (await db.query<{ credential_type_id: string; name: string; scope: 'all_workers' | 'role'; role: string | null; severity: RuleLevel }>(
     `select r.credential_type_id, t.name, r.scope, r.role, r.severity
        from credential_requirements r join credential_types t on t.id = r.credential_type_id
       where t.active`,

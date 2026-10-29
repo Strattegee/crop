@@ -157,6 +157,19 @@ describe('shift duties: API', () => {
     await http().put(`/shifts/${s}/duties`).set(as('other')).send({ dutyIds: [] }).expect(404);
   });
 
+  it('an optional credential on a duty is listed but never checked', async () => {
+    const d = (await http().post('/shift-duties').set(as('admin'))
+      .send({ name: 'Cellar tasting', requirements: [{ credentialTypeId: rsa, severity: 'optional' }] }).expect(201)).body;
+    expect(d.requirements).toEqual([{ credentialTypeId: rsa, typeName: 'RSA', severity: 'optional' }]);
+    const s = await shift('2026-11-12');
+    expect((await http().put(`/shifts/${s}/duties`).set(as('alloc')).send({ dutyIds: [d.id] }).expect(200)).body.personProblems).toEqual([]);
+    const a = (await http().get(`/shifts/${s}/candidates`).set(as('alloc')).expect(200)).body.candidates
+      .find((x: { workerId: string }) => x.workerId === ana);
+    expect(a.eligible).toBe(true);
+    expect([...a.blocks, ...a.warnings].map((r: { message: string }) => r.message).join(' ')).not.toMatch(/RSA/);
+    await http().patch(`/shift-duties/${d.id}`).set(as('admin')).send({ active: false }).expect(200);
+  });
+
   it('follows the after-publishing rule like any other shift change', async () => {
     const list = (await http().get('/shift-duties').set(as('alloc')).expect(200)).body as { id: string; name: string }[];
     const alcohol = list.find(d => d.name === 'Serves alcohol')!.id;
@@ -227,7 +240,7 @@ describe('shift duties: API', () => {
       await c.query('rollback');
       await c.query('begin');
       await c.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
-      expect((await c.query('select count(*)::int as n from shift_duties')).rows[0].n).toBe(2);
+      expect((await c.query('select count(*)::int as n from shift_duties')).rows[0].n).toBe(3);
       await expect(c.query('delete from shift_duties')).rejects.toThrow(/permission denied/);
       await c.query('rollback');
     } finally {

@@ -8,7 +8,7 @@ const LABELS: Record<string, string> = {
   firstName: 'First name', lastName: 'Last name', preferredName: 'Preferred name', email: 'Email', phone: 'Mobile',
   roles: 'Roles', notes: 'Notes', status: 'Status', name: 'Name', category: 'Category', timezone: 'Time zone',
   credentialTypeId: 'Credential', number: 'Number', issuedBy: 'Issued by', issueDate: 'Issue date', expiryDate: 'Expiry date',
-  reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Type',
+  reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Level',
   verificationMethod: 'How it is verified', abn: 'ABN', billingContactName: 'Billing contact', billingEmail: 'Billing email',
   addressLine: 'Address', suburb: 'Suburb', state: 'State', postcode: 'Postcode', clientId: 'Client', specialty: 'Specialty',
   parkingNotes: 'Parking notes', entryNotes: 'Entry notes',

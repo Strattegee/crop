@@ -67,7 +67,7 @@ export async function operatorNeedsForShift(db: PoolClient, shiftId: string): Pr
  * whatever their role. Only active duties and credential types count.
  */
 export async function dutyRulesForShift(db: PoolClient, shiftId: string): Promise<RequirementRule[]> {
-  return (await db.query<{ credential_type_id: string; type_name: string; severity: 'hard' | 'warning'; duty: string }>(
+  return (await db.query<{ credential_type_id: string; type_name: string; severity: 'hard' | 'warning' | 'optional'; duty: string }>(
     `select r.credential_type_id, ct.name as type_name, r.severity, d.name as duty
        from shift_duty_links l join shift_duties d on d.id = l.duty_id
        join shift_duty_requirements r on r.duty_id = d.id join credential_types ct on ct.id = r.credential_type_id

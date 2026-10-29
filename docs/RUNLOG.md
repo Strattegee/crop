@@ -265,3 +265,11 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: correcting a credential. Each credential on a person's page now has Edit: number, who issued it, dates and notes, with the same required fields as adding. If a checked credential gets a new number, issuer or dates, the page says it needs checking again before it counts; saving without changing anything leaves it (and its history) alone. Notes now show under the credential's name.
 - Next: requirement levels (recorded but never warns), or the worker app once its sign-in is confirmed.
 - Waiting on David: approval of the agency connections design and its four questions (unchanged); the worker app's client ID in Zitadel; applying online and uploading documents through a link (both open CROP to the public, so held).
+
+## 2026-10-29 midday, 12:15pm Melbourne (scheduled run)
+
+- Shipped: optional requirements. Besides "must have" (blocks) and "should have" (a warning), a credential can now be marked "Optional" in Settings → Who needs what and on a shift duty. Optional ones are listed on the person's page ("has one" / "not recorded") so everyone can see they're useful, but they never stop anyone working, never warn, and aren't added to onboarding checklists. Industry templates can carry them too. This is the third level David's agency emails use (must have / ideal / optional).
+- Not started: agency connections. David approved the design this morning and his own session may be building it, so this run left it alone to avoid two sessions on the same piece.
+- Next: agency connections (connections and credential matching first), uploading documents through a link (also approved today), or the worker app's sign-in (its client ID was confirmed today).
+- Waiting on David: the public apply form (spam protection and the form's questions).
+

@@ -96,6 +96,21 @@ describe('workers, credentials and compliance', () => {
     ]);
   });
 
+  it('lists optional requirements on the person without checking them', async () => {
+    const rules = (await http().get('/credential-requirements').set(as('alloc')).expect(200)).body as { credentialTypeId: string }[];
+    const ruled = new Set(rules.map(r => r.credentialTypeId));
+    const [name, typeId] = Object.entries(types).find(([, id]) => !ruled.has(id))!;
+    const rule = await http().post('/credential-requirements').set(as('admin'))
+      .send({ credentialTypeId: typeId, scope: 'role', role: 'RN', severity: 'optional' }).expect(201);
+    expect(rule.body.severity).toBe('optional');
+    await http().post('/credential-requirements').set(as('admin')).send({ credentialTypeId: typeId, scope: 'all_workers', severity: 'sometimes' }).expect(400);
+    const w = await http().get(`/workers/${workerId}`).set(as('alloc')).expect(200);
+    expect(w.body.issues.map((i: { typeName: string }) => i.typeName)).not.toContain(name);
+    expect(w.body.optional).toEqual([{ credentialTypeId: typeId, typeName: name, held: false }]);
+    await http().delete(`/credential-requirements/${rule.body.id}`).set(as('admin')).expect(200);
+    expect((await http().get(`/workers/${workerId}`).set(as('alloc')).expect(200)).body.optional).toEqual([]);
+  });
+
   it('records credentials, which count only once verified', async () => {
     const add = (type: string, body: object) =>
       http().post(`/workers/${workerId}/credentials`).set(as('alloc')).send({ credentialTypeId: types[type], ...body });

@@ -36,7 +36,7 @@ type Shift = {
   coveringWorkerId?: string | null; coveringName?: string | null;
 };
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
-type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' }[] };
+type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' | 'optional' }[] };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
@@ -603,7 +603,7 @@ export default async function RosterPage({ searchParams }: {
               <fieldset className="weekdays">
                 <legend>Duties <Link href="/settings/shift-duties" className="muted small">(change duties)</Link></legend>
                 {duties.filter(d => d.active).map(d => (
-                  <label key={d.id} className="inline" title={d.requirements.length ? `Needs ${d.requirements.map(r => r.typeName).join(', ')}` : undefined}>
+                  <label key={d.id} className="inline" title={d.requirements.some(r => r.severity !== 'optional') ? `Needs ${d.requirements.filter(r => r.severity !== 'optional').map(r => r.typeName).join(', ')}` : undefined}>
                     <input type="checkbox" name="dutyIds" value={d.id} />{d.name}
                   </label>
                 ))}
@@ -1013,7 +1013,7 @@ export default async function RosterPage({ searchParams }: {
                   {duties.filter(d => d.active || selected.duties?.some(x => x.id === d.id)).map(d => (
                     <label key={d.id} className="inline">
                       <input type="checkbox" name="dutyIds" value={d.id} defaultChecked={selected.duties?.some(x => x.id === d.id)} disabled={!d.active && !selected.duties?.some(x => x.id === d.id)} />
-                      <span>{d.name}{d.requirements.length > 0 && <span className="muted small"> · needs {d.requirements.map(r => r.typeName).join(', ')}</span>}{!d.active && <span className="muted small"> (switched off)</span>}</span>
+                      <span>{d.name}{d.requirements.some(r => r.severity !== 'optional') && <span className="muted small"> · needs {d.requirements.filter(r => r.severity !== 'optional').map(r => r.typeName).join(', ')}</span>}{!d.active && <span className="muted small"> (switched off)</span>}</span>
                     </label>
                   ))}
                   <button className="btn small secondary">Save duties</button>

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 type Duty = {
   id: string; name: string; description: string | null; active: boolean;
-  requirements: { credentialTypeId: string; typeName: string; severity: 'hard' | 'warning' }[];
+  requirements: { credentialTypeId: string; typeName: string; severity: 'hard' | 'warning' | 'optional' }[];
 };
 type CredentialType = { id: string; name: string; active: boolean };
 
@@ -23,10 +23,11 @@ function NeedsFields({ types, duty }: { types: CredentialType[]; duty?: Duty }) 
         return (
           <label key={t.id} className="inline">
             <span>{t.name}</span>
-            <select name={`req_${t.id}`} defaultValue={r ? (r.severity === 'hard' ? 'must' : 'should') : ''}>
+            <select name={`req_${t.id}`} defaultValue={r ? ({ hard: 'must', warning: 'should', optional: 'optional' } as const)[r.severity] : ''}>
               <option value="">Not needed</option>
               <option value="must">Must have</option>
               <option value="should">Should have (a warning)</option>
+              <option value="optional">Optional (listed, never checked)</option>
             </select>
           </label>
         );
@@ -90,7 +91,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
                   <td><b>{d.name}</b>{!d.active && ' (off)'}{d.description && <div className="muted small">{d.description}</div>}</td>
                   <td>
                     {d.requirements.length === 0 ? <span className="muted">Nothing yet</span> : d.requirements.map(r => (
-                      <div key={r.credentialTypeId}>{r.typeName} <span className="muted small">· {r.severity === 'hard' ? 'must have' : 'should have'}</span></div>
+                      <div key={r.credentialTypeId}>{r.typeName} <span className="muted small">· {({ hard: 'must have', warning: 'should have', optional: 'optional' } as const)[r.severity]}</span></div>
                     ))}
                   </td>
                   <td>

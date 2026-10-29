@@ -4,6 +4,7 @@
  * - A credential is Valid, Expiring (expiry within the agency's window) or Expired, judged on a given date.
  * - A requirement applies to every worker, or to workers with a given role.
  * - Only a verified credential satisfies a hard requirement. Warnings are reported but don't block.
+ * - Optional requirements (migration 0037) are listed for people to see, never checked or warned about.
  * - Checking against a future date (a shift date) treats a credential that expires before then as expired.
  */
 
@@ -11,13 +12,15 @@ export type CredentialStatus = 'valid' | 'expiring' | 'expired';
 export type ComplianceStatus = 'compliant' | 'expiring' | 'non_compliant';
 export type Problem = 'missing' | 'rejected' | 'unverified' | 'expired' | 'expiring' | 'no_work_rights';
 export type Severity = 'hard' | 'warning';
+/** How strongly a requirement is asked for: must have (hard), should have (warning), or optional (listed, never checked). */
+export type RuleLevel = Severity | 'optional';
 
 export interface RequirementRule {
   credentialTypeId: string;
   typeName: string;
   scope: 'all_workers' | 'role';
   role: string | null;
-  severity: Severity;
+  severity: RuleLevel;
   /** Set when the rule comes from a duty on a shift (migration 0029), e.g. "Serves alcohol". */
   forDuty?: string;
 }
@@ -116,8 +119,8 @@ export function workerCompliance(
     if (rtwIssue) issues.push(rtwIssue);
   }
   // If the same type is required more than once (e.g. by role and for everyone), the hard rule wins.
-  const byType = new Map<string, RequirementRule>();
-  for (const r of rules.filter(r => appliesTo(r, roles))) {
+  const byType = new Map<string, RequirementRule & { severity: Severity }>();
+  for (const r of rules.filter((r): r is RequirementRule & { severity: Severity } => r.severity !== 'optional' && appliesTo(r, roles))) {
     const prev = byType.get(r.credentialTypeId);
     // A business-wide or role rule is named plainly; a duty is named only when the duty alone asks for it (or asks harder).
     if (!prev || (prev.severity === 'warning' && r.severity === 'hard')) byType.set(r.credentialTypeId, r);
@@ -147,4 +150,23 @@ export function workerCompliance(
   const order: Problem[] = ['missing', 'no_work_rights', 'rejected', 'expired', 'unverified', 'expiring'];
   issues.sort((x, y) => (x.severity === y.severity ? order.indexOf(x.problem) - order.indexOf(y.problem) : x.severity === 'hard' ? -1 : 1));
   return { status, issues };
+}
+
+/**
+ * The optional requirements that apply to someone (migration 0037): listed so the office can see them, never checked.
+ * A credential also asked for at a stronger level is left out (it already shows as an issue or as met).
+ * `held` means they have one that isn't rejected or expired on the date.
+ */
+export function optionalFor(roles: string[], rules: RequirementRule[], credentials: CredentialFacts[], onDate: string):
+  { credentialTypeId: string; typeName: string; held: boolean }[] {
+  const applying = rules.filter(r => appliesTo(r, roles));
+  const stronger = new Set(applying.filter(r => r.severity !== 'optional').map(r => r.credentialTypeId));
+  const out = new Map<string, { credentialTypeId: string; typeName: string; held: boolean }>();
+  for (const r of applying) {
+    if (r.severity !== 'optional' || stronger.has(r.credentialTypeId) || out.has(r.credentialTypeId)) continue;
+    const held = credentials.some(c => c.credentialTypeId === r.credentialTypeId && c.verification !== 'rejected'
+      && credentialStatus(c.expiryDate, onDate, 0) !== 'expired');
+    out.set(r.credentialTypeId, { credentialTypeId: r.credentialTypeId, typeName: r.typeName, held });
+  }
+  return [...out.values()].sort((a, b) => a.typeName.localeCompare(b.typeName));
 }

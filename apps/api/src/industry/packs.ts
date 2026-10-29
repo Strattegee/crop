@@ -8,11 +8,11 @@ export type Category = 'registration' | 'check' | 'training' | 'vaccination' | '
 export type ItemCategory = 'ppe' | 'fuel' | 'sundries' | 'tools' | 'other';
 
 export interface PackCredential { name: string; category: Category; number: boolean; expiry: boolean; method: string }
-export interface PackRole { name: string; area: string; must?: string[]; should?: string[] }
+export interface PackRole { name: string; area: string; must?: string[]; should?: string[]; optional?: string[] }
 export interface PackShiftCode { code: string; letter?: string; name: string; start: string; end: string; breakMinutes: number }
 export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string }
-/** A shift duty (migration 0029): something a shift may involve, with the credentials it needs (must = blocks, should = warning). */
-export interface PackDuty { name: string; description: string; must?: string[]; should?: string[] }
+/** A shift duty (migration 0029): something a shift may involve, with the credentials it needs (must = blocks, should = warning, optional = listed, never checked). */
+export interface PackDuty { name: string; description: string; must?: string[]; should?: string[]; optional?: string[] }
 export interface PackItem { name: string; category: ItemCategory; unit: string; costCents: number; reorderLevel?: number }
 export interface IndustryPack {
   id: string; name: string; description: string; areas: string[];

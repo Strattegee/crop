@@ -136,7 +136,7 @@ export class CredentialRequirementsController {
     const typeId = text(body, 'credentialTypeId', { required: true, max: 40 })!;
     const scope = oneOf(body, 'scope', ['all_workers', 'role'] as const, { required: true })!;
     const role = scope === 'role' ? text(body, 'role', { required: true, max: 40 }) : null;
-    const severity = oneOf(body, 'severity', ['hard', 'warning'] as const) ?? 'hard';
+    const severity = oneOf(body, 'severity', ['hard', 'warning', 'optional'] as const) ?? 'hard';
     if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose a credential');
     return withTenant(this.pool, t.tenantId, async db => {
       const exists = await db.query('select 1 from credential_types where id = $1', [typeId]);

@@ -31,7 +31,7 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
     const r = await db.query(
       `insert into business_roles(tenant_id, name, area) values ($1,$2,$3) on conflict do nothing`, [tenantId, role.name, role.area]);
     added.roles += r.rowCount ?? 0;
-    for (const [list, severity] of [[role.must ?? [], 'hard'], [role.should ?? [], 'warning']] as const) {
+    for (const [list, severity] of [[role.must ?? [], 'hard'], [role.should ?? [], 'warning'], [role.optional ?? [], 'optional']] as const) {
       for (const name of list) {
         const typeId = typeIds.get(name);
         if (!typeId) continue;
@@ -68,7 +68,7 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
       [tenantId, d.name, d.description])).rows[0];
     if (!r) continue;
     added.duties++;
-    for (const [list, severity] of [[d.must ?? [], 'hard'], [d.should ?? [], 'warning']] as const) {
+    for (const [list, severity] of [[d.must ?? [], 'hard'], [d.should ?? [], 'warning'], [d.optional ?? [], 'optional']] as const) {
       for (const name of list) {
         const typeId = typeIds.get(name);
         if (typeId) await db.query('insert into shift_duty_requirements(tenant_id, duty_id, credential_type_id, severity) values ($1,$2,$3,$4) on conflict do nothing', [tenantId, r.id, typeId, severity]);
