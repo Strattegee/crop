@@ -1,6 +1,6 @@
 # Agency connections and agency fill: design for David to approve
 
-Status: **proposal, held for David; all four questions answered 29 Oct (see the end); waiting for David's go-ahead to build** (backlog item 7 says write it up and hold before building, because it crosses tenants). Written 28 Oct 2026 by a scheduled run. Nothing here is built yet.
+Status: **proposal, held for David; **approved to build by David, 29 Oct**; all four questions answered (see the end)** (backlog item 7 says write it up and hold before building, because it crosses tenants). Written 28 Oct 2026 by a scheduled run. Nothing here is built yet.
 
 Sources: the 25 Oct meeting (`2026-10-25-roster-meeting.md`), Steve and David's answers (`2026-10-26-steve-answers.md`, items 7–11), CLAUDE.md (tenancy and security rules).
 
@@ -112,7 +112,7 @@ First slice: name, role, the agency, and "meets your criteria" yes/no with any w
 
 ## David's answers (29 Oct)
 
-All four answered. Still held until David gives the go-ahead to build.
+All four answered. David gave the go-ahead to build on 29 Oct.
 
 1. **Credential matching is set up when the link is made, not when a shift comes in.** "For the relationship between an agency and an employer to work effectively they need to be set up properly from the beginning. The agency need to understand the requirements and match their pool of staff to them. I think it needs to be checked off prior to shifts being required."
    What this changes: linking gets a setup step. The agency sees the employer's requirements and confirms a match for every one (shared codes suggest matches, and the agency checks them and maps the rest). The link can't take requests until every requirement is matched. The agency can see which of its people meet this employer's requirements before any shift arrives. If the employer adds or changes a requirement later, the agency is asked to match it again.
