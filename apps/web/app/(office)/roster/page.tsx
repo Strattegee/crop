@@ -354,10 +354,44 @@ export default async function RosterPage({ searchParams }: {
       <div className="roster-head">
         <div className="roster-title">
           <h1>{tw.one(T.roster)}</h1>
-          <span className="muted">
-            {span === 'day' ? fullDate(range.anchor) : span === 'month' ? monthLabel(range.anchor) : <>{longDate(days[0])} – {longDate(days[6])}</>}
-          </span>
         </div>
+        {/* Draft / live status and Publish on the same line as the title and toolbar (David, 29 Oct). */}
+        {span !== 'month' && <div className="roster-state" aria-label="Roster status">
+          {span === 'day' && <span className="muted small">Week of {longDate(week)}:</span>}
+          <div className="states">
+            {isHistory ? (
+              <span><b className="pill history">History</b> <span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
+            ) : weekRows.length === 0 ? (
+              <span><b className="pill draft">Draft</b> <span className="muted">Nothing on this week yet.</span></span>
+            ) : weekRows.map(w => (
+              <span key={w.facilityId}>
+                <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>
+                {weekRows.length > 1 || !site ? <> {w.facilityName}</> : null}
+                <span className="muted">
+                    {w.state === 'live' && ` · published ${w.publishedAt ? when(w.publishedAt) : ''}${w.publishedByName ? ` by ${w.publishedByName}` : ''}`}
+                  {w.state === 'live' && w.changesSincePublish > 0 && <> · <strong className="warn">{w.changesSincePublish} {w.changesSincePublish === 1 ? 'change' : 'changes'} since</strong></>}
+                </span>
+              </span>
+            ))}
+            {changeRule !== 'open' && weekRows.some(w => w.state === 'live') && (
+              <span className="muted small">After publishing: {CHANGE_RULE[changeRule]} (Settings).</span>
+            )}
+          </div>
+          <div className="roster-tools">
+            <Link className="btn small secondary" href={url({ log: showLog ? undefined : '1' })}>{showLog ? 'Hide changes' : 'Changes'}</Link>
+            {canPublish && (
+              <form action={publishWeek} style={{ display: "flex", gap: 8, alignItems: "center", margin: 0 }}>
+                <input type="hidden" name="back" value={here} />
+                <input type="hidden" name="week" value={week} />
+                <input type="hidden" name="site" value={site} />
+                <label className="inline small" title="Email and text each person their shifts for the week (after changes: only the people affected)"><input type="checkbox" name="notify" defaultChecked />Tell {tw.lower(T.worker, true)}</label>
+                <button className="btn small" title="Marks the week as live. Changes after this are logged.">
+                  {drafts.length ? 'Publish week' : `Publish ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'}`}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>}
         <div className="roster-toolbar">
           <form method="get" action="/roster" className="tool-site">
             {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
@@ -369,7 +403,10 @@ export default async function RosterPage({ searchParams }: {
           </form>
           <div className="tool-period" role="group" aria-label={`Choose the ${periodWord}`}>
             <Link href={go(range.prev)} aria-label={`Previous ${periodWord}`}>‹</Link>
-            <Link href={go(range.current)}>{range.currentLabel}</Link>
+            {/* The period on screen; pressing it goes back to the current one. */}
+            <Link href={go(range.current)} title={range.currentLabel} className="tool-period-label">
+              {span === 'day' ? fullDate(range.anchor) : span === 'month' ? monthLabel(range.anchor) : <>{longDate(days[0])} – {longDate(days[6])}</>}
+            </Link>
             <Link href={go(range.next)} aria-label={`Next ${periodWord}`}>›</Link>
           </div>
           <details className="tool-menu">
@@ -399,43 +436,6 @@ export default async function RosterPage({ searchParams }: {
 
       <Notices error={sp.error} done={sp.done} />
 
-      {span !== 'month' && <section className="roster-state card" aria-label="Roster status">
-        {span === 'day' && <span className="muted small">Week of {longDate(week)}:</span>}
-        <div className="states">
-          {isHistory ? (
-            <span><b className="pill history">History</b> <span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
-          ) : weekRows.length === 0 ? (
-            <span><b className="pill draft">Draft</b> <span className="muted">Nothing on this week yet.</span></span>
-          ) : weekRows.map(w => (
-            <span key={w.facilityId}>
-              <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>
-              {weekRows.length > 1 || !site ? <> {w.facilityName}</> : null}
-              <span className="muted">
-                {w.state === 'draft' && ' · not published yet'}
-                {w.state === 'live' && ` · published ${w.publishedAt ? when(w.publishedAt) : ''}${w.publishedByName ? ` by ${w.publishedByName}` : ''}`}
-                {w.state === 'live' && w.changesSincePublish > 0 && <> · <strong className="warn">{w.changesSincePublish} {w.changesSincePublish === 1 ? 'change' : 'changes'} since</strong></>}
-              </span>
-            </span>
-          ))}
-          {changeRule !== 'open' && weekRows.some(w => w.state === 'live') && (
-            <span className="muted small">After publishing: {CHANGE_RULE[changeRule]} (Settings).</span>
-          )}
-        </div>
-        <div className="roster-tools">
-          <Link className="btn small secondary" href={url({ log: showLog ? undefined : '1' })}>{showLog ? 'Hide changes' : 'Changes'}</Link>
-          {canPublish && (
-            <form action={publishWeek} style={{ display: "flex", gap: 8, alignItems: "center", margin: 0 }}>
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="week" value={week} />
-              <input type="hidden" name="site" value={site} />
-              <label className="inline small" title="Email and text each person their shifts for the week (after changes: only the people affected)"><input type="checkbox" name="notify" defaultChecked />Tell {tw.lower(T.worker, true)}</label>
-              <button className="btn small" title="Marks the week as live. Changes after this are logged.">
-                {drafts.length ? 'Publish week' : `Publish ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'}`}
-              </button>
-            </form>
-          )}
-        </div>
-      </section>}
 
       <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
         <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
