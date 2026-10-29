@@ -9,6 +9,7 @@ import {
 } from './actions';
 import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
+import { SiteSelect } from './site-select';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
@@ -23,7 +24,7 @@ type Attention = {
     shift: { id: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string };
   }[];
 };
-const ATTENTION_SHOWN = 15;
+const ATTENTION_SHOWN = 5;
 /** A gap in a cover rule (Settings → Cover rules): someone working but nobody holding the credential. */
 type CoverGap = { facilityId: string; facilityName: string; typeName: string; localDate: string; localFrom: string; localTo: string; shiftId: string; title: string };
 
@@ -157,6 +158,9 @@ export default async function RosterPage({ searchParams }: {
   // Day view fetches the whole week (hours against weekly contracts); month view fetches whole weeks around the month.
   const inMonth = (d: string) => d.slice(0, 7) === range.anchor.slice(0, 7);
   const inView = (s: Shift) => span === 'month' ? inMonth(s.localDate) : days.includes(s.localDate);
+  // Counts by stage for the bar along the bottom (it doubles as the colour key).
+  const stageCounts = new Map<string, number>();
+  for (const s of allShifts.filter(inView)) { const c = stage(s, tw).cls; stageCounts.set(c, (stageCounts.get(c) ?? 0) + 1); }
   const cancelled = allShifts.filter(s => s.status === 'cancelled' && inView(s));
   const shifts = allShifts.filter(s => s.status !== 'cancelled' && inView(s));
   const equipment = roster.equipment ?? [];
@@ -347,41 +351,51 @@ export default async function RosterPage({ searchParams }: {
 
   return (
     <div className="roster-page">
+      {/* Toolbar in one row (David, 29 Oct, after looking at Deputy): what you're looking at on the left,
+          how you look at it in one View menu, the period in the middle. */}
       <div className="roster-head">
-        <div>
+        <div className="roster-title">
           <h1>{tw.one(T.roster)}</h1>
-          <p className="muted" style={{ margin: 0 }}>
-            {span === 'day' ? fullDate(range.anchor) : span === 'month' ? monthLabel(range.anchor) : <>Week of {longDate(days[0])} – {longDate(days[6])}</>}
-          </p>
+          <span className="muted">
+            {span === 'day' ? fullDate(range.anchor) : span === 'month' ? monthLabel(range.anchor) : <>{longDate(days[0])} – {longDate(days[6])}</>}
+          </span>
         </div>
-        <div className="roster-tools">
-          <div className="seg" role="group" aria-label="Show">
-            {(['day', 'week', 'month'] as const).map(s => (
-              <Link key={s} href={switchTo(s)} aria-current={span === s ? 'true' : undefined}>{s === 'day' ? 'Day' : s === 'week' ? 'Week' : 'Month'}</Link>
-            ))}
-          </div>
-          <Link className="btn small secondary" href={go(range.prev)} aria-label={`Previous ${periodWord}`}>‹</Link>
-          <Link className="btn small secondary" href={go(range.current)}>{range.currentLabel}</Link>
-          <Link className="btn small secondary" href={go(range.next)} aria-label={`Next ${periodWord}`}>›</Link>
-          <form method="get" action="/roster" className="roster-tools">
+        <div className="roster-toolbar">
+          <form method="get" action="/roster" className="tool-site">
             {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <input type="hidden" name="view" value={view} />
             {look !== 'cards' && <input type="hidden" name="look" value={look} />}
-            <label className="inline">{tw.one(T.site)}
-              <select name="site" defaultValue={site}>
-                <option value="">All {tw.lower(T.site, true)}</option>
-                {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-            </label>
-            <button type="submit" className="btn small secondary">Show</button>
+            <span className="tool-icon" aria-hidden="true">⌖</span>
+            <SiteSelect name="site" value={site} allLabel={`All ${tw.lower(T.site, true)}`} options={activeFacilities.map(f => ({ id: f.id, name: f.name }))} />
+            <noscript><button type="submit" className="btn small secondary">Show</button></noscript>
           </form>
-          {span !== 'month' && <div className="seg" role="group" aria-label="View">
-            <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By {tw.lower(T.area)}</Link>
-            <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By {tw.lower(T.worker)}</Link>
-          </div>}
-          {span === 'week' && <div className="seg" role="group" aria-label="Cards show">
-            {LOOKS.map(l => <Link key={l.id} href={url({ look: l.id === 'cards' ? undefined : l.id })} aria-current={look === l.id ? 'true' : undefined}>{l.label}</Link>)}
-          </div>}
+          <div className="tool-period" role="group" aria-label={`Choose the ${periodWord}`}>
+            <Link href={go(range.prev)} aria-label={`Previous ${periodWord}`}>‹</Link>
+            <Link href={go(range.current)}>{range.currentLabel}</Link>
+            <Link href={go(range.next)} aria-label={`Next ${periodWord}`}>›</Link>
+          </div>
+          <details className="tool-menu">
+            <summary>
+              View: {span !== 'month' && <>{view === 'area' ? `By ${tw.lower(T.area)}` : `By ${tw.lower(T.worker)}`} · </>}
+              {span === 'day' ? 'Day' : span === 'week' ? 'Week' : 'Month'}
+              {span === 'week' && look !== 'cards' && <> · {LOOKS.find(l => l.id === look)?.label}</>}
+            </summary>
+            <div className="tool-menu-body">
+              <div className="tool-menu-title">Period</div>
+              {(['day', 'week', 'month'] as const).map(s2 => (
+                <Link key={s2} href={switchTo(s2)} aria-current={span === s2 ? 'true' : undefined}>{s2 === 'day' ? 'Day' : s2 === 'week' ? 'Week' : 'Month'}</Link>
+              ))}
+              {span !== 'month' && <>
+                <div className="tool-menu-title">Rows</div>
+                <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By {tw.lower(T.area)}</Link>
+                <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By {tw.lower(T.worker)}</Link>
+              </>}
+              {span === 'week' && <>
+                <div className="tool-menu-title">{tw.many(T.shift)} show</div>
+                {LOOKS.map(l => <Link key={l.id} href={url({ look: l.id === 'cards' ? undefined : l.id })} aria-current={look === l.id ? 'true' : undefined}>{l.label}</Link>)}
+              </>}
+            </div>
+          </details>
         </div>
       </div>
 
@@ -436,27 +450,37 @@ export default async function RosterPage({ searchParams }: {
             </span>
             <span className="att-toggle muted small" aria-hidden="true" />
           </>}>
-          <ol>
-            {attention.items.slice(0, ATTENTION_SHOWN).map(i => (
-              <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
-                <span className={`att-kind ${i.kind}`} aria-hidden="true" />
-                <span>
-                  <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
-                  <br />
-                  {/* Opens the shift in its own day or week in a new tab, scrolled to its panel, so the office can work
-                      through several and close each tab when done (David, 29 Oct). */}
-                  <Link href={`${url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}#shift-panel`}
-                    target="_blank" rel="noopener" title="Opens in a new tab">
-                    {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
-                  </Link>
-                  {!site && <span className="muted"> · {i.shift.facilityName}</span>}
-                  {i.shift.areaName && <span className="muted"> · {i.shift.areaName}</span>}
-                  <span className={i.urgent ? 'bad small' : 'muted small'}> · {i.startsIn}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-          {attention.total > ATTENTION_SHOWN && <p className="muted small">And {attention.total - ATTENTION_SHOWN} more; the most pressing are shown first.</p>}
+          {(() => {
+            // Five at first so the roster stays in view; the rest open underneath (David, 29 Oct).
+            const row = (i: (typeof attention.items)[number]) => (
+            <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
+              <span className={`att-kind ${i.kind}`} aria-hidden="true" />
+              <span>
+                <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
+                <br />
+                {/* Opens the shift in its own day or week in a new tab, scrolled to its panel, so the office can work
+                    through several and close each tab when done (David, 29 Oct). */}
+                <Link href={`${url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}#shift-panel`}
+                  target="_blank" rel="noopener" title="Opens in a new tab">
+                  {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
+                </Link>
+                {!site && <span className="muted"> · {i.shift.facilityName}</span>}
+                {i.shift.areaName && <span className="muted"> · {i.shift.areaName}</span>}
+                <span className={i.urgent ? 'bad small' : 'muted small'}> · {i.startsIn}</span>
+              </span>
+            </li>
+            );
+            const rest = attention.items.slice(ATTENTION_SHOWN);
+            return <>
+              <ol>{attention.items.slice(0, ATTENTION_SHOWN).map(row)}</ol>
+              {rest.length > 0 && (
+                <details className="att-more">
+                  <summary>Show {rest.length} more</summary>
+                  <ol>{rest.map(row)}</ol>
+                </details>
+              )}
+            </>;
+          })()}
           {attention.truncated && <p className="muted small">Only the first few hundred {tw.lower(T.shift, true)} were checked. Choose a {tw.lower(T.site)} to see the rest.</p>}
         </AttentionPanel>
         );
@@ -1075,7 +1099,17 @@ export default async function RosterPage({ searchParams }: {
 
       <div className="roster-legend">
         <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><i className="leave-key" /> Leave</span>
-        <span><i className="rb unfilled" /> Unfilled</span><span><i className="rb offered" /> Offered</span><span><i className="rb allocated" /> Allocated, waiting for them</span><span><i className="rb accepted" /> Accepted (when approval is on)</span><span><i className="rb pulled" /> Pulled out</span><span><i className="rb booked" /> Booked</span><span><i className="rb cancelled" /> Cancelled</span>
+        <span><i className="rb accepted" /> Accepted (when approval is on)</span>
+      </div>
+
+      {/* Stage counts for what's on screen, always in view along the bottom (David, 29 Oct, after Deputy's status bar). */}
+      <div className="roster-statusbar" aria-label={`${tw.many(T.shift)} by stage`}>
+        {([['unfilled', 'Unfilled'], ['offered', 'Offered'], ['allocated', 'Allocated'], ['accepted', 'Accepted'], ['pulled', 'Pulled out'], ['booked', 'Booked'], ['cancelled', 'Cancelled']] as const)
+          .filter(([cls]) => cls !== 'accepted' || stageCounts.get(cls))
+          .map(([cls, label]) => (
+            <span key={cls} className={stageCounts.get(cls) ? undefined : 'muted'}><i className={`rb ${cls}`} /> <b>{stageCounts.get(cls) ?? 0}</b> {label}</span>
+          ))}
+        {attention && attention.total > 0 && <span className="att-count"><b>{attention.total}</b> need attention{attention.urgent > 0 && <> · <b className="bad">{attention.urgent}</b> within a day</>}</span>}
       </div>
     </div>
   );

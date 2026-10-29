@@ -24,15 +24,32 @@ h1 { font-size: 24px; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 0 0 12px; }
 .muted { color: var(--muted); }
 
-.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
-.sidebar { background: var(--brand); color: var(--brand-contrast); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-.sidebar .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; padding: 0 10px 16px; }
-.sidebar a { color: #dfe7f1; text-decoration: none; padding: 8px 10px; border-radius: 6px; font-size: 15px; }
-.sidebar a:hover, .sidebar a[aria-current='page'] { background: rgba(255, 255, 255, 0.12); color: #fff; }
-.sidebar .spacer { flex: 1; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.topbar form { display: flex; align-items: center; gap: 8px; margin: 0; }
-.content { padding: 24px; max-width: 1100px; }
+/* Office app: one menu bar across the top (David, 29 Oct), pages use the full width below it. */
+.appbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 8px 20px; flex-wrap: wrap; padding: 0 20px; min-height: 56px; background: var(--brand); color: var(--brand-contrast); }
+.appbar .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; color: #fff; text-decoration: none; margin-right: 8px; }
+.topnav { display: flex; align-items: stretch; gap: 2px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.topnav > a, .topnav-group > button { display: flex; align-items: center; gap: 4px; padding: 0 12px; min-height: 56px; color: #dfe7f1; text-decoration: none; font: inherit; font-size: 15px; background: none; border: 0; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+.topnav > a:hover, .topnav-group > button:hover, .topnav-group > button[aria-expanded='true'] { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.topnav > a[aria-current='page'], .topnav-group > button[data-current='true'] { color: #fff; border-bottom-color: #fff; }
+.topnav-group { position: relative; display: flex; }
+.topnav-group .caret { font-size: 11px; opacity: 0.8; }
+.topnav-menu { position: absolute; top: 100%; left: 0; min-width: 210px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16); padding: 6px; display: flex; flex-direction: column; z-index: 60; }
+.topnav-menu.right { left: auto; right: 0; }
+.topnav-menu a, .topnav-menu .menu-button { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font: inherit; font-size: 14px; text-align: left; background: none; border: 0; width: 100%; cursor: pointer; }
+.topnav-menu a:hover, .topnav-menu .menu-button:hover { background: #eef2f7; }
+.topnav-menu a[aria-current='page'] { font-weight: 600; background: #eef2f7; }
+.topnav-menu form { margin: 0; }
+.menu-who { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.appbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.appbar-link { color: #dfe7f1; text-decoration: none; font-size: 14px; white-space: nowrap; }
+.appbar-link:hover { color: #fff; }
+.business-name { font-size: 14px; color: #dfe7f1; white-space: nowrap; }
+.business-switch { display: flex; gap: 6px; align-items: center; margin: 0; }
+.business-switch select { padding: 4px 8px; font-size: 13px; max-width: 200px; }
+.business-switch .btn { border-color: #fff; }
+.user-menu .avatar { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.14); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.content { padding: 24px; max-width: 1600px; margin: 0 auto; }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -62,10 +79,9 @@ input, select, textarea { font: inherit; font-size: 14px; padding: 8px 10px; bor
 .notice.success { background: var(--ok-bg); color: var(--ok); }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px; position: static; height: auto; }
-  .sidebar .logo { padding: 8px 10px; }
-  .sidebar .spacer { display: none; }
+  .appbar { position: static; padding: 6px 12px; }
+  .topnav { order: 3; flex-basis: 100%; }
+  .topnav > a, .topnav-group > button { min-height: 40px; padding: 0 8px; font-size: 14px; }
   .content { padding: 16px; }
 }
 
@@ -333,3 +349,34 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .use-item { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: flex-end; font-size: 13px; background: #f7f9fa; border-radius: 6px; padding: 8px; }
 .use-item label:not(.inline) { display: flex; flex-direction: column; gap: 2px; }
 .use-item label.inline { display: flex; gap: 6px; align-items: center; }
+
+/* Roster toolbar, one row (29 Oct): site · period · View menu. */
+.roster-head { align-items: center; }
+.roster-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.roster-title h1 { margin: 0; }
+.roster-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tool-site { display: flex; align-items: center; gap: 6px; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0 0 0 10px; }
+.tool-site select { border: 0; padding: 6px 28px 6px 2px; font-size: 14px; background-color: transparent; max-width: 240px; }
+.tool-icon { color: var(--muted); }
+.tool-period { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.tool-period a { padding: 6px 12px; font-size: 14px; color: var(--text); text-decoration: none; }
+.tool-period a + a { border-left: 1px solid var(--border); }
+.tool-period a:hover { background: #eef2f7; }
+.tool-menu { position: relative; }
+.tool-menu > summary { list-style: none; cursor: pointer; padding: 6px 12px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); white-space: nowrap; }
+.tool-menu > summary::-webkit-details-marker { display: none; }
+.tool-menu > summary::after { content: ' ▾'; color: var(--muted); font-size: 11px; }
+.tool-menu[open] > summary { border-color: var(--brand); }
+.tool-menu-body { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16); padding: 6px; display: flex; flex-direction: column; }
+.tool-menu-body a { padding: 6px 10px 6px 26px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; position: relative; }
+.tool-menu-body a:hover { background: #eef2f7; }
+.tool-menu-body a[aria-current='true']::before { content: '✓'; position: absolute; left: 9px; color: var(--brand); font-weight: 700; }
+.tool-menu-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 10px 2px; }
+.att-more > summary { cursor: pointer; color: var(--accent); font-size: 14px; padding: 6px 0; }
+
+/* Stage counts, along the bottom of the screen. */
+.roster-statusbar { position: sticky; bottom: 0; z-index: 30; display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center; justify-content: center; padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 12px rgba(16, 24, 40, 0.06); font-size: 13px; }
+.roster-statusbar .rb { display: inline-block; width: 18px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 2px; }
+.roster-statusbar .att-count { color: var(--warn); }
+.topnav-group.user-menu > button.avatar { min-height: 0; height: 34px; width: 34px; padding: 0; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.5); }
+@media (max-width: 760px) { .roster-statusbar { position: static; border-radius: var(--radius); } }

@@ -287,3 +287,4 @@ Newest first. One entry per working session or scheduled run.
 - Next: matching (the agency matches each of the employer's requirements to its own credentials before requests can be sent), then Agency fill requests and the timer.
 - Waiting on David: the public apply form (spam protection and the form's questions).
 
+- Also (David's request, for the design phase): the office app now has a menu across the top instead of down the side, with related screens grouped (Workers ▾: workers, leave, compliance; Clients & sites ▾; Equipment & items ▾), and Settings and the person's menu on the right. The roster's controls are one row (site, ‹ week ›, a View menu), Needs attention shows the top five with "Show more", and a bar along the bottom counts shifts by stage.
