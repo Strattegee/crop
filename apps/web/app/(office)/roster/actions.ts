@@ -7,7 +7,7 @@ import { fillOpenShifts } from '../demo-tools';
 import { T, words } from '../../../lib/terms';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ROSTER_FULL_COOKIE } from './view';
+import { ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen } from './view';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -18,19 +18,25 @@ const back = (f: FormData) => {
 export async function createShifts(f: FormData) {
   const tw = await words();
   const weekdays = f.getAll('weekdays').map(Number).filter(n => n >= 1 && n <= 7);
-  const single = !str(f, 'endDate') || str(f, 'endDate') === str(f, 'startDate');
+  // Days ticked with no Until (David, 29 Oct): the shifts go on those days in the 7 days from From, not on From itself.
+  const startDate = str(f, 'startDate');
+  const endDate = addShiftsUntil(startDate, str(f, 'endDate'), weekdays);
+  const single = !endDate || endDate === startDate;
   const equipmentOnly = f.get('equipmentOnly') === 'on';
-  await attempt(back(f), () => api('/shifts', {
+  let created = 0;
+  await attempt(back(f), async () => {
+    created = (await api<{ created: number }>('/shifts', {
     method: 'POST',
     body: {
       facilityId: str(f, 'facilityId'), areaId: str(f, 'areaId'), shiftCodeId: str(f, 'shiftCodeId'),
       role: equipmentOnly ? undefined : str(f, 'role'), equipmentOnly,
       startTime: str(f, 'startTime'), endTime: str(f, 'endTime'),
-      ...(single ? { date: str(f, 'startDate') } : { startDate: str(f, 'startDate'), endDate: str(f, 'endDate'), weekdays: weekdays.length ? weekdays : undefined }),
+      ...(single ? { date: startDate } : { startDate, endDate, weekdays: weekdays.length ? weekdays : undefined }),
       quantity: Number(str(f, 'quantity') ?? 1), notes: str(f, 'notes'),
       dutyIds: f.getAll('dutyIds').map(String).filter(Boolean),
     },
-  }), `${tw.many(T.shift)} added.`);
+  })).created;
+  }, () => `${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}.`);
 }
 
 export async function assign(shiftId: string, workerId: string, f: FormData) {
