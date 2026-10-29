@@ -10,7 +10,7 @@ prog={
  'ARCH':('done',1,'22 Oct','Build plan and technical decisions recorded'),
  'D2':('done',1,'22 Oct','CROP name, DigitalOcean hosting, Zitadel sign-in'),
  'ACC':('done',1,'27 Oct','DigitalOcean, GitHub, cropwms.com, Zitadel, Resend email and ClickSend texts all working'),
- 'STORE':('active',.8,None,'Both accounts created. Apple is verifying the business'),
+ 'STORE':('active',.8,None,'Both accounts created. All documents supplied to Apple (29 Oct); waiting on Apple\'s approval'),
  'REPO':('done',1,'22 Oct','Code repository, automatic checks, auto-deploy to staging.cropwms.com'),
  'DM':('done',1,'22 Oct','Core data model built; extended module by module'),
  'SCH':('done',1,'22 Oct','Agencies, data separation between agencies, facilities'),

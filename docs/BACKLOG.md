@@ -62,7 +62,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - ~~Agency connections design~~ Approved 29 Oct (go ahead). Was: read `docs/decisions/2026-10-28-agency-connections-design.md` and answer its four questions before agency connections and agency fill are built (28 Oct). David answered 1–3 on 29 Oct (matching set up and checked when linking; documents shared by agreement per link; self-service link from the employer, confirmed by the agency; recorded at the end of the design note). Question 4 answered 29 Oct: agencies not on CROP get an email listing the requirements (standard for the role, special for the shift, each must have / ideal / optional) and reply outside CROP; the office adds the person as an unchecked agency worker. Held until David gives the go-ahead to build.
 - Open questions from the 25 Oct meeting (see `docs/decisions/2026-10-25-roster-meeting.md`).
 - ~~ClickSend~~ Done 27 Oct: number, username and API key set; test text received.
-- Apple developer verification.
+- Apple developer verification: David supplied all the documents on 29 Oct; waiting on Apple's approval.
 - CFY: credential list and rules; which Entire statuses and reports they use.
 
 
