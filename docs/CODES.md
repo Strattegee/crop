@@ -50,6 +50,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 9110 | Shift duties (under Settings, not in the menu) | Shift duties |
 | 9120 | Cover rules (under Settings, not in the menu) | Cover rules |
 | 9130 | Onboarding checklists (under Settings, not in the menu) | Onboarding checklists |
+| 9140 | Agencies: links with agencies and the businesses we supply (under Settings, not in the menu) | the business's word for Agencies |
 
 ## Still to do
 - Use the words in more places: roster labels and panels, form labels, API error messages, notification text, the worker app.

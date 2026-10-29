@@ -7,7 +7,12 @@
 export type Category = 'registration' | 'check' | 'training' | 'vaccination' | 'licence';
 export type ItemCategory = 'ppe' | 'fuel' | 'sundries' | 'tools' | 'other';
 
-export interface PackCredential { name: string; category: Category; number: boolean; expiry: boolean; method: string }
+/**
+ * `code` is the shared catalogue code (migration 0038): the same credential in any business carries the same code,
+ * so an agency's credentials can be matched to an employer's. It comes from the name; if a pack credential is ever
+ * renamed, keep its old code (pass it to `c`) so existing businesses still match.
+ */
+export interface PackCredential { name: string; code: string; category: Category; number: boolean; expiry: boolean; method: string }
 export interface PackRole { name: string; area: string; must?: string[]; should?: string[]; optional?: string[] }
 export interface PackShiftCode { code: string; letter?: string; name: string; start: string; end: string; breakMinutes: number }
 export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string }
@@ -20,7 +25,13 @@ export interface IndustryPack {
   duties: PackDuty[];
 }
 
-const c = (name: string, category: Category, number: boolean, expiry: boolean, method: string): PackCredential => ({ name, category, number, expiry, method });
+/** The catalogue code for a pack credential's name: `au.` (the packs are Australian) and the name in lower case with dashes. */
+export function catalogueCode(name: string): string {
+  return 'au.' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '');
+}
+
+const c = (name: string, category: Category, number: boolean, expiry: boolean, method: string, code = catalogueCode(name)): PackCredential =>
+  ({ name, code, category, number, expiry, method });
 
 // Shared credentials, so a business with several industries ends up with one of each.
 const FIRST_AID = c('First Aid (HLTAID011)', 'training', true, true, 'Sight statement of attainment (commonly renewed every 3 years)');

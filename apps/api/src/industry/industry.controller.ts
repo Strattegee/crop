@@ -19,11 +19,23 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
   const added = { roles: 0, credentials: 0, requirements: 0, shiftCodes: 0, equipmentTypes: 0, items: 0, duties: 0, words: 0 };
   const typeIds = new Map<string, string>();
   for (const cr of pack.credentials) {
-    const found = (await db.query<{ id: string }>('select id from credential_types where lower(name) = lower($1) limit 1', [cr.name])).rows[0];
-    if (found) { typeIds.set(cr.name, found.id); continue; }
+    const found = (await db.query<{ id: string; catalogue_code: string | null }>(
+      'select id, catalogue_code from credential_types where lower(name) = lower($1) limit 1', [cr.name])).rows[0];
+    if (found) {
+      typeIds.set(cr.name, found.id);
+      // A credential of the same name that has no catalogue code yet (made before codes, migration 0038) gets the
+      // pack's, unless another of the business's credentials already carries it. Nothing else about it changes.
+      if (!found.catalogue_code) {
+        await db.query(`update credential_types set catalogue_code = $2 where id = $1 and catalogue_code is null
+                          and not exists (select 1 from credential_types o where o.catalogue_code = $2)`, [found.id, cr.code]);
+      }
+      continue;
+    }
     const r = (await db.query<{ id: string }>(
-      `insert into credential_types(tenant_id, name, category, has_number, has_expiry, needs_evidence, verification_method)
-       values ($1,$2,$3,$4,$5,true,$6) returning id`, [tenantId, cr.name, cr.category, cr.number, cr.expiry, cr.method])).rows[0];
+      `insert into credential_types(tenant_id, name, category, has_number, has_expiry, needs_evidence, verification_method, catalogue_code)
+       values ($1,$2,$3,$4,$5,true,$6,
+               case when exists (select 1 from credential_types o where o.catalogue_code = $7) then null else $7 end) returning id`,
+      [tenantId, cr.name, cr.category, cr.number, cr.expiry, cr.method, cr.code])).rows[0];
     typeIds.set(cr.name, r.id);
     added.credentials++;
   }
