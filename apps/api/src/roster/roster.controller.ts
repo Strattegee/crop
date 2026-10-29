@@ -73,7 +73,7 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
   to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "localEnd",
   round((extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::numeric, 2)::float8 as hours,
   sa.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
-  sa.status as "assignmentStatus",
+  sa.status as "assignmentStatus", w.agency_name as "agencyName",
   (select count(*)::int from shift_offers o where o.shift_id = s.id and o.status = 'pending' and (o.expires_at is null or o.expires_at > now())) as "offersPending",
   (select coalesce(pw.preferred_name, pw.first_name) || ' ' || pw.last_name from shift_assignments px join workers pw on pw.id = px.worker_id
     where px.shift_id = s.id and px.resource_kind = 'worker' and px.status = 'removed' and px.removed_reason = 'pulled_out'
@@ -474,6 +474,15 @@ export class ShiftsController {
                                order by e.starts_on desc limit 1) et on true
           where w.status = 'active' and ${EMPLOYED_ON('$1')}
           order by w.last_name, w.first_name`, [from, to])).rows;
+      // People from agencies (migration 0042) on shifts in the period: a row each on the By person view, after the business's own.
+      const agencyPeople = (await db.query(
+        `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.agency_name as "agencyName",
+                round(sum(extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::numeric, 2)::float8 as "rosteredHours"
+           from workers w join shift_assignments sa on sa.worker_id = w.id and sa.status in ('assigned', 'confirmed')
+           join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
+          where w.agency_connection_id is not null and s.status <> 'cancelled'
+            and (s.starts_at at time zone f.timezone)::date between $1 and $2 and ($3::uuid is null or s.facility_id = $3)
+          group by w.id order by w.agency_name, w.last_name, w.first_name`, [from, to, facilityId])).rows;
       // Equipment rows on the roster (backlog item 4): everything not retired, with hours booked in the period.
       const equipment = (await db.query(
         `select e.id, e.name, et.name as "typeName", e.status, e.home_facility_id as "homeFacilityId",
@@ -492,7 +501,7 @@ export class ShiftsController {
            from leave_records l join workers w on w.id = l.worker_id
           where w.status = 'active' and l.status in ('requested', 'approved') and l.ends_on >= $1 and l.starts_on <= $2
           order by l.starts_on`, [from, to])).rows;
-      return { from, to, shifts, people, equipment, leave };
+      return { from, to, shifts, people, agencyPeople, equipment, leave };
     });
   }
 

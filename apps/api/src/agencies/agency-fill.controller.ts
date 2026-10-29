@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnApplicationShutdown, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnApplicationShutdown, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -10,17 +10,67 @@ import { queueNotification } from '../notifications/notify.js';
 import { actorOf } from '../roster/publishing.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
-import { wordsFor } from '../terms/words.js';
-import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type SnapshotRequirement } from './requests.js';
+import { T, wordsFor } from '../terms/words.js';
+import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, placementWords, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
 import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
 
 const INBOX_COLS = `id, connection_id as "connectionId", employer_name as "employerName", site_name as "siteName", site_region as "siteRegion",
   site_timezone as "siteTimezone", area_name as "areaName", role, starts_at as "startsAt", ends_at as "endsAt", break_minutes as "breakMinutes",
-  duties, requirements, note, status, received_at as "receivedAt", closed_at as "closedAt", closed_reason as "closedReason"`;
+  duties, requirements, note, status, received_at as "receivedAt", closed_at as "closedAt", closed_reason as "closedReason",
+  placed_worker_id as "placedWorkerId", placed_name as "placedName", placed_by_name as "placedByName", placed_at as "placedAt", placement, placement_at as "placementAt"`;
 
-type InboxRow = InboxShift & { id: string; connectionId: string; siteRegion: string | null; breakMinutes: number; status: string; receivedAt: Date; closedAt: Date | null; closedReason: string | null };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type InboxRow = InboxShift & { id: string; connectionId: string; siteRegion: string | null; breakMinutes: number; status: string; receivedAt: Date; closedAt: Date | null; closedReason: string | null;
+  placedWorkerId: string | null; placedName: string | null; placedByName: string | null; placedAt: Date | null; placement: Placement | null; placementAt: Date | null };
+
+/**
+ * Agency side: this business's people (or just `workerIds`) for one request it was sent, checked against the
+ * employer's requirements as matched to this business's credentials and its own rules for each person. Ranked.
+ */
+async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[]) {
+  const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
+    requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
+    `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
+            to_char(starts_at at time zone site_timezone, 'YYYY-MM-DD') as local_date,
+            to_char(starts_at at time zone site_timezone, 'HH24:MI') as local_start,
+            (extract(epoch from (ends_at - starts_at)) / 3600 - break_minutes / 60.0)::float8 as hours
+       from agency_inbox where id = $1`, [inboxId])).rows[0];
+  if (!r) throw new NotFoundException('Request not found');
+  const live = new Map((await db.query<{ employer_credential_type_id: string; credential_type_id: string }>(
+    'select employer_credential_type_id, credential_type_id from agency_credential_maps where connection_id = $1', [r.connection_id])).rows
+    .map(m => [m.employer_credential_type_id, m.credential_type_id]));
+  const names = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
+  const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
+  const people = r.status !== 'open' ? [] : rankCandidates(await eligibilityForFacts(db, tenantId,
+    { role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
+    { onlyRules: rules, roleWarnOnly: true, blockAll, workerIds }));
+  // (Asking about one person: whether they are active is checked when they are put forward.)
+  return { status: r.status, unmatched, people };
+}
+
+/** Emails the employer's owners and admins that an agency put someone forward. Runs in the employer's own business. */
+async function tellEmployer(pool: Pool, employerTenantId: string, placementId: string) {
+  await withTenant(pool, employerTenantId, async db => {
+    const p = (await db.query<{ agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
+      siteTimezone: string; status: string; shiftId: string; weekStart: string }>(
+      `select p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName",
+              a.name as "areaName", s.starts_at as "startsAt", s.ends_at as "endsAt", f.timezone as "siteTimezone", p.status, s.id as "shiftId",
+              to_char(date_trunc('week', s.starts_at at time zone f.timezone), 'YYYY-MM-DD') as "weekStart"
+         from agency_placements p join workers w on w.id = p.worker_id join shifts s on s.id = p.shift_id
+         join facilities f on f.id = s.facility_id left join areas a on a.id = s.area_id
+        where p.id = $1`, [placementId])).rows[0];
+    if (!p) return;
+    const w = await wordsFor(db);
+    const { subject, body } = putForwardEmail({ ...p, booked: p.status === 'booked' }, process.env.APP_URL || null, w);
+    const emails = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
+    for (const e of emails) {
+      await queueNotification(db, employerTenantId, { channel: 'email', to: e.email, template: 'agency_put_forward', subject, body, dedupeKey: `agency-put-forward:${placementId}:${e.email.toLowerCase()}` });
+    }
+  });
+}
 
 /**
  * Emails the agency's owners and admins about requests it has just been sent. Runs in the agency's own business
@@ -55,10 +105,15 @@ async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
   const active = (await db.query<{ n: number }>(`select count(*)::int as n from agency_connections where side = 'employer' and status = 'active'`)).rows[0].n;
   const w = await wordsFor(db);
   const problem = agencyFillProblem({ status: shift.status, equipmentOnly: shift.equipmentOnly, startsAt: new Date(shift.startsAt) }, active, request?.status === 'open', now, w);
+  const placement = request ? (await db.query<{ id: string; agencyName: string; workerName: string; status: Placement; putForwardByName: string | null; createdAt: Date; decidedAt: Date | null }>(
+    `select p.id, p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "workerName", p.status,
+            p.put_forward_by_name as "putForwardByName", p.created_at as "createdAt", p.decided_at as "decidedAt"
+       from agency_placements p join workers w on w.id = p.worker_id where p.request_id = $1`, [request.id])).rows[0] ?? null : null;
   const next = request?.status === 'open' ? rounds.find(r => roundState(r) === 'waiting') ?? null : null;
   return {
     shiftId,
     request,
+    placement: placement ? { ...placement, state: placementWords(placement.status) } : null,
     rounds: rounds.map(r => ({ ...r, state: roundState(r), dueIn: roundState(r) === 'waiting' ? inWords(new Date(r.dueAt).getTime() - now.getTime()) : null })),
     next: next ? { agencyName: next.agencyName, dueAt: next.dueAt, dueIn: inWords(new Date(next.dueAt).getTime() - now.getTime()) } : null,
     activeAgencies: active,
@@ -181,6 +236,7 @@ export class AgencyFillController {
         when: localWhen(r),
         startsIn: inWords(new Date(r.startsAt).getTime() - now),
         unmatched: r.requirements.filter(q => q.severity !== 'optional' && !q.credentialTypeId).length,
+        placementState: r.placement ? placementWords(r.placement, r.employerName) : null,
       }));
     });
   }
@@ -195,28 +251,47 @@ export class AgencyFillController {
   @Get('agency-requests/:id/people')
   people(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
-        requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
-        `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
-                to_char(starts_at at time zone site_timezone, 'YYYY-MM-DD') as local_date,
-                to_char(starts_at at time zone site_timezone, 'HH24:MI') as local_start,
-                (extract(epoch from (ends_at - starts_at)) / 3600 - break_minutes / 60.0)::float8 as hours
-           from agency_inbox where id = $1`, [id])).rows[0];
-      if (!r) throw new NotFoundException('Request not found');
-      const live = new Map((await db.query<{ employer_credential_type_id: string; credential_type_id: string }>(
-        'select employer_credential_type_id, credential_type_id from agency_credential_maps where connection_id = $1', [r.connection_id])).rows
-        .map(m => [m.employer_credential_type_id, m.credential_type_id]));
-      const names = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
-      const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
-      const people = r.status !== 'open' ? [] : rankCandidates(await eligibilityForFacts(db, t.tenantId,
-        { role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
-        { onlyRules: rules, roleWarnOnly: true, blockAll }));
+      const { status, unmatched, people } = await peopleForRequest(db, t.tenantId, id);
       return {
-        requestId: id, status: r.status, unmatched,
+        requestId: id, status, unmatched,
         ready: people.filter(p => p.eligible).length,
         people: people.map(p => ({ workerId: p.workerId, name: p.name, roles: p.roles, employmentType: p.employmentType, weekHours: p.weekHours,
           available: p.available, eligible: p.eligible, blocks: p.blocks, warnings: p.warnings })),
       };
+    });
+  }
+
+  /**
+   * Agency side: put one of this business's people forward for a request (`{ workerId }`). They must meet the
+   * employer's requirements and this business's own rules (as on the list); then they go onto the employer's shift,
+   * booked straight away or waiting for the employer's approval (the employer's choice for this agency), and the
+   * request closes for every agency. The employer's office is emailed.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('agency-requests/:id/put-forward')
+  @HttpCode(200)
+  async putForward(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const workerId = text(body ?? {}, 'workerId', { required: true, max: 40 })!;
+    if (!UUID.test(workerId)) throw new BadRequestException('Choose a person');
+    const placed = await withTenant(this.pool, t.tenantId, async db => {
+      const inboxRow = (await db.query<{ status: string; placed_name: string | null; closed_reason: string | null }>(
+        'select status, placed_name, closed_reason from agency_inbox where id = $1', [id])).rows[0];
+      if (!inboxRow) throw new NotFoundException('Request not found');
+      if (inboxRow.placed_name) throw new ConflictException(`You have already put ${inboxRow.placed_name} forward for this ${(await wordsFor(db)).lower(T.shift)}`);
+      if (inboxRow.status !== 'open') throw new BadRequestException(`This request has closed${inboxRow.closed_reason ? `: ${inboxRow.closed_reason}` : ''}`);
+      // Lock the person first, so their own roster and another request can't take the same time meanwhile.
+      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new BadRequestException('Choose a person');
+      const { status, people } = await peopleForRequest(db, t.tenantId, id, [workerId]);
+      const p = people[0];
+      if (!p) throw new BadRequestException('Choose a person');
+      if (!p.eligible) throw new ConflictException(`${p.name} can't go: ${p.blocks.map(b => b.message).join('. ')}`);
+      return (await db.query<{ employer_tenant_id: string; placement_id: string; booked: boolean }>(
+        'select * from app_agency_put_forward($1, $2)', [id, workerId])).rows[0];
+    }, actorOf(auth));
+    await tellEmployer(this.pool, placed.employer_tenant_id, placed.placement_id);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const r = (await db.query<InboxRow>(`select ${INBOX_COLS} from agency_inbox where id = $1`, [id])).rows[0];
+      return { ...r, when: localWhen(r), placementState: r.placement ? placementWords(r.placement, r.employerName) : null, booked: placed.booked };
     });
   }
 

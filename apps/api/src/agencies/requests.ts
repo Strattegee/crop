@@ -132,3 +132,44 @@ export function agencyRules(
   }
   return { rules, blockAll, unmatched };
 }
+
+export type Placement = 'waiting' | 'booked' | 'declined' | 'removed' | 'cancelled';
+
+/** How a placement reads, from either side ("Booked", "Waiting for Bayside Hospital to approve"). */
+export function placementWords(p: Placement, employerName?: string): string {
+  switch (p) {
+    case 'booked': return 'Booked';
+    case 'waiting': return employerName ? `Waiting for ${employerName} to approve` : 'Waiting for approval';
+    case 'declined': return 'Declined by the employer';
+    case 'removed': return 'Taken off the shift by the employer';
+    case 'cancelled': return 'The shift was cancelled';
+  }
+}
+
+/**
+ * The email to the employer's owners and admins when an agency puts someone forward. Names the person (that is the
+ * point of it) and the shift; nothing else about them. Uses the employer's own words.
+ */
+export function putForwardEmail(p: {
+  agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
+  siteTimezone: string; booked: boolean; shiftId: string; weekStart: string;
+}, appUrl: string | null, w: Words = DEFAULT_WORDS) {
+  const where = [p.areaName, p.siteName].filter(Boolean).join(', ');
+  const link = appUrl ? `${appUrl.replace(/\/$/, '')}/roster?week=${p.weekStart}&shift=${p.shiftId}#shift-panel` : null;
+  const lines = [
+    `${p.agencyName} has put forward ${p.personName} for your ${w.lower(T.shift)}:`,
+    '',
+    `${p.role} at ${where}`,
+    localWhen(p),
+    '',
+    p.booked
+      ? `${p.personName} is booked on it. ${p.agencyName} has checked them against your requirements.`
+      : `${p.personName} is waiting for your approval. ${p.agencyName} has checked them against your requirements. Approve or decline on the roster.`,
+    link ? `Open it in CROP: ${link}` : `Open it on the roster in CROP.`,
+  ];
+  return {
+    subject: p.booked ? `${p.agencyName} booked ${p.personName}: ${p.role} on ${localDay(p.startsAt, p.siteTimezone)}`
+      : `Approve ${p.personName} from ${p.agencyName}? ${p.role} on ${localDay(p.startsAt, p.siteTimezone)}`,
+    body: lines.join('\n'),
+  };
+}

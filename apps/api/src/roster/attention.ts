@@ -22,6 +22,8 @@ export interface AttentionShift {
   startsAt: Date;
   equipmentOnly: boolean;
   workerName: string | null;
+  /** The agency the person on it came from (agency fill), when they did. */
+  agencyName?: string | null;
   /** assigned (waiting for them) or confirmed, when someone is on it. */
   assignmentStatus: 'assigned' | 'confirmed' | null;
   /** Offers still waiting for a reply. */
@@ -109,7 +111,9 @@ export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours 
     if (!s.workerName) {
       out.push({ ...base, kind: 'open', title: 'Nobody on this shift', detail: offerNote(s) });
     } else if (s.assignmentStatus === 'assigned' && !s.personBlocks.length) {
-      out.push({ ...base, kind: 'unconfirmed', title: `${s.workerName} hasn't confirmed`, detail: 'Waiting for them to agree to the shift' });
+      out.push(s.agencyName
+        ? { ...base, kind: 'unconfirmed', title: `Approve ${s.workerName} from ${s.agencyName}?`, detail: `${s.agencyName} put them forward; approve or decline on the shift` }
+        : { ...base, kind: 'unconfirmed', title: `${s.workerName} hasn't confirmed`, detail: 'Waiting for them to agree to the shift' });
     }
   }
   return out

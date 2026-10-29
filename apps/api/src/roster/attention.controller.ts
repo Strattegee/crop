@@ -18,7 +18,7 @@ const MAX_DAYS = 14;
 const MAX_SHIFTS = 400;
 
 interface Row {
-  id: string; startsAt: Date; equipmentOnly: boolean; workerId: string | null; workerName: string | null;
+  id: string; startsAt: Date; equipmentOnly: boolean; workerId: string | null; workerName: string | null; agencyName: string | null;
   assignmentStatus: 'assigned' | 'confirmed' | null; offersPending: number; offersExpired: number; pulledOutName: string | null;
   equipment: Array<{ id: string; name: string; typeName: string }>;
   facilityId: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string;
@@ -61,7 +61,8 @@ export class AttentionController {
       const facts: AttentionShift[] = [];
       for (const r of list) {
         let personBlocks: string[] = [];
-        if (r.workerId) {
+        // The agency checked its people against this business's requirements; they hold no records here (migration 0042).
+        if (r.workerId && !r.agencyName) {
           const [c] = await eligibilityForShift(db, t.tenantId, r.id, [r.workerId]);
           personBlocks = c ? c.blocks.map(b => b.message) : [];
         }
@@ -71,7 +72,7 @@ export class AttentionController {
             .filter(e => !e.eligible).map(e => ({ name: e.name, reasons: e.blocks.map(b => b.message) }));
         }
         facts.push({
-          id: r.id, startsAt: r.startsAt, equipmentOnly: r.equipmentOnly, workerName: r.workerName, assignmentStatus: r.assignmentStatus,
+          id: r.id, startsAt: r.startsAt, equipmentOnly: r.equipmentOnly, workerName: r.workerName, agencyName: r.agencyName, assignmentStatus: r.assignmentStatus,
           offersPending: r.offersPending, offersExpired: r.offersExpired, pulledOutName: r.pulledOutName,
           personBlocks, equipmentBlocks, equipmentMissing: r.equipmentOnly && !r.equipment.length,
         });

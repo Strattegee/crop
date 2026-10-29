@@ -283,7 +283,10 @@ describe('agency fill: API', () => {
   it('closes requests when the shift starts', async () => {
     const s = await newShift(3);
     await http().post(`/shifts/${s}/agency-fill`).set(as('emp')).send({}).expect(201);
-    expect((await http().get(`/shifts/${s}/agency-fill`).set(as('emp')).expect(200)).body.next.dueIn).toBe('in 1 hour');
+    // 3 hours away: an hour between agencies, or two once it falls on the next day in Melbourne (late evening runs).
+    const startsAt = (await owner.query<{ starts_at: Date }>('select starts_at from shifts where id = $1', [s])).rows[0].starts_at;
+    const gap = escalationMinutes(startsAt, new Date(), 'Australia/Melbourne');
+    expect((await http().get(`/shifts/${s}/agency-fill`).set(as('emp')).expect(200)).body.next.dueIn).toBe(gap === 60 ? 'in 1 hour' : 'in 2 hours');
     await owner.query(`update shifts set starts_at = now() - interval '1 minute' where id = $1`, [s]);
     await timer.runOnce();
     const st = (await http().get(`/shifts/${s}/agency-fill`).set(as('emp')).expect(200)).body;

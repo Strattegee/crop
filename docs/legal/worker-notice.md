@@ -10,7 +10,7 @@ Your name, work contact details, workplace or role, shifts and rosters, availabi
 
 ## Who sees it?
 
-Your employer’s authorised managers and other approved people can access information according to their permissions. CROPwms personnel and service providers may access limited information when needed to operate, secure or support the service. Other workers should only see information necessary for their work role.
+Your employer’s authorised managers and other approved people can access information according to their permissions. CROPwms personnel and service providers may access limited information when needed to operate, secure or support the service. Other workers should only see information necessary for their work role. If you work through an agency and it puts you forward for a shift at a business it supplies, that business sees your name, your agency and the shift; your agency checks your credentials against the business’s requirements and your documents and contact details stay with your agency.
 
 ## What does the app not mean?
 
