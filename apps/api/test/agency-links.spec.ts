@@ -69,6 +69,27 @@ describe('agency links: API', () => {
       idp.addUser({ sub, email, email_verified: true });
       tok[sub] = await idp.token(sub, { expiresIn: '1h' });
     }
+    // The employer's requirements: a must-have (by role and by duty, with a catalogue code), a should-have of its own
+    // making, an optional one, and one whose credential is switched off (not listed).
+    const ct = await owner.query<{ id: string; name: string }>(
+      `insert into credential_types(tenant_id, name, category, catalogue_code, active) values
+         ($1, 'RSA', 'licence', 'au.responsible-service-of-alcohol-rsa', true),
+         ($1, 'Ward orientation', 'training', null, true),
+         ($1, 'Barista course', 'training', null, true),
+         ($1, 'Old check', 'check', null, false) returning id, name`, [ids.bayside]);
+    for (const r of ct.rows) ids[r.name] = r.id;
+    await owner.query(
+      `insert into credential_requirements(tenant_id, credential_type_id, scope, role, severity) values
+         ($1, $2, 'role', 'Bartender', 'warning'), ($1, $3, 'role', 'Nurse', 'warning'), ($1, $4, 'all_workers', null, 'optional'),
+         ($1, $5, 'all_workers', null, 'hard')`, [ids.bayside, ids.RSA, ids['Ward orientation'], ids['Barista course'], ids['Old check']]);
+    const duty = (await owner.query<{ id: string }>(`insert into shift_duties(tenant_id, name) values ($1, 'Serves alcohol') returning id`, [ids.bayside])).rows[0].id;
+    await owner.query(`insert into shift_duty_requirements(tenant_id, duty_id, credential_type_id, severity) values ($1, $2, $3, 'hard')`, [ids.bayside, duty, ids.RSA]);
+    // The agency's own credentials (RSA from a template, so it carries the code).
+    const own = await owner.query<{ id: string; name: string }>(
+      `insert into credential_types(tenant_id, name, category, catalogue_code) values
+         ($1, 'Responsible Service of Alcohol (RSA)', 'licence', 'au.responsible-service-of-alcohol-rsa'),
+         ($1, 'Orientation – Bayside', 'training', null) returning id, name`, [ids.cfy]);
+    for (const r of own.rows) ids['own:' + r.name] = r.id;
     Object.assign(process.env, { APP_DATABASE_URL: db.appUrl, AUTH_ISSUER: idp.issuer, AUTH_AUDIENCE: 'aud' });
     delete process.env.APP_URL;
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -186,6 +207,53 @@ describe('agency links: API', () => {
     expect(events.map((e: { action: string }) => e.action)).toEqual(['book_mode_changed', 'linked']);
   });
 
+  it('the agency matches the employer’s requirements; the link is active once must and should haves are matched', async () => {
+    await http().get(`/agency-links/${firstLink}/requirements`).set(as('emp')).expect(409);
+    await http().get(`/agency-links/${firstLink}/requirements`).set(as('nosy')).expect(404);
+    const view = (await http().get(`/agency-links/${firstLink}/requirements`).set(as('agalloc')).expect(200)).body;
+    expect(view.link.unmatched).toBe(2);
+    expect(view.requirements.map((r: { name: string; severity: string; neededFor: string[] }) => [r.name, r.severity, r.neededFor])).toEqual([
+      ['RSA', 'hard', ['Bartender', 'Serves alcohol (duty)']],
+      ['Ward orientation', 'warning', ['Nurse']],
+      ['Barista course', 'optional', ['Everyone']],
+    ]);
+    const rsa = view.requirements[0];
+    expect(rsa.suggestion).toEqual({ credentialTypeId: ids['own:Responsible Service of Alcohol (RSA)'], name: 'Responsible Service of Alcohol (RSA)' });
+    expect(rsa.match).toBeNull();
+    expect(JSON.stringify(view)).not.toContain('Old check');
+
+    const put = (who: string, matches: unknown) => http().put(`/agency-links/${firstLink}/matches`).set(as(who)).send({ matches });
+    await put('agalloc', [{ requirementId: rsa.requirementId, credentialTypeId: rsa.suggestion.credentialTypeId }]).expect(403);
+    await put('ag', []).expect(400);
+    await put('ag', [{ requirementId: ids['Old check'], credentialTypeId: rsa.suggestion.credentialTypeId }]).expect(400);
+    // Someone else's credential type can't be used (RLS: it isn't there).
+    await put('ag', [{ requirementId: rsa.requirementId, credentialTypeId: ids.RSA }]).expect(400);
+    await put('emp', [{ requirementId: rsa.requirementId, credentialTypeId: ids.RSA }]).expect(409);
+
+    let after = (await put('ag', [{ requirementId: rsa.requirementId, credentialTypeId: rsa.suggestion.credentialTypeId }]).expect(200)).body;
+    expect(after.link).toMatchObject({ status: 'matching', unmatched: 1 });
+    expect(after.requirements[0].match).toMatchObject({ name: 'Responsible Service of Alcohol (RSA)', matchedBy: 'code' });
+    after = (await put('ag', [{ requirementId: after.requirements[1].requirementId, credentialTypeId: ids['own:Orientation – Bayside'] }]).expect(200)).body;
+    expect(after.link).toMatchObject({ status: 'active', unmatched: 0 });
+    expect(after.requirements[1].match.matchedBy).toBe('hand');
+    let emp = (await http().get('/agency-links').set(as('emp')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === firstLink);
+    expect(emp).toMatchObject({ status: 'active', statusWords: 'Caring For You can be sent requests' });
+
+    // The employer adds a requirement: back to matching until the agency matches it.
+    const fa = (await owner.query<{ id: string }>(`insert into credential_types(tenant_id, name, category) values ($1, 'First aid', 'training') returning id`, [ids.bayside])).rows[0].id;
+    await owner.query(`insert into credential_requirements(tenant_id, credential_type_id, scope, severity) values ($1, $2, 'all_workers', 'hard')`, [ids.bayside, fa]);
+    emp = (await http().get('/agency-links').set(as('emp')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === firstLink);
+    expect(emp).toMatchObject({ status: 'matching', unmatched: 1 });
+    expect(emp.statusWords).toMatch(/match 1 requirement of yours/);
+    const ag = (await http().get('/agency-links').set(as('ag')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === firstLink);
+    expect(ag).toMatchObject({ status: 'matching', unmatched: 1 });
+    const events = (await http().get(`/agency-links/${firstLink}/events`).set(as('ag')).expect(200)).body.map((e: { action: string }) => e.action);
+    expect(events.slice(0, 2)).toEqual(['needs_matching', 'matched']);
+    // Removing a match also counts.
+    after = (await put('ag', [{ requirementId: rsa.requirementId, credentialTypeId: null }]).expect(200)).body;
+    expect(after.link.unmatched).toBe(2);
+  });
+
   it('cancelled and expired links can’t be used', async () => {
     const a = await invite();
     await http().post(`/agency-links/invitations/${a.id}/cancel`).set(as('emp')).expect(200);
@@ -214,7 +282,7 @@ describe('agency links: API', () => {
   });
 
   it('industry templates give credentials their catalogue code', async () => {
-    await owner.query(`insert into credential_types(tenant_id, name, category) values ($1, 'Responsible Service of Alcohol (RSA)', 'licence')`, [ids.cfy]);
+    await owner.query(`insert into credential_types(tenant_id, name, category) values ($1, 'Food Handler Training', 'training')`, [ids.cfy]);
     await http().post('/industry-packs/hospitality/apply').set(as('ag')).expect(200);
     const types = (await http().get('/credential-types').set(as('ag')).expect(200)).body as Array<{ name: string; catalogueCode: string | null }>;
     expect(types.find(t => t.name === 'Responsible Service of Alcohol (RSA)')?.catalogueCode).toBe('au.responsible-service-of-alcohol-rsa');

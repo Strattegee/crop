@@ -7,7 +7,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { actorOf } from '../roster/publishing.js';
-import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, newInviteLink, orderProblem, type LinkStatus } from './links.js';
+import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, matchesProblem, newInviteLink, orderProblem, type LinkStatus } from './links.js';
 
 const NOT_VALID = "This link isn't valid. Check you've used the whole link.";
 
@@ -25,6 +25,35 @@ async function linkById(db: PoolClient, connectionId: string) {
   const row = (await db.query<LinkRow>(`select ${LINK_COLS} from agency_connections where connection_id = $1`, [connectionId])).rows[0];
   if (!row) throw new NotFoundException('Link not found');
   return withWords(row);
+}
+
+type Requirement = {
+  requirementId: string; name: string; catalogueCode: string | null; category: string; hasExpiry: boolean;
+  severity: 'hard' | 'warning' | 'optional'; neededFor: string[];
+  match: { credentialTypeId: string; name: string; matchedBy: 'code' | 'hand'; matchedByName: string | null; matchedAt: Date } | null;
+  suggestion: { credentialTypeId: string; name: string } | null;
+};
+
+/** The employer's requirements (through the checked function) joined with this agency's matches and suggestions. */
+async function requirementsFor(db: PoolClient, connectionId: string): Promise<Requirement[]> {
+  const rows = (await db.query<{ requirement_id: string; name: string; catalogue_code: string | null; category: string; has_expiry: boolean; severity: Requirement['severity']; needed_for: string[] }>(
+    'select * from app_agency_requirements($1)', [connectionId])).rows;
+  const maps = new Map((await db.query<{ employer_credential_type_id: string; credential_type_id: string; name: string; active: boolean; matched_by: 'code' | 'hand'; matched_by_name: string | null; matched_at: Date }>(
+    `select m.employer_credential_type_id, m.credential_type_id, ct.name, ct.active, m.matched_by, m.matched_by_name, m.matched_at
+       from agency_credential_maps m join credential_types ct on ct.id = m.credential_type_id where m.connection_id = $1`, [connectionId])).rows
+    .filter(m => m.active).map(m => [m.employer_credential_type_id, m]));
+  const byCode = new Map((await db.query<{ id: string; name: string; catalogue_code: string }>(
+    'select id, name, catalogue_code from credential_types where active and catalogue_code is not null')).rows.map(c => [c.catalogue_code, c]));
+  return rows.map(r => {
+    const m = maps.get(r.requirement_id);
+    const s = r.catalogue_code ? byCode.get(r.catalogue_code) : undefined;
+    return {
+      requirementId: r.requirement_id, name: r.name, catalogueCode: r.catalogue_code, category: r.category, hasExpiry: r.has_expiry,
+      severity: r.severity, neededFor: r.needed_for,
+      match: m ? { credentialTypeId: m.credential_type_id, name: m.name, matchedBy: m.matched_by, matchedByName: m.matched_by_name, matchedAt: m.matched_at } : null,
+      suggestion: s ? { credentialTypeId: s.id, name: s.name } : null,
+    };
+  });
 }
 
 async function businessName(db: PoolClient, tenantId: string) {
@@ -49,9 +78,19 @@ export class AgencyLinksController {
   @Get('agency-links')
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => {
+      // Requirements can change on the employer's side at any time, so each live link's state is brought up to date here.
+      const live = (await db.query<{ connection_id: string }>(`select connection_id from agency_connections where status <> 'ended'`)).rows;
+      const unmatched = new Map<string, number>();
+      for (const l of live) {
+        await db.query('select app_agency_refresh($1)', [l.connection_id]);
+        unmatched.set(l.connection_id, (await db.query<{ n: number }>('select app_agency_unmatched($1) as n', [l.connection_id])).rows[0].n);
+      }
       const links = (await db.query<LinkRow>(
         `select ${LINK_COLS} from agency_connections
-          order by status = 'ended', side, preference nulls last, other_name`)).rows.map(withWords);
+          order by status = 'ended', side, preference nulls last, other_name`)).rows.map(r => {
+          const n = unmatched.get(r.connectionId) ?? 0;
+          return { ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), unmatched: n };
+        });
       const invitations = (await db.query<{ id: string; forName: string | null; createdByName: string | null; createdAt: Date; expiresAt: Date; acceptedAt: Date | null; cancelledAt: Date | null; acceptedBy: string | null }>(
         `select i.id, i.for_name as "forName", i.created_by_name as "createdByName", i.created_at as "createdAt", i.expires_at as "expiresAt",
                 i.accepted_at as "acceptedAt", i.cancelled_at as "cancelledAt", c.other_name as "acceptedBy"
@@ -172,6 +211,61 @@ export class AgencyLinksController {
   }
 
   /**
+   * Agency side: the employer's credential requirements on this link, each with the agency's match (if any) and a
+   * suggestion from the shared catalogue code. Must have and should have need a match before requests can be sent;
+   * optional ones can be matched but don't have to be.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('agency-links/:connectionId/requirements')
+  requirements(@Tenant() t: Membership, @Param('connectionId', ParseUUIDPipe) connectionId: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const link = await linkById(db, connectionId);
+      const reqs = await requirementsFor(db, connectionId);
+      const unmatched = (await db.query<{ n: number }>('select app_agency_unmatched($1) as n', [connectionId])).rows[0].n;
+      return { link: { ...link, unmatched, statusWords: linkStatusWords(link.status, link.side, link.otherName, unmatched) }, requirements: reqs };
+    });
+  }
+
+  /**
+   * Agency side: match the employer's requirements to this business's credentials
+   * (`{ matches: [{ requirementId, credentialTypeId | null }] }`; null removes a match). Returns the requirements again.
+   */
+  @Roles('owner', 'admin')
+  @Put('agency-links/:connectionId/matches')
+  async match(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('connectionId', ParseUUIDPipe) connectionId: string, @Body() body: Record<string, unknown>) {
+    const list = body?.matches;
+    const problem = matchesProblem(list);
+    if (problem) throw new BadRequestException(problem);
+    const actor = actorOf(auth);
+    await withTenant(this.pool, t.tenantId, async db => {
+      const reqs = await requirementsFor(db, connectionId);
+      const byId = new Map(reqs.map(r => [r.requirementId, r]));
+      for (const m of list as Array<{ requirementId: string; credentialTypeId: string | null }>) {
+        const req = byId.get(m.requirementId);
+        if (!req) throw new BadRequestException('That requirement is no longer on the list. Refresh the page and try again.');
+        if (m.credentialTypeId === null) {
+          await db.query('delete from agency_credential_maps where connection_id = $1 and employer_credential_type_id = $2', [connectionId, m.requirementId]);
+          continue;
+        }
+        const own = (await db.query<{ active: boolean; catalogue_code: string | null }>(
+          'select active, catalogue_code from credential_types where id = $1', [m.credentialTypeId])).rows[0];
+        if (!own?.active) throw new BadRequestException(`Choose one of your credentials for ${req.name}`);
+        const by = req.catalogueCode && own.catalogue_code === req.catalogueCode ? 'code' : 'hand';
+        await db.query(
+          `insert into agency_credential_maps(tenant_id, connection_id, employer_credential_type_id, employer_type_name, credential_type_id, matched_by, matched_by_name)
+           values ($1,$2,$3,$4,$5,$6,$7)
+           on conflict (tenant_id, connection_id, employer_credential_type_id) do update
+             set credential_type_id = excluded.credential_type_id, employer_type_name = excluded.employer_type_name,
+                 matched_by = excluded.matched_by, matched_by_name = excluded.matched_by_name, matched_at = now()
+             where agency_credential_maps.credential_type_id is distinct from excluded.credential_type_id`,
+          [t.tenantId, connectionId, m.requirementId, req.name, m.credentialTypeId, by, actor.name ?? null]);
+      }
+      await db.query('select app_agency_refresh($1)', [connectionId]);
+    }, actor);
+    return this.requirements(t, connectionId);
+  }
+
+  /**
    * The agency opening an invitation link, signed in to its own business: who it is from and whether it can be used.
    * Shows the employer's name only.
    */
@@ -195,6 +289,7 @@ export class AgencyLinksController {
     if (!INVITE_TOKEN.test(token)) throw new NotFoundException(NOT_VALID);
     return withTenant(this.pool, t.tenantId, async db => {
       const id = (await db.query<{ id: string }>('select app_agency_accept_invite($1) as id', [hashInviteToken(token)])).rows[0].id;
+      await db.query('select app_agency_refresh($1)', [id]);
       return linkById(db, id);
     }, actorOf(auth));
   }
