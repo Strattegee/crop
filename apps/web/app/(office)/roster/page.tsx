@@ -7,12 +7,11 @@ import {
   applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, unassign, useItem,
 } from './actions';
-import { cookies } from 'next/headers';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  ATTENTION_COOKIE, LOOKS, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  LOOKS, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -126,8 +125,7 @@ export default async function RosterPage({ searchParams }: {
   const switchTo = (s: Span) => url({ ...at(s, anchorForSwitch(range, s, today)), shift: s === 'month' ? undefined : sp.shift });
 
   const showLog = sp.log === '1' && span !== 'month';
-  // Needs attention opens when something starts within a day, unless the office closed it (David, 27 Oct).
-  const attentionPref = (await cookies()).get(ATTENTION_COOKIE)?.value;
+  // Needs attention starts closed with its counts showing (David, 29 Oct).
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
   const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, coverGaps] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
@@ -439,10 +437,52 @@ export default async function RosterPage({ searchParams }: {
         </div>
       </section>}
 
-      {attention && attention.total > 0 && (() => {
-        const attentionOpen = attentionPref === 'open' || (attentionPref !== 'closed' && attention.urgent > 0);
+      <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
+        <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
+        <div><span>Filled</span><strong className="ok">{filled}</strong></div>
+        <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
+        <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
+        <div><span>{tw.one(T.equipment)} hours</span><strong>{fmtHours(equipHours)}</strong></div>
+      </section>
+
+      {changeRequests.length > 0 && (
+        <section className="card roster-requests" aria-label="Changes waiting for approval">
+          <h2 style={{ marginTop: 0 }}>{changeRequests.length === 1 ? '1 change waiting for approval' : `${changeRequests.length} changes waiting for approval`}</h2>
+          <ol>
+            {changeRequests.map(r => (
+              <li key={r.id}>
+                <span>
+                  <Link href={url({ shift: r.shiftId })}>{longDate(r.localDate)} {r.localStart}–{r.localEnd} {r.role}</Link>
+                  {!site && <span className="muted"> · {r.facilityName}</span>}: <strong>{r.summary}</strong>
+                  {r.reason && r.kind !== 'other' && r.kind !== 'cancel' && <span className="muted"> ({r.reason})</span>}
+                  <span className="muted small"> asked by {r.requestedByName ?? 'someone'}, {when(r.createdAt)}</span>
+                </span>
+                <span className="req-actions">
+                  {r.canDecide && <>
+                    <form action={decideChange.bind(null, r.id, 'approve')}><input type="hidden" name="back" value={here} /><button className="btn small">Approve</button></form>
+                    <form action={decideChange.bind(null, r.id, 'decline')} className="decline">
+                      <input type="hidden" name="back" value={here} />
+                      <input name="note" maxLength={300} placeholder="Why not (optional)" aria-label="Why not (optional)" />
+                      <button className="btn small secondary">Decline</button>
+                    </form>
+                  </>}
+                  {r.canWithdraw && !r.canDecide && (
+                    <form action={decideChange.bind(null, r.id, 'withdraw')}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Withdraw</button></form>
+                  )}
+                  {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* Three panels side by side, closed when the page opens, so the roster itself is near the top (David, 29 Oct).
+          Opening one gives it the full width. */}
+      <div className="roster-trio">
+      {attention && attention.total > 0 ? (() => {
         return (
-        <AttentionPanel open={attentionOpen} summary={<>
+        <AttentionPanel open={false} summary={<>
             <h2>Needs attention</h2>
             <span className="muted">
               {' '}{attention.total} in the next {attention.days} days
@@ -484,106 +524,10 @@ export default async function RosterPage({ searchParams }: {
           {attention.truncated && <p className="muted small">Only the first few hundred {tw.lower(T.shift, true)} were checked. Choose a {tw.lower(T.site)} to see the rest.</p>}
         </AttentionPanel>
         );
-      })()}
-
-      {changeRequests.length > 0 && (
-        <section className="card roster-requests" aria-label="Changes waiting for approval">
-          <h2 style={{ marginTop: 0 }}>{changeRequests.length === 1 ? '1 change waiting for approval' : `${changeRequests.length} changes waiting for approval`}</h2>
-          <ol>
-            {changeRequests.map(r => (
-              <li key={r.id}>
-                <span>
-                  <Link href={url({ shift: r.shiftId })}>{longDate(r.localDate)} {r.localStart}–{r.localEnd} {r.role}</Link>
-                  {!site && <span className="muted"> · {r.facilityName}</span>}: <strong>{r.summary}</strong>
-                  {r.reason && r.kind !== 'other' && r.kind !== 'cancel' && <span className="muted"> ({r.reason})</span>}
-                  <span className="muted small"> asked by {r.requestedByName ?? 'someone'}, {when(r.createdAt)}</span>
-                </span>
-                <span className="req-actions">
-                  {r.canDecide && <>
-                    <form action={decideChange.bind(null, r.id, 'approve')}><input type="hidden" name="back" value={here} /><button className="btn small">Approve</button></form>
-                    <form action={decideChange.bind(null, r.id, 'decline')} className="decline">
-                      <input type="hidden" name="back" value={here} />
-                      <input name="note" maxLength={300} placeholder="Why not (optional)" aria-label="Why not (optional)" />
-                      <button className="btn small secondary">Decline</button>
-                    </form>
-                  </>}
-                  {r.canWithdraw && !r.canDecide && (
-                    <form action={decideChange.bind(null, r.id, 'withdraw')}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Withdraw</button></form>
-                  )}
-                  {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
+      })() : (
+        <section className="card roster-attention quiet" aria-label="Needs attention"><h2>Needs attention</h2> <span className="muted">Nothing in the next 7 days.</span></section>
       )}
-
-      {coverGaps.length > 0 && (
-        <section className="card roster-cover" aria-label="Cover gaps">
-          <h2 style={{ marginTop: 0 }}>
-            {coverGaps.length === 1 ? '1 cover gap' : `${coverGaps.length} cover gaps`} this {periodWord}
-            {' '}<Link href="/settings/cover-rules" className="muted small">(cover rules)</Link>
-          </h2>
-          <ol>
-            {coverGaps.map(g => (
-              <li key={`${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`}>
-                <Link href={url({ shift: g.shiftId })}>{longDate(g.localDate)}</Link>{' '}
-                <strong>{g.title}</strong>
-                {!site && <span className="muted"> · {g.facilityName}</span>}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {showLog && (
-        <section className="card roster-log" aria-label="Changes this week">
-          <h2 style={{ marginTop: 0 }}>Changes this week</h2>
-          {changes.length === 0 ? <p className="muted">Nothing recorded yet.</p> : (
-            <ol>
-              {changes.slice(0, 200).map(c => (
-                <li key={c.id}>
-                  <span className="muted small">{when(c.at)}</span>
-                  <span>
-                    <Link href={url({ shift: c.shiftId })}>{longDate(c.localDate)} {c.localStart}–{c.localEnd} {c.role}</Link>
-                    {!site && <span className="muted"> · {c.facilityName}</span>}: {c.summary}
-                    <span className="muted"> {byWhom(c)}</span>
-                    {c.afterPublish && <b className="pill live small">after publishing</b>}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      )}
-
-      <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
-        <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
-        <div><span>Filled</span><strong className="ok">{filled}</strong></div>
-        <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
-        <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
-        <div><span>{tw.one(T.equipment)} hours</span><strong>{fmtHours(equipHours)}</strong></div>
-      </section>
-
-      {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
-        <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="hidden" name="back" value={here} />
-          <input type="hidden" name="week" value={week} />
-          <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
-          <button className="btn small">Load café demo</button>
-        </form>
-      )}
-
-      {process.env.DEMO_TOOLS === 'on' && open > 0 && span !== 'month' && (
-        <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
-          <input type="hidden" name="back" value={here} />
-          <input type="hidden" name="week" value={week} />
-          <span className="muted small">Demo only:</span>
-          <button className="btn small secondary">Fill open shifts with demo staff</button>
-        </form>
-      )}
-
-      <details className="card" open={shifts.length === 0}>
+      <details className="card roster-add" open={shifts.length === 0}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
         {activeFacilities.length === 0 ? (
           <p className="muted">Add a {tw.lower(T.site)} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
@@ -639,9 +583,8 @@ export default async function RosterPage({ searchParams }: {
           </form>
         )}
       </details>
-
       {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
-        <details className="card roster-templates" open={shifts.length === 0 && templates.length > 0}>
+        <details className="card roster-templates">
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
           <p className="muted small">Save a {tw.lower(T.site)}&apos;s usual week as a template, then fill any week from it, or copy last week. Each {tw.lower(T.shift)} gets its usual person where they can work it (waiting for them to confirm) and its usual {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
           <div className="template-forms">
@@ -707,6 +650,67 @@ export default async function RosterPage({ searchParams }: {
           )}
         </details>
       )}
+      </div>
+
+      {coverGaps.length > 0 && (
+        <details className="card roster-cover" aria-label="Cover gaps">
+          <summary>
+            <strong>{coverGaps.length === 1 ? '1 cover gap' : `${coverGaps.length} cover gaps`} this {periodWord}</strong>
+            {' '}<Link href="/settings/cover-rules" className="muted small">(cover rules)</Link>
+          </summary>
+          <ol>
+            {coverGaps.map(g => (
+              <li key={`${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`}>
+                <Link href={url({ shift: g.shiftId })}>{longDate(g.localDate)}</Link>{' '}
+                <strong>{g.title}</strong>
+                {!site && <span className="muted"> · {g.facilityName}</span>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+
+      {showLog && (
+        <section className="card roster-log" aria-label="Changes this week">
+          <h2 style={{ marginTop: 0 }}>Changes this week</h2>
+          {changes.length === 0 ? <p className="muted">Nothing recorded yet.</p> : (
+            <ol>
+              {changes.slice(0, 200).map(c => (
+                <li key={c.id}>
+                  <span className="muted small">{when(c.at)}</span>
+                  <span>
+                    <Link href={url({ shift: c.shiftId })}>{longDate(c.localDate)} {c.localStart}–{c.localEnd} {c.role}</Link>
+                    {!site && <span className="muted"> · {c.facilityName}</span>}: {c.summary}
+                    <span className="muted"> {byWhom(c)}</span>
+                    {c.afterPublish && <b className="pill live small">after publishing</b>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+
+
+      {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
+        <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="week" value={week} />
+          <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
+          <button className="btn small">Load café demo</button>
+        </form>
+      )}
+
+      {process.env.DEMO_TOOLS === 'on' && open > 0 && span !== 'month' && (
+        <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="week" value={week} />
+          <span className="muted small">Demo only:</span>
+          <button className="btn small secondary">Fill open shifts with demo staff</button>
+        </form>
+      )}
+
+
 
       {span === 'month' && (
         <section className="card roster-month" aria-label={monthLabel(range.anchor)}>
