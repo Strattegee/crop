@@ -30,7 +30,7 @@ export type InboxRow = InboxShift & { id: string; connectionId: string; siteRegi
  * Agency side: this business's people (or just `workerIds`) for one request it was sent, checked against the
  * employer's requirements as matched to this business's credentials and its own rules for each person. Ranked.
  */
-export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[]) {
+export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[], opts: { evenIfClosed?: boolean } = {}) {
   const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
     requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
     `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
@@ -44,8 +44,9 @@ export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId
     .map(m => [m.employer_credential_type_id, m.credential_type_id]));
   const names = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
   const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
-  const people = r.status !== 'open' ? [] : rankCandidates(await eligibilityForFacts(db, tenantId,
-    { role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
+  // `evenIfClosed`: checking the person already put forward (Needs attention); the placement itself is this shift (`id`), so it isn't double booking.
+  const people = r.status !== 'open' && !opts.evenIfClosed ? [] : rankCandidates(await eligibilityForFacts(db, tenantId,
+    { id: inboxId, role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
     { onlyRules: rules, roleWarnOnly: true, blockAll, workerIds }));
   // (Asking about one person: whether they are active is checked when they are put forward.)
   return { status: r.status, unmatched, people };

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { T, words } from '../../../lib/terms';
 import { mondayOf } from '../roster/view';
+import { AgencyAttentionList, type AgencyAttention } from '../allocations/agency-attention';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,13 +27,17 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The office's first screen: what needs them in the coming week, decisions waiting, then their people. */
 export default async function Dashboard() {
   const tw = await words();
-  const [facilities, s, types, attention, leave, requests, onboarding] = await Promise.all([
+  const [facilities, s, types, attention, leave, requests, onboarding, allocations] = await Promise.all([
     api<unknown[]>('/facilities'), api<Summary>('/compliance/summary'), api<unknown[]>('/credential-types'),
     api<Attention>('/roster/attention').catch(() => null),
     api<Leave[]>('/leave?status=requested').catch(() => [] as Leave[]),
     api<ChangeRequest[]>('/roster/change-requests').catch(() => [] as ChangeRequest[]),
     api<Onboarding[]>('/onboardings').catch(() => [] as Onboarding[]),
+    api<{ agencyLinks: number }>('/allocations/summary').catch(() => null),
   ]);
+  // A business that supplies employers (agency side links) also gets Allocations' Needs attention.
+  const agencyAttention = allocations && allocations.agencyLinks > 0
+    ? await api<AgencyAttention>('/allocations/attention').catch(() => null) : null;
   const shiftsWord = tw.lower(T.shift, true);
   const kinds: { kind: Kind; text: (n: number) => string }[] = [
     { kind: 'person_blocked', text: n => `${plural(n, 'person', 'people')} who can't work their ${tw.lower(T.shift)} now` },
@@ -90,6 +95,14 @@ export default async function Dashboard() {
             </>
           )}
           <Link href="/roster">Open the {tw.lower(T.roster)}</Link>
+        </section>
+      )}
+
+      {agencyAttention && (
+        <section className="card dash-attention" style={{ marginTop: 16 }}>
+          <h2>Allocations: needs attention</h2>
+          <AgencyAttentionList a={agencyAttention} shown={SHOWN} shiftsWord={shiftsWord} onAllocations={false} />
+          <Link href="/allocations">Open Allocations</Link>
         </section>
       )}
 
