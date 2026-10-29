@@ -60,7 +60,7 @@ We retain information only while needed for permitted business, operational, cus
 
 ## Access and correction
 
-You may request access to or correction of personal information we hold about you using \[PRIVACY EMAIL\]. For employer-controlled rosters, employment details or timesheets, we may refer the request to your employer while meeting any direct duties we have. We may need to verify identity and will explain lawful grounds for refusing a request.
+You may request access to or correction of personal information we hold about you using info@strattegee.com. For employer-controlled rosters, employment details or timesheets, we may refer the request to your employer while meeting any direct duties we have. We may need to verify identity and will explain lawful grounds for refusing a request.
 
 ## Notifications and permissions
 
@@ -68,7 +68,7 @@ Mobile operating system settings may allow you to control optional push notifica
 
 ## Complaints
 
-Send privacy questions or complaints to \[PRIVACY EMAIL / POSTAL ADDRESS\]. We will acknowledge and assess complaints within a reasonable time, ordinarily aiming to respond within 30 days. If dissatisfied, you may be able to complain to the Office of the Australian Information Commissioner (oaic.gov.au).
+Send privacy questions or complaints to info@strattegee.com or 1330 Malvern Road, Malvern VIC 3144. We will acknowledge and assess complaints within a reasonable time, ordinarily aiming to respond within 30 days. If dissatisfied, you may be able to complain to the Office of the Australian Information Commissioner (oaic.gov.au).
 
 # 7. Changes and children
 

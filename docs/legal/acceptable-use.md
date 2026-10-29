@@ -12,6 +12,6 @@ Applies to all administrators and mobile worker users with access to CROPwms. Cu
 
 - Do not upload unlawful content, unnecessary sensitive information or information that the organisation has no lawful reason to collect.
 
-- Report suspected security incidents, wrongly assigned records or accidental access to another organisation’s data promptly to \[SECURITY CONTACT\].
+- Report suspected security incidents, wrongly assigned records or accidental access to another organisation’s data promptly to info@strattegee.com.
 
 - CROPwms may proportionately restrict problematic activity where necessary for safety or lawfulness, with notice and opportunity to remedy where practicable.

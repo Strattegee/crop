@@ -146,4 +146,4 @@ Neither party may assign the Contract without consent not unreasonably withheld,
 
 ## 9.3 Contact
 
-Legal notices: \[LEGAL CONTACT EMAIL\]; support: \[SUPPORT EMAIL\]; privacy: \[PRIVACY EMAIL\]. An Order may specify additional notice details.
+Legal notices: info@strattegee.com; support: info@strattegee.com; privacy: info@strattegee.com. An Order may specify additional notice details.
