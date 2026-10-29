@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
+const LEVEL_LABEL: Record<string, string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
 type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
 
@@ -154,16 +155,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Who needs what</h2>
-        <p className="muted" style={{ marginTop: 0 }}>A <strong>hard</strong> rule stops a worker being compliant (and, once rostering arrives, being booked). A <strong>warning</strong> is shown but doesn't block. Rules for particular clients and facilities come with the client module.</p>
+        <p className="muted" style={{ marginTop: 0 }}><strong>Must have</strong> stops a worker being compliant and being put on a shift. <strong>Should have</strong> is shown as a warning but doesn't block. <strong>Optional</strong> is listed on the person's page so everyone knows it's useful, but it's never checked or warned about. Rules for particular clients and sites come with the client module.</p>
         {rules.length === 0 ? <p className="muted">No rules yet.</p> : (
           <table>
-            <thead><tr><th>Credential</th><th>Applies to</th><th>Type</th><th /></tr></thead>
+            <thead><tr><th>Credential</th><th>Applies to</th><th>Level</th><th /></tr></thead>
             <tbody>
               {rules.map(r => (
                 <tr key={r.id}>
                   <td>{r.typeName}</td>
                   <td>{r.scope === 'all_workers' ? 'All workers' : `Role: ${r.role}`}</td>
-                  <td>{r.severity === 'hard' ? 'Hard' : 'Warning'}</td>
+                  <td>{LEVEL_LABEL[r.severity] ?? r.severity}</td>
                   <td>{canEdit && <form action={removeRule.bind(null, r.id)}><button type="submit" className="btn small secondary">Remove</button></form>}</td>
                 </tr>
               ))}
@@ -179,8 +180,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </select>
             </label>
             <label>Role (leave blank for all workers)<input name="role" maxLength={40} placeholder="e.g. RN" /></label>
-            <label>Type
-              <select name="severity" defaultValue="hard"><option value="hard">Hard</option><option value="warning">Warning</option></select>
+            <label>Level
+              <select name="severity" defaultValue="hard"><option value="hard">Must have</option><option value="warning">Should have (a warning)</option><option value="optional">Optional (listed, never checked)</option></select>
             </label>
             <button type="submit" className="btn">Add rule</button>
           </form>

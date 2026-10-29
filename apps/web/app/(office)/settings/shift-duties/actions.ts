@@ -7,11 +7,12 @@ const BACK = '/settings/shift-duties';
 
 /** Each credential's choice on the form: `req_<credentialTypeId>` = must | should (anything else: not needed). */
 function requirements(f: FormData) {
-  const out: { credentialTypeId: string; severity: 'hard' | 'warning' }[] = [];
+  const out: { credentialTypeId: string; severity: 'hard' | 'warning' | 'optional' }[] = [];
   for (const [k, v] of f.entries()) {
     if (!k.startsWith('req_')) continue;
     if (v === 'must') out.push({ credentialTypeId: k.slice(4), severity: 'hard' });
     else if (v === 'should') out.push({ credentialTypeId: k.slice(4), severity: 'warning' });
+    else if (v === 'optional') out.push({ credentialTypeId: k.slice(4), severity: 'optional' });
   }
   return out;
 }

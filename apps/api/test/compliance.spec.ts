@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { credentialStatus, rightToWorkIssue, todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts } from '../src/workforce/compliance.js';
+import { credentialStatus, optionalFor, rightToWorkIssue, todayIn, workerCompliance, type CredentialFacts, type RequirementRule, type RightToWorkFacts } from '../src/workforce/compliance.js';
 
 const police: RequirementRule = { credentialTypeId: 'police', typeName: 'Police check', scope: 'all_workers', role: null, severity: 'hard' };
 const ahpra: RequirementRule = { credentialTypeId: 'ahpra', typeName: 'AHPRA', scope: 'role', role: 'RN', severity: 'hard' };
@@ -98,5 +98,30 @@ describe('right to work', () => {
   it('makes the worker non-compliant when included', () => {
     expect(workerCompliance([], [], [], TODAY, 30, null)).toMatchObject({ status: 'non_compliant', issues: [{ typeName: 'Right to work', problem: 'missing' }] });
     expect(workerCompliance([], [], [], TODAY, 30, rtw({})).status).toBe('compliant');
+  });
+});
+
+describe('optional requirements', () => {
+  const firstAid: RequirementRule = { credentialTypeId: 'firstaid', typeName: 'First aid', scope: 'role', role: 'RN', severity: 'optional' };
+  const policeOptional: RequirementRule = { ...police, severity: 'optional' };
+
+  it('are never checked or warned about', () => {
+    expect(workerCompliance(['RN'], [firstAid, policeOptional], [], TODAY, 30)).toEqual({ status: 'compliant', issues: [] });
+    expect(workerCompliance(['RN'], [firstAid], [cred('1', 'firstaid', '2026-01-01', 'unverified')], TODAY, 30).issues).toEqual([]);
+  });
+
+  it('do not soften a stronger rule for the same credential', () => {
+    const r = workerCompliance(['RN'], [policeOptional, police], [], TODAY, 30);
+    expect(r.issues.map(i => `${i.typeName}:${i.severity}`)).toEqual(['Police check:hard']);
+  });
+
+  it('are listed for the roles they apply to, with whether a current one is held', () => {
+    expect(optionalFor(['AIN'], [firstAid], [], TODAY)).toEqual([]);
+    expect(optionalFor(['RN'], [firstAid], [], TODAY)).toEqual([{ credentialTypeId: 'firstaid', typeName: 'First aid', held: false }]);
+    expect(optionalFor(['RN'], [firstAid], [cred('1', 'firstaid', '2027-01-01', 'unverified')], TODAY)[0].held).toBe(true);
+    expect(optionalFor(['RN'], [firstAid], [cred('1', 'firstaid', '2026-10-31')], TODAY)[0].held).toBe(false);
+    expect(optionalFor(['RN'], [firstAid], [cred('1', 'firstaid', null, 'rejected')], TODAY)[0].held).toBe(false);
+    // Asked for more strongly elsewhere: shown as an issue or met, not as optional.
+    expect(optionalFor(['RN'], [policeOptional, police], [], TODAY)).toEqual([]);
   });
 });

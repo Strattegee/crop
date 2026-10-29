@@ -6,7 +6,7 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date, email, oneOf, text, textList } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
-import { credentialStatus, todayIn } from './compliance.js';
+import { credentialStatus, optionalFor, todayIn } from './compliance.js';
 import { loadSettings } from './settings.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { beginOnboarding } from './onboarding.controller.js';
@@ -99,7 +99,7 @@ export class WorkersController {
     });
   }
 
-  /** A worker with their credentials, compliance status and issues. */
+  /** A worker with their credentials, compliance status and issues, and the optional requirements that apply to them (listed, never checked). */
   @Roles(...OFFICE_ROLES)
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
@@ -120,7 +120,8 @@ export class WorkersController {
       for (const c of credentials as unknown as Array<{ id: string; documents?: unknown[] }>) c.documents = docs.filter(d => d.credentialId === c.id);
       const facts = (await credentialFactsByWorker(db, [id])).get(id) ?? [];
       const compliance = ctx.evaluate(worker.roles, facts, (await rightToWorkByWorker(db, [id])).get(id) ?? null);
-      return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, today: ctx.today };
+      const optional = optionalFor(worker.roles, ctx.rules, facts, ctx.today);
+      return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, optional, today: ctx.today };
     });
   }
 

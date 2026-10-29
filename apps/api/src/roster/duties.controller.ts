@@ -18,9 +18,9 @@ const DUTY_COLS = `d.id, d.name, d.description, d.active,
   coalesce((select json_agg(json_build_object('credentialTypeId', r.credential_type_id, 'typeName', ct.name, 'severity', r.severity) order by ct.name)
               from shift_duty_requirements r join credential_types ct on ct.id = r.credential_type_id where r.duty_id = d.id), '[]'::json) as requirements`;
 
-type Requirement = { credentialTypeId: string; severity: 'hard' | 'warning' };
+type Requirement = { credentialTypeId: string; severity: 'hard' | 'warning' | 'optional' };
 
-/** `requirements: [{ credentialTypeId, severity }]` — severity hard (blocks) or warning; defaults to hard. */
+/** `requirements: [{ credentialTypeId, severity }]` — severity hard (blocks), warning, or optional (listed, never checked); defaults to hard. */
 function requirementsField(body: Record<string, unknown>): Requirement[] | null {
   const v = body?.requirements;
   if (v === undefined || v === null) return null;
@@ -31,7 +31,7 @@ function requirementsField(body: Record<string, unknown>): Requirement[] | null 
     const r = (x ?? {}) as Record<string, unknown>;
     if (typeof r.credentialTypeId !== 'string' || !UUID.test(r.credentialTypeId)) throw new BadRequestException('Choose a credential for each requirement');
     const severity = r.severity === undefined || r.severity === null ? 'hard' : r.severity;
-    if (severity !== 'hard' && severity !== 'warning') throw new BadRequestException('Each requirement must be "must have" or "should have"');
+    if (severity !== 'hard' && severity !== 'warning' && severity !== 'optional') throw new BadRequestException('Each requirement must be "must have", "should have" or "optional"');
     if (seen.has(r.credentialTypeId)) throw new BadRequestException('Each credential can only be listed once');
     seen.add(r.credentialTypeId);
     return { credentialTypeId: r.credentialTypeId, severity };

@@ -15,8 +15,8 @@ describe('industry packs: content', () => {
     for (const p of PACKS) {
       const names = new Set(p.credentials.map(c => c.name));
       expect(names.size, `${p.id}: duplicate credential`).toBe(p.credentials.length);
-      for (const r of p.roles) for (const n of [...(r.must ?? []), ...(r.should ?? [])]) expect(names.has(n), `${p.id} ${r.name}: ${n}`).toBe(true);
-      for (const d of p.duties) for (const n of [...(d.must ?? []), ...(d.should ?? [])]) expect(names.has(n), `${p.id} duty ${d.name}: ${n}`).toBe(true);
+      for (const r of p.roles) for (const n of [...(r.must ?? []), ...(r.should ?? []), ...(r.optional ?? [])]) expect(names.has(n), `${p.id} ${r.name}: ${n}`).toBe(true);
+      for (const d of p.duties) for (const n of [...(d.must ?? []), ...(d.should ?? []), ...(d.optional ?? [])]) expect(names.has(n), `${p.id} duty ${d.name}: ${n}`).toBe(true);
       expect(new Set(p.duties.map(d => d.name.toLowerCase())).size, `${p.id}: duplicate duty`).toBe(p.duties.length);
       for (const e of p.equipmentTypes) if (e.operatorCredential) expect(names.has(e.operatorCredential), `${p.id} ${e.name}`).toBe(true);
       expect(new Set(p.roles.map(r => r.name)).size).toBe(p.roles.length);
@@ -37,7 +37,7 @@ describe('industry packs: content', () => {
   it('a duty shared by several packs is described the same way in each', () => {
     const seen = new Map<string, string>();
     for (const p of PACKS) for (const d of p.duties) {
-      const sig = JSON.stringify([d.description, d.must ?? [], d.should ?? []]);
+      const sig = JSON.stringify([d.description, d.must ?? [], d.should ?? [], d.optional ?? []]);
       if (seen.has(d.name)) expect(sig, d.name).toBe(seen.get(d.name));
       else seen.set(d.name, sig);
     }

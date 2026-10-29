@@ -30,6 +30,7 @@ type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
   status: string; roles: string[]; compliance: string; credentials: Credential[];
   issues: { typeName: string; severity: string; problem: string }[];
+  optional?: { credentialTypeId: string; typeName: string; held: boolean }[];
 };
 type CredentialType = { id: string; name: string; active: boolean; hasNumber: boolean; hasExpiry: boolean };
 type Rtw = {
@@ -81,6 +82,18 @@ export default async function WorkerPage({ params, searchParams }: {
                 {i.typeName}: {PROBLEM_LABEL[i.problem] ?? i.problem}
                 {i.severity === 'warning' && <span className="muted"> (warning only)</span>}
               </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(w.optional?.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Optional</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>Useful to have. Never checked and never stops anyone working.</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {w.optional!.map(o => (
+              <li key={o.credentialTypeId}>{o.typeName}: <span className="muted">{o.held ? 'has one' : 'not recorded'}</span></li>
             ))}
           </ul>
         </div>
