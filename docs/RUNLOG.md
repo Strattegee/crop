@@ -280,3 +280,10 @@ Newest first. One entry per working session or scheduled run.
 - Changed for accuracy, for the lawyer to check: the pack said CROP wouldn't hold health information or background checks, but credentials can include vaccination records and police checks, and right to work holds visa details; the privacy policy and DPA now say so. The subprocessor register lists DigitalOcean, Zitadel, Resend, ClickSend and (when switched on) Cloudflare.
 - Waiting on David: ABN, address, contact emails and effective date for the documents; the apply form's questions.
 - Also (David's request): clicking a Needs attention entry, on the roster or the Dashboard, now opens that shift in a new tab, scrolled to its panel, so the office can open several, fix each and close the tab.
+
+## 2026-10-29 afternoon, 3:30pm Melbourne (scheduled run)
+
+- Shipped: linking with agencies (first slice of agency connections, approved by David this morning). Settings → Agencies: an owner or admin makes an invitation link and sends it to the agency; the agency's owner or admin opens it while signed in to CROP and presses "Link"; both businesses then see the link ("waiting for the agency to match your requirements"). The employer puts its agencies in order (1, 2, 3) and chooses per agency whether people they put forward are booked straight away or approved first. Either side can end a link, with a reason the other sees. Links work once, last 7 days and can be cancelled. A business that isn't part of a link sees nothing of it (tested), and every step is logged on both sides. Credentials from the industry templates now carry a shared code so the next step can suggest matches.
+- Next: matching (the agency matches each of the employer's requirements to its own credentials before requests can be sent), then Agency fill requests and the timer.
+- Waiting on David: the public apply form (spam protection and the form's questions).
+

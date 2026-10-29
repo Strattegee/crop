@@ -83,6 +83,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Link href="/settings/onboarding" className="btn small secondary">Onboarding checklists</Link>
       </div>
 
+      <div className="card">
+        <h2>{tw.many(T.agency)}</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Link with {tw.lower(T.agency, true)} that also use CROP, in the order you’d ask them, and see the businesses you supply.</p>
+        <Link href="/settings/agencies" className="btn small secondary">{tw.many(T.agency)}</Link>
+      </div>
+
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Words we use</h2>
         <p className="muted" style={{ marginTop: 0 }}>Call things what your business calls them. Menus, page titles and the {tw.lower(T.roster)} use these words. Leave a word blank to go back to the standard one.</p>

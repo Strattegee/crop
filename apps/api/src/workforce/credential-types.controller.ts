@@ -10,7 +10,7 @@ import { APP_POOL } from '../database/database.module.js';
 // Right to work has its own section (right-to-work.controller.ts), so it isn't offered as a credential category.
 export const CATEGORIES = ['registration', 'check', 'training', 'vaccination', 'licence'] as const;
 const TYPE_COLUMNS = `id, name, category, has_number as "hasNumber", has_expiry as "hasExpiry", needs_evidence as "needsEvidence",
-  verification_method as "verificationMethod", verification_url as "verificationUrl", active`;
+  verification_method as "verificationMethod", verification_url as "verificationUrl", active, catalogue_code as "catalogueCode"`;
 
 /** Starter list for a nursing agency (spec CRD-12), for CFY to confirm and adjust. */
 const STARTER: Array<{ name: string; category: (typeof CATEGORIES)[number]; number?: boolean; expiry?: boolean; method?: string; url?: string }> = [
