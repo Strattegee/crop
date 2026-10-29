@@ -176,7 +176,7 @@ export default async function RosterPage({ searchParams }: {
   const periodWord = span === 'day' ? 'day' : span === 'month' ? 'month' : 'week';
 
   // Rows
-  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled'; cells: Shift[][]; leave?: (Leave | null)[]; balance?: { text: string; cls: string } };
+  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled' | 'area'; cells: Shift[][]; leave?: (Leave | null)[]; balance?: { text: string; cls: string } };
   const cellsFor = (pred: (s: Shift) => boolean, list: Shift[]) => days.map(d => list.filter(s => s.localDate === d && pred(s)));
   const personRow = (p: Person, list: Shift[]): Row => {
     const bal = p.contractedHours == null ? null : p.contractedHours - p.rosteredHours;
@@ -192,27 +192,34 @@ export default async function RosterPage({ searchParams }: {
     key: `open-${key}`, label: `Open ${tw.lower(T.shift, true)}`, kind: 'open', sub: `${list.filter(s => !s.workerId && !s.equipmentOnly).length} to fill`,
     cells: cellsFor(s => !s.workerId && !s.equipmentOnly, list),
   });
-  const equipOnlyRow = (key: string, list: Shift[]): Row | null => list.some(s => s.equipmentOnly)
-    ? { key: `eq-${key}`, label: `${tw.one(T.equipment)} only`, kind: 'equipment', sub: 'dry hire', cells: cellsFor(s => !!s.equipmentOnly, list) }
-    : null;
 
   const groups: { key: string; title: string; sub?: string; rows: Row[] }[] = [];
   if (view === 'area') {
-    const byGroup = new Map<string, Shift[]>();
-    for (const s of shifts) {
-      const k = `${s.facilityName}|||${s.areaName ?? ''}`;
-      byGroup.set(k, [...(byGroup.get(k) ?? []), s]);
+    // By area (David, 29 Oct): one row per area, its shifts stacked by start time in each day, each card naming who is
+    // on it or "Unfilled". Hours compare filled with needed; people's own hours are on the By worker view.
+    const byFacility = new Map<string, Map<string, Shift[]>>();
+    for (const s of [...shifts].sort((a, b) => a.localStart.localeCompare(b.localStart))) {
+      const areas = byFacility.get(s.facilityName) ?? new Map<string, Shift[]>();
+      areas.set(s.areaName ?? '', [...(areas.get(s.areaName ?? '') ?? []), s]);
+      byFacility.set(s.facilityName, areas);
     }
-    for (const [k, list] of [...byGroup.entries()].sort()) {
-      const [fac, area] = k.split('|||');
-      const people = roster.people.filter(p => list.some(s => s.workerId === p.id));
-      const rows = [...people.map(p => personRow(p, list))];
-      if (list.some(s => !s.workerId && !s.equipmentOnly)) rows.push(openRow(k, list));
-      const eq = equipOnlyRow(k, list);
-      if (eq) rows.push(eq);
-      const gone = cancelled.filter(c => `${c.facilityName}|||${c.areaName ?? ''}` === k);
-      if (gone.length) rows.push({ key: `x-${k}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this ${periodWord}`, cells: cellsFor(() => true, gone) });
-      groups.push({ key: k, title: fac, sub: area || `No ${tw.lower(T.area)}`, rows });
+    for (const fac of [...new Set([...byFacility.keys(), ...cancelled.map(c => c.facilityName)])].sort()) {
+      const areas = byFacility.get(fac) ?? new Map<string, Shift[]>();
+      const rows: Row[] = [...areas.entries()].sort(([a], [b]) => (a || '\uffff').localeCompare(b || '\uffff')).map(([area, list]) => {
+        const people = list.filter(s => !s.equipmentOnly);
+        const unfilled = people.filter(s => !s.workerId).length;
+        const need = people.reduce((t, s) => t + s.hours, 0);
+        const got = people.filter(s => s.workerId).reduce((t, s) => t + s.hours, 0);
+        return {
+          key: `${fac}|||${area}`, label: area || `No ${tw.lower(T.area)}`, kind: 'area' as const,
+          sub: `${tw.count(list.length, T.shift)}${unfilled ? ` · ${unfilled} unfilled` : ''}`,
+          cells: cellsFor(() => true, list),
+          balance: { text: `${fmtHours(got)} / ${fmtHours(need)} h`, cls: got < need ? 'under' : 'even' },
+        };
+      });
+      const gone = cancelled.filter(c => c.facilityName === fac);
+      if (gone.length) rows.push({ key: `x-${fac}`, label: 'Cancelled', kind: 'cancelled', sub: `${gone.length} this ${periodWord}`, cells: cellsFor(() => true, gone) });
+      groups.push({ key: fac, title: fac, rows });
     }
   } else {
     groups.push({ key: 'people', title: tw.many(T.worker), rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
@@ -295,7 +302,10 @@ export default async function RosterPage({ searchParams }: {
   ) : (<>
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
     <span className="st">{stage(s, tw).label}</span>
-    <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>
+    {kind === 'area' ? (<>
+      <span className={`ln who-on${s.workerName || s.equipmentOnly ? '' : ' unfilled'}`}>{s.equipmentOnly ? s.role : s.workerName ?? 'Unfilled'}</span>
+      {!s.equipmentOnly && <span className="ln rl">{s.role}</span>}
+    </>) : <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>}
     {s.coveringName && <span className="cv">{coveringLine(s.coveringName)}</span>}
     {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
     {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
