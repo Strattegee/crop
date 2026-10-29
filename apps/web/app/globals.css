@@ -342,7 +342,8 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .dash-attention ol li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); }
 .dash-attention .att-kind { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
 .dash-attention .att-kind.person_blocked, .dash-attention .att-kind.equipment_blocked { background: var(--bad); }
-.dash-attention .att-kind.open, .dash-attention .att-kind.cover_gap { background: var(--warn); }
+.dash-attention .att-kind.open, .dash-attention .att-kind.cover_gap, .dash-attention .att-kind.link_matching { background: var(--warn); }
+.dash-attention > summary { list-style: revert; }
 
 /* Items on a shift (roster panel) */
 .shift-items .inline-form { display: flex; gap: 4px; align-items: center; }

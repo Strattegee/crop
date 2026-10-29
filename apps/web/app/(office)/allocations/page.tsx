@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { businessZone, whenIn } from '../../../lib/business';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
+import { AgencyAttentionList, type AgencyAttention } from './agency-attention';
 import { offerToPeople, pullOut, putForward, recordYes, withdrawOffers } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,8 @@ const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn
  * booked straight away or waiting for the employer's approval, as the employer chose). Closed ones show who went.
  */
 export default async function AllocationsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
-  const [list, tw, zone, sp] = await Promise.all([api<Request[]>('/agency-requests?status=all'), words(), businessZone(), searchParams]);
+  const [list, tw, zone, sp, attention] = await Promise.all([api<Request[]>('/agency-requests?status=all'), words(), businessZone(), searchParams,
+    api<AgencyAttention>('/allocations/attention').catch(() => null)]);
   const when = whenIn(zone);
   const open = list.filter(r => r.status === 'open');
   // Each open request's people, checked against the employer's requirements as matched to this business's credentials.
@@ -50,12 +52,20 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
         Put someone forward, or offer it to several and the first to accept goes, and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose). If they can&apos;t go after all, pull them out before the {shift} starts; you&apos;re emailed when the employer approves, declines or takes them off.
       </p>
       <Notices error={sp.error} done={sp.done} />
+      {attention && attention.total > 0 && (
+        <details className="card dash-attention" open={attention.urgent > 0 || attention.byKind.person_blocked > 0} aria-label="Needs attention">
+          <summary style={{ cursor: 'pointer' }}>
+            <strong>Needs attention</strong> <span className="muted">· {attention.total}{attention.urgent > 0 ? <> · <span className="bad">{attention.urgent} within a day</span></> : null}</span>
+          </summary>
+          <AgencyAttentionList a={attention} shown={20} shiftsWord={tw.lower(T.shift, true)} onAllocations />
+        </details>
+      )}
       <div className="card">
         <h2>Open ({open.length})</h2>
         {open.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>No open requests. When an employer sends you a {shift}, it shows here and your owners and admins get an email.</p>
         ) : open.map(r => (
-          <div key={r.id} className="alloc-row" style={{ borderTop: '1px solid var(--line, #e5e5e5)', padding: '10px 0' }}>
+          <div key={r.id} id={`request-${r.id}`} className="alloc-row" style={{ borderTop: '1px solid var(--line, #e5e5e5)', padding: '10px 0' }}>
             <p style={{ margin: 0 }}>
               <strong>{r.role}</strong> · {r.employerName} · {[r.areaName, r.siteName, r.siteRegion].filter(Boolean).join(', ')}
             </p>
@@ -152,7 +162,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
             <thead><tr><th>{tw.one(T.shift)}</th><th>Employer</th><th>When</th><th>Outcome</th></tr></thead>
             <tbody>
               {closed.map(r => (
-                <tr key={r.id}>
+                <tr key={r.id} id={`request-${r.id}`}>
                   <td>{r.role} · {r.siteName}</td><td>{r.employerName}</td><td>{r.when}</td>
                   <td>
                     {r.placedName ? <><strong>{r.placedName}</strong> · {r.placementState ?? r.placement}{r.placedByName ? <span className="muted"> · put forward by {r.placedByName}</span> : null}</>
