@@ -11,7 +11,8 @@ import { actorOf } from '../roster/publishing.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
 import { wordsFor } from '../terms/words.js';
-import { agencyFillProblem, escalationMinutes, inWords, localWhen, requestArrivedEmail, roundSchedule, roundState, type InboxShift } from './requests.js';
+import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type SnapshotRequirement } from './requests.js';
+import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
 
@@ -181,6 +182,41 @@ export class AgencyFillController {
         startsIn: inWords(new Date(r.startsAt).getTime() - now),
         unmatched: r.requirements.filter(q => q.severity !== 'optional' && !q.credentialTypeId).length,
       }));
+    });
+  }
+
+  /**
+   * Agency side: this business's people for a request, checked against the employer's requirements (as matched to
+   * this business's credentials) and its own rules for each person (right to work, visa hours, leave, availability,
+   * double booking, rest, end of employment). Ready first, then fewest hours that week. A different role name is a
+   * warning, since businesses name roles differently. Reads only this business's rows.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('agency-requests/:id/people')
+  people(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
+        requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
+        `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
+                to_char(starts_at at time zone site_timezone, 'YYYY-MM-DD') as local_date,
+                to_char(starts_at at time zone site_timezone, 'HH24:MI') as local_start,
+                (extract(epoch from (ends_at - starts_at)) / 3600 - break_minutes / 60.0)::float8 as hours
+           from agency_inbox where id = $1`, [id])).rows[0];
+      if (!r) throw new NotFoundException('Request not found');
+      const live = new Map((await db.query<{ employer_credential_type_id: string; credential_type_id: string }>(
+        'select employer_credential_type_id, credential_type_id from agency_credential_maps where connection_id = $1', [r.connection_id])).rows
+        .map(m => [m.employer_credential_type_id, m.credential_type_id]));
+      const names = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
+      const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
+      const people = r.status !== 'open' ? [] : rankCandidates(await eligibilityForFacts(db, t.tenantId,
+        { role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
+        { onlyRules: rules, roleWarnOnly: true, blockAll }));
+      return {
+        requestId: id, status: r.status, unmatched,
+        ready: people.filter(p => p.eligible).length,
+        people: people.map(p => ({ workerId: p.workerId, name: p.name, roles: p.roles, employmentType: p.employmentType, weekHours: p.weekHours,
+          available: p.available, eligible: p.eligible, blocks: p.blocks, warnings: p.warnings })),
+      };
     });
   }
 

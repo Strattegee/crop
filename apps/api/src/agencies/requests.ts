@@ -103,3 +103,32 @@ export function requestArrivedEmail(s: InboxShift, appUrl: string | null, w: Wor
   ].filter((l): l is string => l !== null);
   return { subject: `${s.employerName}: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}`, body: lines.join('\n') };
 }
+
+export type SnapshotRequirement = InboxShift['requirements'][number] & { requirementId?: string };
+
+/**
+ * The rules an agency checks its people against for a request: each must-have and should-have, as the agency's own
+ * credential (its current match when the request carries the employer's requirement id, else the match it had when
+ * the request arrived; removing a match since means it is unmatched). A must-have with no match blocks everyone (nobody can be checked against it); a should-have
+ * with no match is listed. Optional ones are never checked.
+ */
+export function agencyRules(
+  reqs: SnapshotRequirement[], liveMatch: Map<string, string>, ownTypeNames: Map<string, string>, employerName: string,
+) {
+  const rules: Array<{ credentialTypeId: string; typeName: string; scope: 'all_workers'; role: null; severity: 'hard' | 'warning'; forDuty?: string }> = [];
+  const blockAll: string[] = [];
+  const unmatched: Array<{ name: string; severity: 'hard' | 'warning' }> = [];
+  for (const q of reqs) {
+    if (q.severity === 'optional') continue;
+    // The agency's current match is authoritative; requests sent before requirement ids were carried use the match they arrived with.
+    const typeId = q.requirementId ? liveMatch.get(q.requirementId) ?? null : q.credentialTypeId ?? null;
+    const typeName = typeId ? ownTypeNames.get(typeId) : undefined;
+    if (!typeId || !typeName) {
+      unmatched.push({ name: q.name, severity: q.severity });
+      if (q.severity === 'hard') blockAll.push(`${employerName}'s ${q.name} isn't matched to your credentials yet`);
+      continue;
+    }
+    rules.push({ credentialTypeId: typeId, typeName, scope: 'all_workers', role: null, severity: q.severity, ...(q.forDuty ? { forDuty: q.forDuty } : {}) });
+  }
+  return { rules, blockAll, unmatched };
+}

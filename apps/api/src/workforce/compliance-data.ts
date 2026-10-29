@@ -19,6 +19,10 @@ export async function complianceContext(db: PoolClient, tenantId: string) {
     evaluate(roles: string[], credentials: CredentialFacts[], rightToWork: RightToWorkFacts | null, onDate = today, extraRules: RequirementRule[] = []) {
       return workerCompliance(roles, extraRules.length ? [...rules, ...extraRules] : rules, credentials, onDate, settings.expiringWindowDays, rightToWork);
     },
+    /** Against these rules only, not the business's own (an agency checking its people against an employer's requirements). */
+    evaluateOnly(roles: string[], credentials: CredentialFacts[], rightToWork: RightToWorkFacts | null, onDate: string, onlyRules: RequirementRule[]) {
+      return workerCompliance(roles, onlyRules, credentials, onDate, settings.expiringWindowDays, rightToWork);
+    },
   };
 }
 
