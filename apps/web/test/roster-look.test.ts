@@ -30,4 +30,10 @@ describe('roster card looks', () => {
     expect(simpleLine(shift, 'person')).toBe('Barista');
     expect(simpleLine({ ...shift, equipment: [{}, {}] }, 'equipment')).toBe('Sam Example +2');
   });
+
+  it('names who is on an area row card, or says Unfilled (29 Oct)', () => {
+    expect(simpleLine(shift, 'area')).toBe('Sam Example · Barista');
+    expect(simpleLine({ ...shift, workerName: null }, 'area')).toBe('Unfilled · Barista');
+    expect(detailLines(shift, 'area', 'area')).toEqual(['7.5 hours']);
+  });
 });

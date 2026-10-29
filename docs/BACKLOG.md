@@ -73,6 +73,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## Ribbon roster (26 Oct)
 
+- [x] By area view: one row per area, names on the cards, hours filled / needed (David, 29 Oct).
+
 - [x] Top menu instead of the side menu (David, 29 Oct, for the design phase): menu bar across the top with Workers, Clients & sites and Equipment & items as small menus; Settings and the person's menu on the right. Roster toolbar in one row (site, period, View menu) after looking at Deputy; Needs attention shows five then "Show N more"; stage counts in a bar along the bottom. Then (29 Oct, David): summary strip up top, and Needs attention, Add shifts and Templates and copying side by side, a third each, closed when the page opens, so the roster itself is near the top. Full page view (29 Oct, David): a button that hides the menu bar and folds the boxes above the roster into one full-width section that drops down when clicked, remembered per browser, for the biggest working screen.
 - [x] The ribbon: coloured stage line on every shift (booked green, assigned yellow, open grey, cancelled pink); cancelled shifts stay visible.
 - [x] Left strip: people / equipment / items, hours and balance, drag to assign or book.

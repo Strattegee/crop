@@ -238,7 +238,8 @@ const hoursText = (h: number) => `${Math.round(h * 100) / 100} ${h === 1 ? 'hour
 export function detailLines(s: CardShift, kind: string, view: 'area' | 'person'): string[] {
   const out: string[] = [];
   // The usual card names the person (or the role while nobody is on it); say the other one too.
-  if (kind !== 'person' && kind !== 'cancelled' && s.workerName && !s.equipmentOnly) out.push(s.role);
+  // An area row's card already names both the person and the role.
+  if (kind !== 'person' && kind !== 'cancelled' && kind !== 'area' && s.workerName && !s.equipmentOnly) out.push(s.role);
   if (s.areaName && (view === 'person' || kind === 'person')) out.push(s.areaName);
   out.push(hoursText(s.hours));
   if (s.pulledOutName) out.push(`${s.pulledOutName} pulled out`);
@@ -249,7 +250,10 @@ export function detailLines(s: CardShift, kind: string, view: 'area' | 'person')
 
 /** The one line on a Simple card: who is on it, else the role (or the equipment-only label). */
 export function simpleLine(s: CardShift & { equipment?: unknown[] }, kind: string): string {
-  const who = kind === 'person' || s.status === 'cancelled' ? s.role : s.workerName ?? s.role;
+  // Area rows (29 Oct): who is on it, or Unfilled, then the role.
+  const who = kind === 'area' && s.status !== 'cancelled'
+    ? (s.equipmentOnly ? s.role : `${s.workerName ?? 'Unfilled'} · ${s.role}`)
+    : kind === 'person' || s.status === 'cancelled' ? s.role : s.workerName ?? s.role;
   const extra = s.equipment?.length ? ` +${s.equipment.length}` : '';
   return `${who}${extra}`;
 }
