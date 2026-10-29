@@ -38,7 +38,8 @@ export default async function MatchPage({ params, searchParams }: { params: Prom
       <p className="muted">
         For each credential {employer} asks for, choose the credential you record for it. Must have and should have need a match before {employer} can
         send you requests; optional ones help but aren’t needed. CROP then checks your people against {employer}’s requirements using your records;
-        {` ${employer}`} never sees the records themselves. If {employer} adds a requirement later, you’ll be asked to match it.
+        {` ${employer}`} never sees the records themselves, only which of its listed credentials your person held on the day (so they count towards
+        its site cover and equipment operator checks). If {employer} adds a requirement later, you’ll be asked to match it.
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className={`notice ${view.link.status === 'active' ? 'success' : ''}`}>{view.link.statusWords}</div>

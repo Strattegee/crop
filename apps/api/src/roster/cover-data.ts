@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { credentialFactsByWorker } from '../workforce/compliance-data.js';
 import { credentialStatus, type CredentialFacts } from '../workforce/compliance.js';
+import { agencyCredentialsForShifts } from './agency-credentials.js';
 import { coverGaps, coverGapWords, type CoverShift } from './cover.js';
 
 /** A gap in a cover rule, as the office sees it (local times in the site's time zone). */
@@ -57,6 +58,9 @@ export async function coverGapsBetween(db: PoolClient, from: Date, to: Date, fac
       order by s.starts_at, s.id`, [from, to, facilityId])).rows;
   if (!shifts.length) return [];
   const creds = await credentialFactsByWorker(db, [...new Set(shifts.map(s => s.worker_id))]);
+  // An agency's person holds what their agency confirmed for that shift (they have no records here).
+  const agency = await agencyCredentialsForShifts(db, shifts.map(s => s.id));
+  const credsOn = (s: { id: string; worker_id: string }) => agency.get(`${s.id}:${s.worker_id}`) ?? creds.get(s.worker_id) ?? [];
 
   const bySite = new Map<string, typeof shifts>();
   for (const s of shifts) bySite.set(s.facility_id, [...(bySite.get(s.facility_id) ?? []), s]);
@@ -69,7 +73,7 @@ export async function coverGapsBetween(db: PoolClient, from: Date, to: Date, fac
       if ((rule.facility_id && rule.facility_id !== siteId) || seen.has(rule.credential_type_id)) continue;
       seen.add(rule.credential_type_id);
       const cover: CoverShift[] = list.map(s => ({
-        id: s.id, startsAt: s.starts_at, endsAt: s.ends_at, holds: holdsOn(creds.get(s.worker_id) ?? [], rule.credential_type_id, s.local_date),
+        id: s.id, startsAt: s.starts_at, endsAt: s.ends_at, holds: holdsOn(credsOn(s), rule.credential_type_id, s.local_date),
       }));
       const { facility_name: facilityName, timezone } = list[0];
       for (const g of coverGaps(cover)) {

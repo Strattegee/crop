@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { credentialFactsByWorker } from '../workforce/compliance-data.js';
+import { agencyCredentialsForShifts } from './agency-credentials.js';
 import { loadSettings } from '../workforce/settings.js';
 import { loadShiftFacts } from './eligibility-data.js';
 import type { Eligibility, OtherShift } from './eligibility.js';
@@ -65,7 +66,9 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
     `select sa.worker_id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name
        from shift_assignments sa join workers w on w.id = sa.worker_id
       where sa.shift_id = $1 and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')`, [shiftId])).rows[0];
-  const person = p ? { name: p.name, credentials: (await credentialFactsByWorker(db, [p.worker_id])).get(p.worker_id) ?? [] } : null;
+  // An agency's person holds what their agency confirmed for this shift (they have no records here).
+  const agencyCreds = p ? (await agencyCredentialsForShifts(db, [shiftId])).get(`${shiftId}:${p.worker_id}`) : undefined;
+  const person = p ? { name: p.name, credentials: agencyCreds ?? (await credentialFactsByWorker(db, [p.worker_id])).get(p.worker_id) ?? [] } : null;
 
   return items.map(i => ({
     equipmentId: i.id, name: i.name, typeName: i.type_name, status: i.status,
