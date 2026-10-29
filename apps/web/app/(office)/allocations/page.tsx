@@ -3,14 +3,14 @@ import { api } from '../../../lib/api';
 import { businessZone, whenIn } from '../../../lib/business';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
-import { putForward } from './actions';
+import { pullOut, putForward } from './actions';
 
 export const dynamic = 'force-dynamic';
 
 type Requirement = { name: string; severity: 'hard' | 'warning' | 'optional'; forDuty: string | null; credentialTypeId: string | null };
 type Request = {
   id: string; connectionId: string; employerName: string; siteName: string; siteRegion: string | null; areaName: string | null; role: string;
-  when: string; startsIn: string; breakMinutes: number; duties: string[]; requirements: Requirement[]; note: string | null;
+  startsAt: string; when: string; startsIn: string; breakMinutes: number; duties: string[]; requirements: Requirement[]; note: string | null;
   status: 'open' | 'filled' | 'withdrawn' | 'expired'; receivedAt: string; closedAt: string | null; closedReason: string | null; unmatched: number;
   placedName: string | null; placedByName: string | null; placement: string | null; placementState: string | null;
 };
@@ -36,13 +36,14 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
     [r.id, await api<People>(`/agency-requests/${r.id}/people`).catch(() => null)] as const)));
   const closed = list.filter(r => r.status !== 'open');
   const shift = tw.lower(T.shift);
+  const now = Date.now();
   return (
     <>
       <h1>Allocations</h1>
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
         Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
-        Put someone forward and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose).
+        Put someone forward and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose). If they can&apos;t go after all, pull them out before the {shift} starts; you&apos;re emailed when the employer approves, declines or takes them off.
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className="card">
@@ -118,6 +119,15 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
                   <td>
                     {r.placedName ? <><strong>{r.placedName}</strong> · {r.placementState ?? r.placement}{r.placedByName ? <span className="muted"> · put forward by {r.placedByName}</span> : null}</>
                       : <>{CLOSED[r.status] ?? r.status}{r.closedReason ? <span className="muted"> · {r.closedReason}</span> : null}</>}
+                    {r.placedName && (r.placement === 'waiting' || r.placement === 'booked') && new Date(r.startsAt).getTime() > now && (
+                      <details className="small">
+                        <summary style={{ cursor: 'pointer' }}>Pull out</summary>
+                        <form action={pullOut.bind(null, r.id, r.placedName, r.employerName)} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                          <input name="reason" maxLength={300} placeholder={`Reason for ${r.employerName} (optional, no health details)`} aria-label="Reason" />
+                          <button className="btn small secondary" title={`Take ${r.placedName} off ${r.employerName}'s ${shift}`}>Pull {r.placedName} out</button>
+                        </form>
+                      </details>
+                    )}
                   </td>
                 </tr>
               ))}

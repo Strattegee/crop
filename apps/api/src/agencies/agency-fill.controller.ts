@@ -11,7 +11,7 @@ import { actorOf } from '../roster/publishing.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
 import { T, wordsFor } from '../terms/words.js';
-import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, placementWords, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
+import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
 import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
@@ -70,6 +70,54 @@ async function tellEmployer(pool: Pool, employerTenantId: string, placementId: s
       await queueNotification(db, employerTenantId, { channel: 'email', to: e.email, template: 'agency_put_forward', subject, body, dedupeKey: `agency-put-forward:${placementId}:${e.email.toLowerCase()}` });
     }
   });
+}
+
+/** Emails the employer's owners and admins that an agency took its person back. Runs in the employer's own business. */
+async function tellEmployerPulledOut(pool: Pool, employerTenantId: string, placementId: string) {
+  await withTenant(pool, employerTenantId, async db => {
+    const p = (await db.query<{ agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
+      siteTimezone: string; reason: string | null; shiftId: string; weekStart: string }>(
+      `select p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName",
+              a.name as "areaName", s.starts_at as "startsAt", s.ends_at as "endsAt", f.timezone as "siteTimezone", p.pulled_out_reason as reason,
+              s.id as "shiftId", to_char(date_trunc('week', s.starts_at at time zone f.timezone), 'YYYY-MM-DD') as "weekStart"
+         from agency_placements p join workers w on w.id = p.worker_id join shifts s on s.id = p.shift_id
+         join facilities f on f.id = s.facility_id left join areas a on a.id = s.area_id
+        where p.id = $1`, [placementId])).rows[0];
+    if (!p) return;
+    const w = await wordsFor(db);
+    const { subject, body } = pulledOutEmail(p, process.env.APP_URL || null, w);
+    const emails = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
+    for (const e of emails) {
+      await queueNotification(db, employerTenantId, { channel: 'email', to: e.email, template: 'agency_pulled_out', subject, body, dedupeKey: `agency-pulled-out:${placementId}:${e.email.toLowerCase()}` });
+    }
+  });
+}
+
+/**
+ * Emails agencies about what the employer did with the people they put forward (approved, declined, taken off,
+ * recorded as pulled out, shift cancelled). The employer's change marks the agency's copy; each mark is taken and
+ * its email queued in one transaction in the agency's own business. Returns how many were told.
+ */
+export async function tellPlacementChanges(pool: Pool, limit = 50): Promise<number> {
+  const pending = (await pool.query<{ agency_tenant_id: string; inbox_id: string }>('select agency_tenant_id, inbox_id from app_agency_placement_notices($1)', [limit])).rows;
+  let told = 0;
+  for (const n of pending) {
+    await withTenant(pool, n.agency_tenant_id, async db => {
+      const notice = (await db.query<{ notice: Placement | null }>('select app_agency_take_notice($1) as notice', [n.inbox_id])).rows[0]?.notice;
+      if (!notice || notice === 'waiting') return;
+      const row = (await db.query<InboxRow>(`select ${INBOX_COLS} from agency_inbox where id = $1`, [n.inbox_id])).rows[0];
+      if (!row?.placedName) return;
+      const w = await wordsFor(db);
+      const { subject, body } = placementChangedEmail({ ...row, personName: row.placedName, placement: notice }, process.env.APP_URL || null, w);
+      const emails = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
+      for (const e of emails) {
+        await queueNotification(db, n.agency_tenant_id, { channel: 'email', to: e.email, template: 'agency_placement_changed', subject, body,
+          dedupeKey: `agency-placement:${n.inbox_id}:${notice}:${e.email.toLowerCase()}` });
+      }
+      told++;
+    });
+  }
+  return told;
 }
 
 /**
@@ -295,6 +343,27 @@ export class AgencyFillController {
     });
   }
 
+  /**
+   * Agency side: take back the person this business put forward for a request (`{ reason? }`, which the employer
+   * sees), before the shift starts. The employer's shift opens again with them shown as pulled out, and the
+   * employer's office is emailed. Refused only when the employer has locked the week.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('agency-requests/:id/pull-out')
+  @HttpCode(200)
+  async pullOut(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const reason = text(body ?? {}, 'reason', { max: 300 });
+    const done = await withTenant(this.pool, t.tenantId, async db => {
+      if (!(await db.query('select 1 from agency_inbox where id = $1', [id])).rowCount) throw new NotFoundException('Request not found');
+      return (await db.query<{ employer_tenant_id: string; placement_id: string }>('select * from app_agency_pull_out($1, $2)', [id, reason ?? null])).rows[0];
+    }, actorOf(auth));
+    await tellEmployerPulledOut(this.pool, done.employer_tenant_id, done.placement_id);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const r = (await db.query<InboxRow>(`select ${INBOX_COLS} from agency_inbox where id = $1`, [id])).rows[0];
+      return { ...r, when: localWhen(r), placementState: r.placement ? placementWords(r.placement, r.employerName) : null };
+    });
+  }
+
   /** For the menu: whether this business supplies any employer (an agency side link) and how many requests are open. */
   @Roles(...OFFICE_ROLES)
   @Get('allocations/summary')
@@ -317,7 +386,7 @@ export class AgencyFillController {
 
 /**
  * The agency fill timer: every minute, closes requests whose shift has started and sends each request on to the
- * next agency when its time comes. Off with AGENCY_ESCALATE=off or NOTIFY_DISPATCH=off (tests call runOnce).
+ * next agency when its time comes, and emails agencies about their people's placements changing. Off with AGENCY_ESCALATE=off or NOTIFY_DISPATCH=off (tests call runOnce).
  */
 @Injectable()
 export class AgencyEscalator implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -344,6 +413,8 @@ export class AgencyEscalator implements OnApplicationBootstrap, OnApplicationShu
     try {
       const sent = (await this.pool.query<Delivery>('select agency_tenant_id, inbox_id from app_agency_escalate(50)')).rows;
       await tellAgencies(this.pool, sent);
+      // What employers did with the people agencies put forward.
+      await tellPlacementChanges(this.pool);
       return sent.length;
     } finally {
       this.running = false;
