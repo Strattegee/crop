@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { LegalFooter } from '../../../lib/legal/legal-footer';
 import { offerLink, type OfferView } from '../../../lib/offer-link';
 
 export const dynamic = 'force-dynamic';
@@ -91,6 +92,7 @@ export default async function OfferPage({ params, searchParams }: {
         </section>
       )}
       <p className="muted small">This link is just for you. Please don&apos;t forward it.</p>
+      <LegalFooter />
     </main>
   );
 }

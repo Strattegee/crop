@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { LegalFooter } from '../lib/legal/legal-footer';
 import { apiBaseUrl } from '../lib/config';
 import { currentUser, OFFICE_ROLES } from '../lib/current-user';
 
@@ -78,6 +79,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           {health && <> · Database: <strong>{health.db}</strong> · Version: {health.version}</>}
         </p>
       </section>
+      <LegalFooter />
     </main>
   );
 }

@@ -26,6 +26,7 @@ prog={
  'MATCH':('done',1,'26 Oct','Hard blocks and warnings, availability and leave, with screens: usual week, date changes, leave requests and approvals. Since then also shift duties (27 Oct), cover rules and end of employment (28 Oct)'),
  'BCAST':('active',.65,None,'Bank fill: open shifts offered to several bank and casual staff by email and text, first to accept is booked, no double booking. Staff accept or decline from a one-off link in the message, no sign-in needed. Uses availability and leave. Worker app to come'),
  'ONB':('active',.42,None,'Onboarding checklists (28 Oct): each business keeps checklists of what a new person needs, with tasks the office ticks and checks that tick themselves (credentials checked and current, right to work, employment terms); start one when adding a person, who stays off the roster until an owner or admin finishes it and makes them active. Asking the person by email or text for what is still needed from them done 28 Oct. Applying online, uploading through a link and the worker app to do'),
+ 'TOS':('active',.5,None,'Draft privacy policy, terms, data agreement, acceptable use and schedules published on the test site (29 Oct); details such as ABN, contacts and dates still to fill, then legal review'),
  'PROTO':('done',1,'26 Oct','Ribbon roster concept endorsed by Steve; first version built'),
 }
 rows=[]
