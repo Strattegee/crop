@@ -401,3 +401,14 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-head > .roster-toolbar { order: 3; }
 .roster-head > .roster-state > .roster-tools { order: 4; margin-left: auto; }
 .tool-period-label { white-space: nowrap; }
+
+/* Full page view (David, 29 Oct): no menu bar, the boxes above the roster fold into one full-width section. */
+body:has(.roster-page.full) .appbar { display: none; }
+.content:has(.roster-page.full) { padding: 10px 16px 0; }
+.roster-page.full { gap: 8px; }
+.roster-page.full .roster-head h1 { font-size: 20px; }
+.roster-info { margin: 0; padding: 8px 14px; }
+.roster-info > summary { cursor: pointer; }
+.roster-info[open] > summary { margin-bottom: 10px; }
+.roster-info[open] { display: flex; flex-direction: column; gap: 12px; }
+.tool-full { margin: 0; }

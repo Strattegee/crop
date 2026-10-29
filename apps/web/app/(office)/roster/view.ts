@@ -208,6 +208,8 @@ export function monthCopyWeeks(anyDayInMonth: string): { mondays: string[]; next
 }
 
 /** Remembers whether the office opened or closed the Needs attention panel (per browser, a year). */
+/** Remembers the roster's full page view (the menu bar and the boxes above the roster folded away; David, 29 Oct). */
+export const ROSTER_FULL_COOKIE = 'crop_roster_full';
 export const ATTENTION_COOKIE = 'crop_attention';
 
 /**
