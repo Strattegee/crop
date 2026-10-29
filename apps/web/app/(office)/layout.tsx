@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { api } from '../../lib/api';
 import { currentAgency, currentUser, OFFICE_ROLES } from '../../lib/current-user';
 import { TopNav, UserMenu, type NavItem, type NavLink } from './nav';
 import { FUNCTIONS } from '../../lib/functions';
@@ -35,6 +36,13 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
     const links = g.codes.map(link).filter((l): l is NavLink => l !== null);
     return { label: g.label ? g.label(w) : links[0]?.label ?? '', links };
   }).filter(i => i.links.length);
+  // Allocations (agency fill, function code 2200) only for businesses that supply an employer, after the Roster.
+  const alloc = await api<{ agencyLinks: number; open: number }>('/allocations/summary').catch(() => null);
+  const allocLink = link(2200);
+  if (alloc && alloc.agencyLinks > 0 && allocLink) {
+    const at = items.findIndex(i => i.links.some(l => l.code === 2000));
+    items.splice(at + 1, 0, { label: alloc.open ? `${allocLink.label} (${alloc.open})` : allocLink.label, links: [allocLink] });
+  }
   const settings = link(9000)!;
   const platform = user.me.platformAdmin ? link(9900) : null;
   const name = user.me.name ?? user.me.email;

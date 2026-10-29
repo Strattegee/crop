@@ -5,7 +5,7 @@ import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  agencyFill, agencyFillNext, agencyFillWithdraw, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
@@ -48,6 +48,13 @@ type FacilityDetail = Facility & { areas: { id: string; name: string; active: bo
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; letter?: string | null; startTime: string; endTime: string; active: boolean };
 type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
+/** `GET /shifts/:id/agency-fill` (migration 0040). */
+type AgencyFillState = {
+  request: { id: string; status: 'open' | 'filled' | 'withdrawn' | 'expired'; note: string | null; createdByName: string | null; createdAt: string; closedReason: string | null } | null;
+  rounds: { id: string; agencyName: string; position: number; dueAt: string; sentAt: string | null; state: 'sent' | 'waiting' | 'skipped'; skippedReason: string | null; dueIn: string | null }[];
+  next: { agencyName: string; dueIn: string } | null;
+  activeAgencies: number; canRequest: boolean; problem: string | null;
+};
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
 type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' | 'history'; version: number | null; publishedAt: string | null; publishedByName: string | null; changesSincePublish: number; shifts: number; changeRefusal?: string | null; pendingRequests?: number };
@@ -246,12 +253,14 @@ export default async function RosterPage({ searchParams }: {
   let panelError: string | null = null;
   // Duties are needed by the shift panel and the Add shifts form.
   const liveShift = selected && selected.status !== 'cancelled' ? selected : null;
-  const [shiftHistory, duties, shiftItems, stockHere] = await Promise.all([
+  const [shiftHistory, duties, shiftItems, stockHere, agencyState] = await Promise.all([
     selected ? api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     api<Duty[]>('/shift-duties').catch(() => [] as Duty[]),
     // Items on the shift (backlog item 5): what it used, and stock at its site for the item list.
     liveShift ? api<ShiftItems>(`/shifts/${liveShift.id}/items?byPerson=true`).catch(() => null) : Promise.resolve(null),
     liveShift ? api<{ itemId: string; onHand: number }[]>(`/stock?facilityId=${liveShift.facilityId}`).catch(() => []) : Promise.resolve([]),
+    // Agency fill (backlog items 7–8): where the shift stands with the business's agencies.
+    selected && !selected.equipmentOnly ? api<AgencyFillState>(`/shifts/${selected.id}/agency-fill`).catch(() => null) : Promise.resolve(null),
   ]);
   const itemChoices = liveShift ? shiftItemChoices(itemList, stockHere) : [];
   if (selected && selected.status !== 'cancelled') {
@@ -1040,7 +1049,7 @@ export default async function RosterPage({ searchParams }: {
                         ))}
                       </details>
                     )}
-                    <p className="muted small" style={{ marginTop: 10 }}>{tw.one(T.agency)} fill comes next: send the {tw.lower(T.shift)} to your {tw.lower(T.agency, true)} when your own staff can&apos;t cover it.</p>
+                    {agencyState && <AgencyFillSection st={agencyState} shiftId={selected.id} here={here} when={when} tw={tw} />}
                   </>
                 )}
               </section>
@@ -1149,6 +1158,48 @@ export default async function RosterPage({ searchParams }: {
           ))}
         {attention && attention.total > 0 && <span className="att-count"><b>{attention.total}</b> need attention{attention.urgent > 0 && <> · <b className="bad">{attention.urgent}</b> within a day</>}</span>}
       </div>
+    </div>
+  );
+}
+
+/** The shift panel's Agency fill part: send to agencies in order, see who has it and who's next, bring forward or take back. */
+function AgencyFillSection({ st, shiftId, here, when, tw }: { st: AgencyFillState; shiftId: string; here: string; when: (iso: string) => string; tw: Words }) {
+  const agencies = tw.lower(T.agency, true);
+  const open = st.request?.status === 'open' ? st.request : null;
+  const closed = st.request && !open ? st.request : null;
+  return (
+    <div className="agencyfill" style={{ marginTop: 12 }}>
+      <p style={{ margin: '0 0 6px' }}><strong>{tw.one(T.agency)} fill</strong> <span className="muted">· send it to your {agencies} when your own staff can&apos;t cover it</span></p>
+      {open && (
+        <>
+          <p className="small" style={{ margin: '0 0 4px' }}>With {agencies} since {when(open.createdAt)}{open.createdByName ? ` (${open.createdByName})` : ''}.{open.note ? ` Note: ${open.note}` : ''}</p>
+          {st.rounds.map(r => (
+            <div key={r.id} className="panel-row small">
+              <span>{r.position}. {r.agencyName}</span>
+              <span className="muted">{r.state === 'sent' ? `has it since ${when(r.sentAt!)}` : r.state === 'waiting' ? `gets it ${r.dueIn}` : r.skippedReason ?? 'skipped'}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            {st.next && (
+              <form action={agencyFillNext.bind(null, shiftId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Send to {st.next.agencyName} now</button></form>
+            )}
+            <form action={agencyFillWithdraw.bind(null, shiftId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Take it back</button></form>
+          </div>
+          <p className="muted small" style={{ margin: '6px 0 0' }}>Putting someone on it yourself takes it back from the {agencies} too.</p>
+        </>
+      )}
+      {!open && closed && (
+        <p className="muted small" style={{ margin: '0 0 6px' }}>Last sent {when(closed.createdAt)}: {closed.closedReason ?? closed.status}.</p>
+      )}
+      {!open && st.canRequest && (
+        <form action={agencyFill.bind(null, shiftId)} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="hidden" name="back" value={here} />
+          <label className="sr-only" htmlFor="agencyNote">Note for the {agencies}</label>
+          <input id="agencyNote" name="note" maxLength={300} placeholder={`Note for the ${agencies} (optional)`} style={{ flex: '1 1 180px' }} />
+          <button className="btn small">Send to {agencies}</button>
+        </form>
+      )}
+      {!open && !st.canRequest && st.problem && <p className="muted small" style={{ margin: 0 }}>{st.problem}</p>}
     </div>
   );
 }

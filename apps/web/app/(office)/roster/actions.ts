@@ -79,6 +79,24 @@ export async function offer(shiftId: string, f: FormData) {
   }), `Offered to ${workerIds.length} ${workerIds.length === 1 ? 'person' : 'people'}. The first to accept gets it.`);
 }
 
+/** Agency fill (migration 0040): send an open shift to the business's agencies, first in order now, the rest on the timer. */
+export async function agencyFill(shiftId: string, f: FormData) {
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/agency-fill`, { method: 'POST', body: { note: str(f, 'note') } }),
+    `Sent to your first ${tw.lower(T.agency)}. The next ones get it in turn if nobody is put forward.`);
+}
+
+export async function agencyFillNext(shiftId: string, f: FormData) {
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/agency-fill/next`, { method: 'POST' }), `Sent to the next ${tw.lower(T.agency)}.`);
+}
+
+export async function agencyFillWithdraw(shiftId: string, f: FormData) {
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/agency-fill/withdraw`, { method: 'POST', body: { reason: str(f, 'reason') } }),
+    `Taken back from your ${tw.lower(T.agency, true)}.`);
+}
+
 export async function recordReply(offerId: string, reply: 'accept' | 'decline', f: FormData) {
   await attempt(back(f), () => api(`/offers/${offerId}/${reply}`, { method: 'POST' }), reply === 'accept' ? 'Accepted and booked.' : 'Recorded as declined.');
 }

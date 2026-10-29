@@ -37,7 +37,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 1000 | Dashboard | Dashboard |
 | 2000 | Roster | term 1045 |
 | 2100 | Bank fill (roster side panel) | term 1080 + "fill" (reserved) |
-| 2200 | Agency fill / allocation (reserved) | |
+| 2200 | Allocations: requests from employers this business supplies (agency fill; in the menu only for businesses with an agency-side link) | "Allocations" |
 | 3000 | Workers | term 1010 |
 | 3500 | Compliance | Compliance |
 | 4000 | Clients | term 1015 |

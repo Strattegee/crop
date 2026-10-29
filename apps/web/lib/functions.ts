@@ -5,6 +5,7 @@
 export const FUNCTIONS = [
   { code: 1000, path: '/dashboard', label: 'Dashboard' },
   { code: 2000, path: '/roster', term: 1045, one: true },
+  { code: 2200, path: '/allocations', label: 'Allocations' },
   { code: 3000, path: '/workers', term: 1010 },
   { code: 3200, path: '/leave', label: 'Leave' },
   { code: 3500, path: '/compliance', label: 'Compliance' },
