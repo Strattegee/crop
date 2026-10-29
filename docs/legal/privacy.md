@@ -1,6 +1,6 @@
 # 3. PUBLIC PRIVACY POLICY — DRAFT
 
-Effective \[DATE\] \| Last updated \[DATE\] \| Operator: Strattegee Pty Ltd, ABN \[ABN\], \[ADDRESS\].
+Effective \[DATE\] \| Last updated \[DATE\] \| Operator: Strattegee Pty Ltd, ABN 74 667 291 965, 1330 Malvern Road, Malvern VIC 3144, Australia.
 
 # 1. Who we are
 
