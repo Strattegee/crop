@@ -270,6 +270,6 @@ Newest first. One entry per working session or scheduled run.
 
 - Shipped: optional requirements. Besides "must have" (blocks) and "should have" (a warning), a credential can now be marked "Optional" in Settings → Who needs what and on a shift duty. Optional ones are listed on the person's page ("has one" / "not recorded") so everyone can see they're useful, but they never stop anyone working, never warn, and aren't added to onboarding checklists. Industry templates can carry them too. This is the third level David's agency emails use (must have / ideal / optional).
 - Not started: agency connections. David approved the design this morning and his own session may be building it, so this run left it alone to avoid two sessions on the same piece.
-- Next: agency connections (connections and credential matching first), or uploading documents through a link (also approved today).
-- Waiting on David: the worker app's client ID in Zitadel; the public apply form (spam protection and the form's questions).
+- Next: agency connections (connections and credential matching first), uploading documents through a link (also approved today), or the worker app's sign-in (its client ID was confirmed today).
+- Waiting on David: the public apply form (spam protection and the form's questions).
 
