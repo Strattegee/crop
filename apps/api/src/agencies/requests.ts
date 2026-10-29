@@ -228,3 +228,55 @@ export function pulledOutEmail(p: {
   ];
   return { subject: `${p.agencyName} pulled ${p.personName} out: ${p.role} on ${localDay(p.startsAt, p.siteTimezone)}`, body: lines.join('\n') };
 }
+
+/** The shift as the agency's person sees it: "Nurse at Ward 3, Bayside Campus (Bayside Hospital), Tue 3 Nov, 7:00am to 3:30pm". */
+export function agencyShiftLine(s: { employerName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date; siteTimezone: string }) {
+  const where = [s.areaName, s.siteName].filter(Boolean).join(', ');
+  return `${s.role} at ${where} (${s.employerName}), ${localWhen(s)}`;
+}
+
+type AgencyOfferShift = Parameters<typeof agencyShiftLine>[0];
+
+/**
+ * The offer to one of the agency's own people (email and text), from the agency, in the agency's words. The first to
+ * accept goes. First name and the shift only.
+ */
+export function agencyOfferMessage(firstName: string, agency: string, s: AgencyOfferShift, expiresLabel: string | null, link: string | null, w: Words = DEFAULT_WORDS) {
+  const what = agencyShiftLine(s);
+  const aShift = w.a(T.shift);
+  const until = expiresLabel ? ` The offer is open until ${expiresLabel}.` : '';
+  const subject = `${w.one(T.shift)} available: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}`;
+  if (link) {
+    return {
+      subject,
+      email: `Hi ${firstName},\n\n${agency} has ${aShift} for you:\n\n${what}\n\nAccept or decline here: ${link}\n\nThe first person to accept goes.${until} This link is just for you, so please don't forward it.\n\nThanks,\n${agency}`,
+      sms: `Hi ${firstName}, ${agency} has ${aShift} for you: ${what}. Accept or decline: ${link} (first to accept goes).${until}`,
+    };
+  }
+  return {
+    subject,
+    email: `Hi ${firstName},\n\n${agency} has ${aShift} for you:\n\n${what}\n\nContact ${agency} if you'd like it. The first person to accept goes.${until}\n\nThanks,\n${agency}`,
+    sms: `Hi ${firstName}, ${agency} has ${aShift} for you: ${what}. Contact ${agency} if you'd like it; the first to accept goes.${until}`,
+  };
+}
+
+/** To the person who accepted: booked, or waiting for the employer's approval. */
+export function agencyAcceptedMessage(firstName: string, agency: string, s: AgencyOfferShift, booked: boolean, w: Words = DEFAULT_WORDS) {
+  const what = agencyShiftLine(s);
+  const shift = w.lower(T.shift);
+  const state = booked ? `You're booked.` : `${s.employerName} approves people from ${agency} first, so you're not booked yet. ${agency} will confirm with you.`;
+  return {
+    subject: booked ? `Booked: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}` : `Waiting for approval: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}`,
+    email: `Hi ${firstName},\n\nThanks for taking this ${shift}:\n\n${what}\n\n${state}\n\nThanks,\n${agency}`,
+    sms: `Hi ${firstName}, thanks for taking the ${shift}: ${what}. ${state}`,
+  };
+}
+
+/** To the others who were offered it, once someone has it (email only). */
+export function agencyFilledMessage(firstName: string, agency: string, s: AgencyOfferShift, w: Words = DEFAULT_WORDS) {
+  const shift = w.lower(T.shift);
+  return {
+    subject: `${w.one(T.shift)} filled: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}`,
+    email: `Hi ${firstName},\n\nThe ${shift} we offered you has been filled:\n\n${agencyShiftLine(s)}\n\nThanks for your time.\n\n${agency}`,
+  };
+}

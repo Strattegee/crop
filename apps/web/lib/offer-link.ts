@@ -8,14 +8,23 @@ export type OfferView = {
   expiresAt: string | null;
   /** The business's word for a shift, e.g. { one: 'Job', lower: 'job' }; older APIs may not send it. */
   word?: { one: string; lower: string };
+  /** Agency offers: the employer the agency's person would work for. */
+  employer?: string;
   shift: { label: string; role: string; date: string; start: string; end: string; site: string; area: string | null; timezone: string; cancelled: boolean };
 };
 
 export type OfferResult = { ok: true; view: OfferView } | { ok: false; status: number; message: string };
 
+/** Whose offer: an employer's to its own staff (`/offer/…`) or an agency's to its people (`/agency-offer/…`). */
+export type OfferKind = 'staff' | 'agency';
+export const OFFER_PATHS: Record<OfferKind, { page: string; api: string }> = {
+  staff: { page: '/offer', api: '/offer-links' },
+  agency: { page: '/agency-offer', api: '/agency-offer-links' },
+};
+
 /** Calls the public offer-link API. The token is the only credential; no cookies or tokens are sent. */
-export async function offerLink(token: string, action?: 'accept' | 'decline'): Promise<OfferResult> {
-  const path = `/offer-links/${encodeURIComponent(token)}${action ? `/${action}` : ''}`;
+export async function offerLink(token: string, action?: 'accept' | 'decline', kind: OfferKind = 'staff'): Promise<OfferResult> {
+  const path = `${OFFER_PATHS[kind].api}/${encodeURIComponent(token)}${action ? `/${action}` : ''}`;
   try {
     const res = await fetch(`${apiBaseUrl()}${path}`, { method: action ? 'POST' : 'GET', cache: 'no-store' });
     const body = (await res.json().catch(() => ({}))) as OfferView & { message?: string | string[] };
