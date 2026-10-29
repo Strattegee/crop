@@ -273,3 +273,9 @@ Newest first. One entry per working session or scheduled run.
 - Next: agency connections (connections and credential matching first), uploading documents through a link (also approved today), or the worker app's sign-in (its client ID was confirmed today).
 - Waiting on David: the public apply form (spam protection and the form's questions).
 
+
+## 2026-10-29 midday, 12:30pm Melbourne (session with David)
+
+- Shipped: the legal documents David supplied are on staging at /legal: privacy policy, worker privacy notice, subscription agreement, data processing agreement, acceptable use policy, and the service level, security and data schedules. Gaps still to fill are highlighted. The home page and shift offer page link to Privacy and Legal.
+- Changed for accuracy, for the lawyer to check: the pack said CROP wouldn't hold health information or background checks, but credentials can include vaccination records and police checks, and right to work holds visa details; the privacy policy and DPA now say so. The subprocessor register lists DigitalOcean, Zitadel, Resend, ClickSend and (when switched on) Cloudflare.
+- Waiting on David: ABN, address, contact emails and effective date for the documents; the apply form's questions.

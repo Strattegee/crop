@@ -1,0 +1,14 @@
+.page { max-width: 760px; margin: 40px auto 64px; padding: 0 16px; line-height: 1.6; color: #1d262c; }
+.crumbs { font-size: 14px; color: #5d6775; margin-bottom: 8px; }
+.crumbs a { color: inherit; }
+.title { font-size: 30px; margin: 0 0 4px; }
+.version { color: #5d6775; margin: 0 0 24px; font-size: 14px; }
+.page h2 { font-size: 21px; margin: 32px 0 8px; }
+.page h3 { font-size: 17px; margin: 22px 0 6px; }
+.page table { border-collapse: collapse; width: 100%; font-size: 14px; display: block; overflow-x: auto; }
+.page th, .page td { border: 1px solid #d6dae1; padding: 6px 8px; text-align: left; vertical-align: top; }
+.page mark { background: #fff3c4; color: inherit; padding: 0 2px; border-radius: 2px; }
+.list { list-style: none; padding: 0; }
+.list li { border-top: 1px solid #e3e6ea; padding: 12px 0; }
+.list a { font-weight: 600; font-size: 17px; }
+.note { font-size: 14px; color: #5d6775; border-left: 3px solid #d6dae1; padding-left: 12px; }
