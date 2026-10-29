@@ -24,7 +24,7 @@
 
 - Supplier controls: signed processing/security terms, inventory, risk review, overseas access mapping, and notices for material changes.
 
-- Assurance: \[TEST SCHEDULE\], \[RELEVANT CERTIFICATIONS IF ACTUALLY OBTAINED\], contact for vulnerability reports \[EMAIL\].
+- Assurance: \[TEST SCHEDULE\], \[RELEVANT CERTIFICATIONS IF ACTUALLY OBTAINED\], contact for vulnerability reports info@strattegee.com.
 
 ## Schedule C — Data Lifecycle and Exit (proposed defaults to approve)
 

@@ -1,6 +1,6 @@
 # 1. MASTER SAAS SUBSCRIPTION AGREEMENT
 
-Parties: Strattegee Pty Ltd ABN \[ABN\] of \[REGISTERED ADDRESS\] (Provider, CROPwms, we/us) and the entity identified on an accepted Order (Customer, you). Effective when Customer accepts the Order and these Terms. Version 0.1 (draft), 24 October 2026.
+Parties: Strattegee Pty Ltd ABN 74 667 291 965 of 1330 Malvern Road, Malvern VIC 3144, Australia (Provider, CROPwms, we/us) and the entity identified on an accepted Order (Customer, you). Effective when Customer accepts the Order and these Terms. Version 0.1 (draft), 24 October 2026.
 
 # 1. Definitions and contract structure
 
@@ -146,4 +146,4 @@ Neither party may assign the Contract without consent not unreasonably withheld,
 
 ## 9.3 Contact
 
-Legal notices: \[LEGAL CONTACT EMAIL\]; support: \[SUPPORT EMAIL\]; privacy: \[PRIVACY EMAIL\]. An Order may specify additional notice details.
+Legal notices: info@strattegee.com; support: info@strattegee.com; privacy: info@strattegee.com. An Order may specify additional notice details.

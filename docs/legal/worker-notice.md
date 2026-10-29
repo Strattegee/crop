@@ -18,7 +18,7 @@ Installing the app does not itself mean that you consent to location tracking, c
 
 ## Your choices and help
 
-For an incorrect shift or employment record, contact your employer. For app account, privacy or security issues, contact \[SUPPORT / PRIVACY CONTACT\]. You can read CROPwms’s full Privacy Policy at cropwms.com/legal/privacy and your employer’s notice at \[EMPLOYER-SUPPLIED LINK\]. You may have legal rights to access or correct personal information held about you.
+For an incorrect shift or employment record, contact your employer. For app account, privacy or security issues, contact info@strattegee.com. You can read CROPwms’s full Privacy Policy at cropwms.com/legal/privacy and your employer’s notice at \[EMPLOYER-SUPPLIED LINK\]. You may have legal rights to access or correct personal information held about you.
 
 ## Out-of-hours notifications
 
