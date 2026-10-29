@@ -310,3 +310,36 @@ export function coveringChoices(
     .sort((a, b) => a.r - b.r || a.p.name.localeCompare(b.p.name))
     .map(({ p, r }) => ({ id: p.id, label: r === 0 ? `${p.name} · on leave` : r === 1 ? `${p.name} · leave requested` : p.name, away: r < 2 }));
 }
+
+/** Adds n days to an ISO date (yyyy-mm-dd). */
+export const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Add shifts: the last date of the run. Days ticked with no Until put the shifts on those days in the 7 days
+ * from From (David, 29 Oct: ticking Fri used to be ignored and the shift landed on From). Undefined = one shift on From.
+ */
+export function addShiftsUntil(startDate: string | undefined, endDate: string | undefined, weekdays: number[]): string | undefined {
+  if (endDate) return endDate;
+  return weekdays.length && startDate ? addDaysIso(startDate, 6) : undefined;
+}
+
+/** "Fri 30 Oct" for an ISO date, for messages after adding shifts. */
+export const shortDate = (d: string) =>
+  new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '');
+
+/** The dates Add shifts will use: every date from From to Until on the ticked days (all days when none ticked). */
+export function addShiftsDates(startDate: string, endDate: string | undefined, weekdays: number[]): string[] {
+  const out: string[] = [];
+  for (let d = startDate; d <= (endDate ?? startDate); d = addDaysIso(d, 1)) {
+    const wd = ((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+    if (!endDate || endDate === startDate || !weekdays.length || weekdays.includes(wd)) out.push(d);
+  }
+  return out;
+}
+
+/** "on Fri 30 Oct" or "on 3 days, Mon 26 Oct to Fri 30 Oct". */
+export function addShiftsWhen(dates: string[]): string {
+  if (!dates.length) return '';
+  if (dates.length === 1) return ` on ${shortDate(dates[0])}`;
+  return ` on ${dates.length} days, ${shortDate(dates[0])} to ${shortDate(dates[dates.length - 1])}`;
+}

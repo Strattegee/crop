@@ -13,6 +13,7 @@ import { SiteSelect } from './site-select';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  addDaysIso,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -93,7 +94,6 @@ type PublishedChanges = 'open' | 'managers' | 'locked';
 const CHANGE_RULE: Record<Exclude<PublishedChanges, 'open'>, string> = { managers: 'only owners and admins can change a live week', locked: 'changes to a live week are turned off' };
 /** Height of one lane of bars in the day timeline. */
 const LANE_PX = 60;
-const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
@@ -485,10 +485,10 @@ export default async function RosterPage({ searchParams }: {
           </label>
           <label>Start<input name="startTime" type="time" /></label>
           <label>End<input name="endTime" type="time" /></label>
-          <label>From<input name="startDate" type="date" required defaultValue={span === 'month' ? range.anchor : days[0]} /></label>
-          <label>Until <span className="muted">(for a block)</span><input name="endDate" type="date" /></label>
+          <label>From<input name="startDate" type="date" required defaultValue={span === 'month' ? range.anchor : days.includes(today) ? today : days[0]} /></label>
+          <label>Until <span className="muted">(optional)</span><input name="endDate" type="date" /></label>
           <fieldset className="weekdays">
-            <legend>Days (for a block)</legend>
+            <legend>Days <span className="muted">(optional: only these days, in the week from From or up to Until)</span></legend>
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
               <label key={d} className="inline"><input type="checkbox" name="weekdays" value={i + 1} />{d}</label>
             ))}
