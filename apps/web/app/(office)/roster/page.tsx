@@ -10,6 +10,7 @@ import {
 } from './actions';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
+import { minutesWords, requestStepChoices } from '../../../lib/agency-timing';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
@@ -53,10 +54,11 @@ type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
 /** `GET /shifts/:id/agency-fill` (migration 0040). */
 type AgencyFillState = {
-  request: { id: string; status: 'open' | 'filled' | 'withdrawn' | 'expired'; note: string | null; createdByName: string | null; createdAt: string; closedReason: string | null } | null;
+  request: { id: string; status: 'open' | 'filled' | 'withdrawn' | 'expired'; note: string | null; stepMinutes: number | null; createdByName: string | null; createdAt: string; closedReason: string | null } | null;
   rounds: { id: string; agencyName: string; position: number; dueAt: string; sentAt: string | null; state: 'sent' | 'waiting' | 'skipped'; skippedReason: string | null; dueIn: string | null }[];
   next: { agencyName: string; dueIn: string } | null;
   activeAgencies: number; canRequest: boolean; problem: string | null;
+  timing?: { band: 'soon' | 'today' | 'later'; bandWords: string; defaultMinutes: number; defaultWords: string };
   placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string } | null;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
@@ -1190,7 +1192,10 @@ function AgencyFillSection({ st, shiftId, here, when, tw }: { st: AgencyFillStat
       <p style={{ margin: '0 0 6px' }}><strong>{tw.one(T.agency)} fill</strong> <span className="muted">· send it to your {agencies} when your own staff can&apos;t cover it</span></p>
       {open && (
         <>
-          <p className="small" style={{ margin: '0 0 4px' }}>With {agencies} since {when(open.createdAt)}{open.createdByName ? ` (${open.createdByName})` : ''}.{open.note ? ` Note: ${open.note}` : ''}</p>
+          <p className="small" style={{ margin: '0 0 4px' }}>
+            With {agencies} since {when(open.createdAt)}{open.createdByName ? ` (${open.createdByName})` : ''}.
+            {open.stepMinutes && st.rounds.length > 1 ? ` ${minutesWords(open.stepMinutes)} between each.` : ''}{open.note ? ` Note: ${open.note}` : ''}
+          </p>
           {st.rounds.map(r => (
             <div key={r.id} className="panel-row small">
               <span>{r.position}. {r.agencyName}</span>
@@ -1216,6 +1221,13 @@ function AgencyFillSection({ st, shiftId, here, when, tw }: { st: AgencyFillStat
           <input type="hidden" name="back" value={here} />
           <label className="sr-only" htmlFor="agencyNote">Note for the {agencies}</label>
           <input id="agencyNote" name="note" maxLength={300} placeholder={`Note for the ${agencies} (optional)`} style={{ flex: '1 1 180px' }} />
+          {st.timing && st.activeAgencies > 1 && (
+            <label className="small">Next {tw.lower(T.agency)} after{' '}
+              <select name="stepMinutes" defaultValue="" title={`Your usual for a ${tw.lower(T.shift)} that ${st.timing.bandWords} (Settings → ${tw.many(T.agency)})`}>
+                {requestStepChoices(st.timing.defaultMinutes).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
+          )}
           <button className="btn small">Send to {agencies}</button>
         </form>
       )}

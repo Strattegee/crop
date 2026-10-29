@@ -5,7 +5,8 @@ import { whenIn, businessZone } from '../../../../lib/business';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
-import { cancelInvite, createInvite, endLink, moveAgency, setBookMode } from './actions';
+import { cancelInvite, createInvite, endLink, moveAgency, setBookMode, setTiming } from './actions';
+import { TIMING_BANDS, minutesWords, stepChoices, type AgencyTiming } from '../../../../lib/agency-timing';
 import { NEW_LINK_COOKIE } from './invite-cookie';
 
 export const dynamic = 'force-dynamic';
@@ -28,9 +29,11 @@ const INVITE_STATE: Record<Invite['state'], string> = { pending: 'Waiting', used
  */
 export default async function AgenciesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [data, agency, sp, zone] = await Promise.all([
+  const [data, agency, sp, zone, settings] = await Promise.all([
     api<{ links: LinkRow[]; invitations: Invite[] }>('/agency-links'), currentAgency(), searchParams, businessZone(),
+    api<{ agencyTiming: AgencyTiming }>('/settings'),
   ]);
+  const timing = settings.agencyTiming;
   const newLink = (await cookies()).get(NEW_LINK_COOKIE)?.value;
   const when = whenIn(zone);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
@@ -70,7 +73,7 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           <p className="muted">No {agencies} linked yet.{canEdit && ' Make an invitation link below.'}</p>
         ) : (
           <>
-            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency}, then the next ones on a timer (from agency fill, coming soon).</p>
+            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency} straight away, then to each next one in this order on the timer below, until someone is put forward.</p>
             <table>
               <thead><tr><th>Order</th><th>{tw.one(T.agency)}</th><th>State</th><th>People they put forward</th><th /></tr></thead>
               <tbody>
@@ -106,6 +109,35 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           </>
         )}
       </div>
+
+      {(weUse.length > 0 || canEdit) && (
+        <div className="card">
+          <h2>How long each {anAgency} gets</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            When you send a {tw.lower(T.shift)} to your {agencies}, the first gets it straight away. If nobody has been put forward, the next one
+            gets it too after this long, and so on down the list. The more urgent the {tw.lower(T.shift)}, the shorter the wait. You can choose a
+            different time when sending one.
+          </p>
+          {canEdit ? (
+            <form action={setTiming}>
+              <div className="form-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {TIMING_BANDS.map(b => (
+                  <label key={b.key}>{b.label}
+                    <select name={b.key} defaultValue={String(timing[b.key])}>
+                      {stepChoices(b.choices, timing[b.key]).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <button type="submit" className="btn secondary">Save timing</button>
+            </form>
+          ) : (
+            <ul className="small">
+              {TIMING_BANDS.map(b => <li key={b.key}>{b.label}: {minutesWords(timing[b.key])}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       {canEdit && (
         <div className="card">

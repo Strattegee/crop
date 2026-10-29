@@ -12,6 +12,7 @@ import { addDays } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { loadSettings } from './settings.js';
 import { PUBLISHED_CHANGES, type PublishedChanges } from '../roster/publishing.js';
+import { STEP_LIMITS } from '../agencies/requests.js';
 
 @ApiBearerAuth()
 @Controller()
@@ -64,15 +65,23 @@ export class ComplianceController {
     if (country && !isCountry(country)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     const published = text(body, 'publishedChanges', { max: 20 });
     if (published && !PUBLISHED_CHANGES.includes(published as PublishedChanges)) throw new BadRequestException('Choose what can change after a roster is published');
+    const timing = body?.agencyTiming as Record<string, unknown> | undefined;
+    if (timing !== undefined && (typeof timing !== 'object' || timing === null || Array.isArray(timing))) throw new BadRequestException('Agency timing must be three numbers of minutes');
+    const soon = timing ? int(timing, 'soonMinutes', 1, STEP_LIMITS.soonMinutes) : null;
+    const today = timing ? int(timing, 'todayMinutes', 1, STEP_LIMITS.todayMinutes) : null;
+    const later = timing ? int(timing, 'laterMinutes', 1, STEP_LIMITS.laterMinutes) : null;
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
       await db.query(
-        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes, country) values ($1,$2,$3,$4,$5,$6,$7)
+        `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes, country,
+           agency_step_soon_minutes, agency_step_today_minutes, agency_step_later_minutes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          on conflict (tenant_id) do update set expiring_window_days = excluded.expiring_window_days, timezone = excluded.timezone,
            sms_monthly_cap = excluded.sms_monthly_cap, min_rest_hours = excluded.min_rest_hours, published_changes = excluded.published_changes,
-           country = excluded.country`,
+           country = excluded.country, agency_step_soon_minutes = excluded.agency_step_soon_minutes,
+           agency_step_today_minutes = excluded.agency_step_today_minutes, agency_step_later_minutes = excluded.agency_step_later_minutes`,
         [t.tenantId, windowDays ?? cur.expiringWindowDays, tz ?? cur.timezone, smsCap ?? cur.smsMonthlyCap, minRest ?? cur.minRestHours,
-          published ?? cur.publishedChanges, country ?? cur.country],
+          published ?? cur.publishedChanges, country ?? cur.country,
+          soon ?? cur.agencyTiming.soonMinutes, today ?? cur.agencyTiming.todayMinutes, later ?? cur.agencyTiming.laterMinutes],
       );
       return loadSettings(db, t.tenantId);
     });

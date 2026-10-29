@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { AgencyEscalator } from '../src/agencies/agency-fill.controller.js';
-import { agencyFillProblem, agencyRules, escalationMinutes, inWords, requestArrivedEmail, roundSchedule } from '../src/agencies/requests.js';
+import { agencyFillProblem, agencyRules, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('agency fill: rules', () => {
@@ -19,6 +19,13 @@ describe('agency fill: rules', () => {
     expect(escalationMinutes(new Date('2026-11-02T02:00:00Z'), now, zone)).toBe(10);  // exactly 2 hours
     expect(escalationMinutes(new Date('2026-11-02T08:00:00Z'), now, zone)).toBe(60);  // 7pm today
     expect(escalationMinutes(new Date('2026-11-02T14:00:00Z'), now, zone)).toBe(120); // 1am tomorrow, Melbourne
+    // A business's own timing replaces the defaults band by band.
+    const own = { soonMinutes: 5, todayMinutes: 30, laterMinutes: 240 };
+    expect(escalationMinutes(new Date('2026-11-02T01:30:00Z'), now, zone, own)).toBe(5);
+    expect(escalationMinutes(new Date('2026-11-02T08:00:00Z'), now, zone, own)).toBe(30);
+    expect(escalationMinutes(new Date('2026-11-02T14:00:00Z'), now, zone, own)).toBe(240);
+    expect(timingBand(new Date('2026-11-02T08:00:00Z'), now, zone)).toBe('today');
+    expect([10, 60, 90, 120, 45].map(minutesWords)).toEqual(['10 minutes', '1 hour', '1 hour 30 minutes', '2 hours', '45 minutes']);
     const plan = roundSchedule([{ connectionId: 'b', preference: 2 }, { connectionId: 'a', preference: 1 }, { connectionId: 'c', preference: 3 }], now, 10);
     expect(plan.map(p => [p.connectionId, p.position, (p.dueAt.getTime() - now.getTime()) / 60_000])).toEqual([['a', 1, 0], ['b', 2, 10], ['c', 3, 20]]);
   });
@@ -242,6 +249,38 @@ describe('agency fill: API', () => {
     const st2 = (await http().post(`/shifts/${s2}/agency-fill/next`).set(as('empalloc')).expect(200)).body;
     expect(st2.rounds.map((r: { state: string; sentHow: string }) => [r.state, r.sentHow])).toEqual([['sent', 'first'], ['sent', 'manual']]);
     await http().post(`/shifts/${s2}/agency-fill/withdraw`).set(as('emp')).send({ reason: 'Covered by our own staff' }).expect(200);
+  });
+
+  it('uses the business’s own timing, or the gap the office chooses when sending', async () => {
+    const s = await newShift(40); // tomorrow or later
+    expect((await http().get(`/shifts/${s}/agency-fill`).set(as('emp')).expect(200)).body.timing)
+      .toEqual({ band: 'later', bandWords: 'starts tomorrow or later', defaultMinutes: 120, defaultWords: '2 hours' });
+    // Only owners and admins set it; each band within its limits.
+    await http().patch('/settings').set(as('empalloc')).send({ agencyTiming: { laterMinutes: 45 } }).expect(403);
+    expect((await http().patch('/settings').set(as('emp')).send({ agencyTiming: { soonMinutes: 0 } }).expect(400)).body.message)
+      .toBe('Starts within 2 hours must be a whole number from 1 to 240');
+    await http().patch('/settings').set(as('emp')).send({ agencyTiming: 'fast' }).expect(400);
+    const saved = (await http().patch('/settings').set(as('emp')).send({ agencyTiming: { laterMinutes: 45 } }).expect(200)).body;
+    expect(saved.agencyTiming).toEqual({ soonMinutes: 10, todayMinutes: 60, laterMinutes: 45 });
+    expect(saved.minRestHours).toBe(10); // other settings untouched
+    expect((await http().get(`/shifts/${s}/agency-fill`).set(as('emp')).expect(200)).body.timing).toMatchObject({ defaultMinutes: 45, defaultWords: '45 minutes' });
+
+    let st = (await http().post(`/shifts/${s}/agency-fill`).set(as('empalloc')).send({}).expect(201)).body;
+    expect(st.request.stepMinutes).toBe(45);
+    expect(st.next.dueIn).toBe('in 45 minutes');
+    await http().post(`/shifts/${s}/agency-fill/withdraw`).set(as('emp')).send({}).expect(200);
+
+    // The office can choose the gap for one request.
+    const s2 = await newShift(41);
+    expect((await http().post(`/shifts/${s2}/agency-fill`).set(as('emp')).send({ stepMinutes: 2000 }).expect(400)).body.message)
+      .toBe('Time before the next agency must be a whole number from 1 to 1440');
+    st = (await http().post(`/shifts/${s2}/agency-fill`).set(as('emp')).send({ stepMinutes: 15 }).expect(201)).body;
+    expect(st.request.stepMinutes).toBe(15);
+    expect(st.next.dueIn).toBe('in 15 minutes');
+    await http().post(`/shifts/${s2}/agency-fill/withdraw`).set(as('emp')).send({}).expect(200);
+
+    // Back to David's defaults for the tests that follow.
+    await http().patch('/settings').set(as('emp')).send({ agencyTiming: { laterMinutes: 120 } }).expect(200);
   });
 
   it('withdrawing, filling or cancelling the shift closes it for every agency', async () => {

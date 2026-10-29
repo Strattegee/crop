@@ -41,3 +41,9 @@ export async function endLink(connectionId: string, f: FormData) {
   await attempt(BACK, () => api(`/agency-links/${connectionId}/end`, { method: 'POST', body: { reason: str(f, 'reason') ?? null } }),
     'Link ended. Both businesses keep its history.');
 }
+
+export async function setTiming(f: FormData) {
+  const n = (k: string) => { const v = Number(str(f, k)); return Number.isInteger(v) && v > 0 ? v : undefined; };
+  await attempt(BACK, () => api('/settings', { method: 'PATCH', body: { agencyTiming: { soonMinutes: n('soonMinutes'), todayMinutes: n('todayMinutes'), laterMinutes: n('laterMinutes') } } }),
+    'Timing saved. It applies to requests sent from now on.');
+}
