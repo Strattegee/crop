@@ -82,7 +82,22 @@ export async function dutyRulesForShift(db: PoolClient, shiftId: string): Promis
  */
 export async function eligibilityForShift(db: PoolClient, tenantId: string, shiftId: string, workerIds?: string[]): Promise<Candidate[]> {
   const shift = await loadShiftFacts(db, shiftId);
+  return eligibilityForFacts(db, tenantId, shift, {
+    workerIds, operatorNeeds: await operatorNeedsForShift(db, shiftId), extraRules: await dutyRulesForShift(db, shiftId),
+  });
+}
 
+/**
+ * The core of eligibility for any shift described by its facts (within withTenant). For the business's own shifts,
+ * `extraRules` are the duties' rules on top of its own. For an agency checking its people against an employer's
+ * request, `onlyRules` replaces the business's own rules, `roleWarnOnly` makes a different role name a warning
+ * (businesses name roles differently), and `blockAll` adds blocks that apply to everyone (requirements not matched).
+ */
+export async function eligibilityForFacts(db: PoolClient, tenantId: string, shift: ShiftFacts & { id?: string }, opts: {
+  workerIds?: string[]; operatorNeeds?: OperatorNeed[]; extraRules?: RequirementRule[]; onlyRules?: RequirementRule[];
+  roleWarnOnly?: boolean; blockAll?: string[];
+}): Promise<Candidate[]> {
+  const { workerIds } = opts;
   const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null }>(
     `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
        from workers w
@@ -118,8 +133,8 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
     others.set(o.worker_id, list);
   }
 
-  const operatorNeeds = await operatorNeedsForShift(db, shiftId);
-  const dutyRules = await dutyRulesForShift(db, shiftId);
+  const operatorNeeds = opts.operatorNeeds ?? [];
+  const dutyRules = opts.extraRules ?? [];
   const availability = await availabilityByWorker(db, ids, shift.localDate);
   const leave = await leaveByWorker(db, ids, shift.localDate);
   const employment = await termsByWorker(db, ids);
@@ -128,12 +143,19 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
   const weekTo = addDays(weekFrom, 6);
   return workers.map(w => {
     const mine = others.get(w.id) ?? [];
-    const { issues } = ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate, dutyRules);
+    const { issues } = opts.onlyRules
+      ? ctx.evaluateOnly(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate, opts.onlyRules)
+      : ctx.evaluate(w.roles, creds.get(w.id) ?? [], rtw.get(w.id) ?? null, shift.localDate, dutyRules);
     const e = shiftEligibility(shift, {
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
       availability: availability.get(w.id), leave: leave.get(w.id) ?? [], employment: employment.get(w.id) ?? [],
+      roleWarnOnly: opts.roleWarnOnly,
     });
+    for (const message of opts.blockAll ?? []) {
+      e.blocks.push({ code: 'credential', message });
+      e.eligible = false;
+    }
     const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
     return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100,
       available: !e.warnings.some(x => x.code === 'availability'), ...e };

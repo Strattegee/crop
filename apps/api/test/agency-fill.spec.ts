@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { AgencyEscalator } from '../src/agencies/agency-fill.controller.js';
-import { agencyFillProblem, escalationMinutes, inWords, requestArrivedEmail, roundSchedule } from '../src/agencies/requests.js';
+import { agencyFillProblem, agencyRules, escalationMinutes, inWords, requestArrivedEmail, roundSchedule } from '../src/agencies/requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('agency fill: rules', () => {
@@ -55,6 +55,25 @@ describe('agency fill: rules', () => {
     expect(body).toContain('Tue 3 Nov, 7:00am to 3:30pm');
     expect(body).toContain('1 of its requirements isn\'t matched');
     expect(body).toContain('https://staging.cropwms.com/allocations');
+  });
+});
+
+describe('agency fill: the agency\'s rules for a request', () => {
+  it('uses the current match, blocks everyone on an unmatched must-have, lists an unmatched should-have, skips optional', () => {
+    const names = new Map([['own-a', 'AHPRA registration'], ['own-b', 'First aid']]);
+    const r = agencyRules([
+      { requirementId: 'emp-1', name: 'Nursing registration', severity: 'hard', forDuty: null, credentialTypeId: 'old' },
+      { name: 'CPR', severity: 'warning', forDuty: 'Pool', credentialTypeId: 'own-b' },                         // older request: the match it came with
+      { requirementId: 'emp-3', name: 'Police check', severity: 'hard', forDuty: null, credentialTypeId: 'own-b' }, // match removed since
+      { requirementId: 'emp-4', name: 'Manual handling', severity: 'warning', forDuty: null, credentialTypeId: null },
+      { name: 'Barista', severity: 'optional', forDuty: null, credentialTypeId: null },
+    ], new Map([['emp-1', 'own-a']]), names, 'Bayside Hospital');
+    expect(r.rules).toEqual([
+      { credentialTypeId: 'own-a', typeName: 'AHPRA registration', scope: 'all_workers', role: null, severity: 'hard' },
+      { credentialTypeId: 'own-b', typeName: 'First aid', scope: 'all_workers', role: null, severity: 'warning', forDuty: 'Pool' },
+    ]);
+    expect(r.blockAll).toEqual(["Bayside Hospital's Police check isn't matched to your credentials yet"]);
+    expect(r.unmatched).toEqual([{ name: 'Police check', severity: 'hard' }, { name: 'Manual handling', severity: 'warning' }]);
   });
 });
 
@@ -150,8 +169,8 @@ describe('agency fill: API', () => {
     expect(got).toHaveLength(1);
     expect(got[0]).toMatchObject({ employerName: 'Bayside Hospital', siteName: 'Bayside Campus', role: 'Nurse', status: 'open', note: 'Ask for Sam at the desk', unmatched: 0 });
     expect(got[0].requirements).toEqual([
-      { name: 'Nursing registration', severity: 'hard', forDuty: null, credentialTypeId: ids['reg:cfy'] },
-      { name: 'Barista course', severity: 'optional', forDuty: null, credentialTypeId: null },
+      { requirementId: expect.any(String), name: 'Nursing registration', severity: 'hard', forDuty: null, credentialTypeId: ids['reg:cfy'] },
+      { requirementId: expect.any(String), name: 'Barista course', severity: 'optional', forDuty: null, credentialTypeId: null },
     ]);
     expect(await inbox('metro')).toEqual([]);
     expect(await inbox('nosy')).toEqual([]);
@@ -167,6 +186,43 @@ describe('agency fill: API', () => {
     // Logged on both sides.
     expect((await owner.query(`select tenant_id from agency_events where action = 'request_sent' order by tenant_id`)).rows.map(r => r.tenant_id).sort())
       .toEqual([ids.bayside, ids.cfy].sort());
+  });
+
+  it('the agency sees its own people for a request, checked against the employer’s requirements', async () => {
+    const inboxId = (await inbox('ag'))[0].id as string;
+    const today = (await owner.query<{ d: string }>(`select to_char(now() + interval '400 days', 'YYYY-MM-DD') as d`)).rows[0].d;
+    const person = async (first: string, roles: string[], cred: boolean) => {
+      const w = (await owner.query<{ id: string }>(
+        `insert into workers(tenant_id, first_name, last_name, roles) values ($1,$2,'Example',$3) returning id`, [ids.cfy, first, roles])).rows[0].id;
+      await owner.query(`insert into right_to_work_records(tenant_id, worker_id, status, citizen_proof_type, verification) values ($1,$2,'citizen','au_passport','verified')`, [ids.cfy, w]);
+      if (cred) await owner.query(`insert into worker_credentials(tenant_id, worker_id, credential_type_id, expiry_date, verification) values ($1,$2,$3,$4,'verified')`, [ids.cfy, w, ids['reg:cfy'], today]);
+      return w;
+    };
+    await person('Ana', ['Nurse'], true);
+    await person('Ben', ['Registered Nurse'], true);
+    await person('Cara', ['Nurse'], false);
+    // Someone at Bayside itself never appears.
+    await owner.query(`insert into workers(tenant_id, first_name, last_name, roles) values ($1,'Bayside','Staff','{Nurse}')`, [ids.bayside]);
+
+    let res = (await http().get(`/agency-requests/${inboxId}/people`).set(as('ag')).expect(200)).body;
+    expect(res.ready).toBe(2);
+    expect(res.unmatched).toEqual([]);
+    expect(res.people.map((p: { name: string; eligible: boolean }) => [p.name, p.eligible])).toEqual([['Ana Example', true], ['Ben Example', true], ['Cara Example', false]]);
+    expect(res.people[1].warnings.map((w: { code: string }) => w.code)).toEqual(['role']);
+    expect(res.people[2].blocks.map((b: { message: string }) => b.message)).toEqual(["Cara Example's AHPRA registration is missing"]);
+    await http().get(`/agency-requests/${inboxId}/people`).set(as('metro')).expect(404);
+    await http().get(`/agency-requests/${inboxId}/people`).set(as('emp')).expect(404);
+
+    // The agency removes its match: nobody can be checked against that requirement, so nobody is ready.
+    await owner.query(`delete from agency_credential_maps where tenant_id = $1`, [ids.cfy]);
+    res = (await http().get(`/agency-requests/${inboxId}/people`).set(as('ag')).expect(200)).body;
+    expect(res.ready).toBe(0);
+    expect(res.unmatched).toEqual([{ name: 'Nursing registration', severity: 'hard' }]);
+    expect(res.people[0].blocks.map((b: { message: string }) => b.message)).toContain("Bayside Hospital's Nursing registration isn't matched to your credentials yet");
+    await owner.query(
+      `insert into agency_credential_maps(tenant_id, connection_id, employer_credential_type_id, employer_type_name, credential_type_id, matched_by)
+       select $1, $2, ct.id, ct.name, $3, 'hand' from credential_types ct where ct.tenant_id = $4 and ct.name = 'Nursing registration'`,
+      [ids.cfy, conn.cfy, ids['reg:cfy'], ids.bayside]);
   });
 
   it('the timer sends it on when the next agency’s turn comes; the office can bring it forward', async () => {

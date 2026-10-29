@@ -13,17 +13,25 @@ type Request = {
   status: 'open' | 'filled' | 'withdrawn' | 'expired'; receivedAt: string; closedAt: string | null; closedReason: string | null; unmatched: number;
 };
 
+type Reason = { code: string; message: string };
+type Person = { workerId: string; name: string; roles: string[]; weekHours: number; available: boolean; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
+type People = { ready: number; unmatched: { name: string; severity: string }[]; people: Person[] };
+
 const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
 
 /**
  * Allocations (function code 2200, agency fill first slice): the requests employers have sent this business, soonest
- * first, with what each needs. Putting people forward comes next.
+ * first, with what each needs and this business's people checked against it (ready first). Putting people forward
+ * comes next.
  */
 export default async function AllocationsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const [list, tw, zone, sp] = await Promise.all([api<Request[]>('/agency-requests?status=all'), words(), businessZone(), searchParams]);
   const when = whenIn(zone);
   const open = list.filter(r => r.status === 'open');
+  // Each open request's people, checked against the employer's requirements as matched to this business's credentials.
+  const people = new Map(await Promise.all(open.map(async r =>
+    [r.id, await api<People>(`/agency-requests/${r.id}/people`).catch(() => null)] as const)));
   const closed = list.filter(r => r.status !== 'open');
   const shift = tw.lower(T.shift);
   return (
@@ -31,7 +39,8 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
       <h1>Allocations</h1>
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
-        Choosing who goes comes next; for now, call the employer to put someone forward.
+        Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
+        Putting someone forward in CROP comes next; for now, call the employer.
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className="card">
@@ -61,6 +70,31 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
                 <Link href={`/settings/agencies/${r.connectionId}`}>Match {r.employerName}&apos;s requirements</Link> so CROP can check your people against them.
               </p>
             )}
+            {(() => {
+              const p = people.get(r.id);
+              if (!p) return <p className="muted small" style={{ margin: '4px 0 0' }}>Couldn&apos;t check your {tw.lower(T.worker, true)} for this one.</p>;
+              const ready = p.people.filter(x => x.eligible);
+              const cant = p.people.filter(x => !x.eligible);
+              return (
+                <div style={{ marginTop: 6 }}>
+                  <p className="small" style={{ margin: 0 }}><strong>Ready to go ({ready.length})</strong></p>
+                  {ready.length === 0 && <p className="muted small" style={{ margin: 0 }}>Nobody meets the requirements for this {shift}.</p>}
+                  {ready.slice(0, 8).map(x => (
+                    <div key={x.workerId} className="small">
+                      <Link href={`/workers/${x.workerId}`}>{x.name}</Link> <span className="muted">· {x.roles.join(', ') || 'no role'} · {x.weekHours} h that week</span>
+                      {x.warnings.map(w => <span key={w.message} className="warnline"> ⚠ {w.message}</span>)}
+                    </div>
+                  ))}
+                  {ready.length > 8 && <p className="muted small" style={{ margin: 0 }}>and {ready.length - 8} more</p>}
+                  {cant.length > 0 && (
+                    <details className="small">
+                      <summary className="muted" style={{ cursor: 'pointer' }}>Can&apos;t go ({cant.length})</summary>
+                      {cant.map(x => <div key={x.workerId} className="blocked"><strong>{x.name}</strong>{x.blocks.map(b => <span key={b.message}>{b.message}</span>)}</div>)}
+                    </details>
+                  )}
+                </div>
+              );
+            })()}
             <p className="muted small" style={{ margin: '4px 0 0' }}>Received {when(r.receivedAt)}</p>
           </div>
         ))}

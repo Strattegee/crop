@@ -54,6 +54,8 @@ export interface EligibilityInput {
   leave?: LeaveFacts[];
   /** Live employment terms (end of employment blocks; none recorded means nothing to check). */
   employment?: TermDates[];
+  /** A different role is a warning, not a block (an agency's roles are named by the agency, not the employer). */
+  roleWarnOnly?: boolean;
 }
 
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
@@ -101,7 +103,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
   const warnings: Reason[] = [];
 
   if (!p.roles.some(r => r.toLowerCase() === shift.role.toLowerCase())) {
-    blocks.push({ code: 'role', message: `${p.name} doesn't have the role ${shift.role}` });
+    (p.roleWarnOnly ? warnings : blocks).push({ code: 'role', message: `${p.name} doesn't have the role ${shift.role}` });
   }
 
   for (const i of p.issues) {
