@@ -393,3 +393,11 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-kpis > div { padding: 6px 14px; }
 .roster-kpis strong { font-size: 18px; }
 @media (max-width: 900px) { .roster-trio { grid-template-columns: minmax(0, 1fr); } }
+/* Status and Publish sit in the title row (29 Oct): title · status (takes the spare room) · toolbar. */
+.roster-head { flex-wrap: wrap; justify-content: flex-start; gap: 10px 14px; }
+.roster-head > .roster-state { display: contents; }
+.roster-head > .roster-title { order: 1; }
+.roster-head > .roster-state > .states { order: 2; flex: 1 1 auto; font-size: 14px; gap: 6px 14px; }
+.roster-head > .roster-toolbar { order: 3; }
+.roster-head > .roster-state > .roster-tools { order: 4; margin-left: auto; }
+.tool-period-label { white-space: nowrap; }
