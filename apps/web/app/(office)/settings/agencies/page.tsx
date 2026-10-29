@@ -51,7 +51,7 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
       <p className="muted">
         Link with {agencies} that also use CROP, so you can send them {shifts} you can’t fill yourself. You make an invitation link and send it to
         the {anAgency}; they open it while signed in to CROP and confirm. Before they can be sent requests, the {anAgency} matches each of your
-        credential requirements to its own (coming next). Either side can end a link at any time; both keep its history.
+        credential requirements to its own. Either side can end a link at any time; both keep its history.
       </p>
       <Notices error={sp.error} done={sp.done} />
       {!canEdit && <div className="notice error">Only owners and administrators can link, reorder or end links.</div>}
@@ -155,7 +155,12 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
               {weSupply.map(l => (
                 <tr key={l.connectionId}>
                   <td><b>{l.otherName}</b><div className="muted small">Linked {when(l.createdAt)}</div></td>
-                  <td className="small">{l.statusWords}</td>
+                  <td className="small">
+                    {l.statusWords}
+                    <div><Link href={`/settings/agencies/${l.connectionId}`} className="btn small secondary" style={{ marginTop: 4 }}>
+                      {l.status === 'active' ? 'See matches' : 'Match requirements'}
+                    </Link></div>
+                  </td>
                   <td>{canEdit && <EndForm link={l} />}</td>
                 </tr>
               ))}

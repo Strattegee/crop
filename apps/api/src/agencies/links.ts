@@ -24,12 +24,13 @@ export function inviteState(i: { acceptedAt: Date | null; cancelledAt: Date | nu
 
 export type LinkStatus = 'matching' | 'active' | 'ended';
 /** The link's state in plain words, for the side reading it. */
-export function linkStatusWords(status: LinkStatus, side: 'employer' | 'agency', other: string): string {
+export function linkStatusWords(status: LinkStatus, side: 'employer' | 'agency', other: string, unmatched?: number): string {
   if (status === 'ended') return 'Ended';
   if (status === 'active') return side === 'employer' ? `${other} can be sent requests` : `You can be sent requests by ${other}`;
+  const n = unmatched && unmatched > 0 ? `${unmatched} requirement${unmatched === 1 ? '' : 's'}` : null;
   return side === 'employer'
-    ? `Linked. Waiting for ${other} to match your requirements before requests can go to them`
-    : `Linked. Match ${other}'s requirements to your credentials before they can send you requests`;
+    ? `Linked. Waiting for ${other} to match ${n ? `${n} of yours` : 'your requirements'} before requests can go to them`
+    : `Linked. Match ${n ? `${n} of ${other}'s` : `${other}'s requirements`} to your credentials before they can send you requests`;
 }
 
 /**
@@ -41,5 +42,23 @@ export function orderProblem(ids: unknown, live: string[]): string | null {
   if (new Set(ids).size !== ids.length) return 'Each agency can appear only once';
   const known = new Set(live);
   if (ids.length !== live.length || ids.some(i => !known.has(i))) return 'The list of agencies has changed. Refresh the page and try again.';
+  return null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Checks the shape of `{ matches: [{ requirementId, credentialTypeId | null }] }`; returns the error to show or null. */
+export function matchesProblem(list: unknown): string | null {
+  if (!Array.isArray(list) || list.length === 0) return 'Choose at least one match';
+  if (list.length > 200) return 'Too many matches at once';
+  const seen = new Set<string>();
+  for (const m of list) {
+    if (!m || typeof m !== 'object') return 'Choose a credential for each requirement';
+    const { requirementId, credentialTypeId } = m as Record<string, unknown>;
+    if (typeof requirementId !== 'string' || !UUID.test(requirementId)) return 'Choose a requirement';
+    if (credentialTypeId !== null && (typeof credentialTypeId !== 'string' || !UUID.test(credentialTypeId))) return 'Choose one of your credentials';
+    if (seen.has(requirementId)) return 'Each requirement can be matched only once';
+    seen.add(requirementId);
+  }
   return null;
 }
