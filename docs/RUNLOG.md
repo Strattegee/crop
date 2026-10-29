@@ -330,3 +330,11 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: Needs attention for agencies. Allocations now opens with a Needs attention box (and the Dashboard shows it too, for any business that supplies employers) covering the next 7 days: requests nobody has been put forward for yet (what has been offered so far, and how many of the agency's people are ready, or that a must-have still needs matching), people the agency put forward who can no longer go by its own checks (a credential or right to work run out by the day, leave approved since, employment ended), people waiting for the employer's approval, and employers whose requirements the agency still has to match. Anything within a day comes first; each line opens the request. It reads only the agency's own records.
 - Next: agency people counting for cover rules and equipment operator checks on the employer's side, or the worker app's sign-in and shifts.
 - Waiting on David: the public apply form (spam protection and the form's questions).
+
+## 2026-10-30 morning, 9:10am Melbourne (scheduled run)
+
+- Shipped: people an agency puts forward now count for the employer's site cover rules (e.g. "someone with first aid on at all times") and for operating equipment (e.g. a forklift licence). When the agency puts someone forward, CROP notes which of the employer's listed credentials the agency confirmed they hold on that day (names only, nothing else from the agency's records), and the shift panel says "They confirmed: …". Agencies see the employer's cover and operator credentials in their matching list as optional, so they can match them.
+- Also: the privacy policy, worker notice and data processing agreement say the employer sees which of its listed credentials an agency's worker held on the day (for the lawyer to check).
+- Next: the worker app's sign-in and shifts, or the requirements email for agencies not on CROP.
+- Waiting on David: the public apply form (spam protection and the form's questions).
+

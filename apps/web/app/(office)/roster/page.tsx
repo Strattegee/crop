@@ -59,7 +59,7 @@ type AgencyFillState = {
   next: { agencyName: string; dueIn: string } | null;
   activeAgencies: number; canRequest: boolean; problem: string | null;
   timing?: { band: 'soon' | 'today' | 'later'; bandWords: string; defaultMinutes: number; defaultWords: string };
-  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string } | null;
+  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string; confirmedCredentials?: string[] } | null;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
@@ -1004,6 +1004,7 @@ export default async function RosterPage({ searchParams }: {
                   {selected.agencyName && agencyState?.placement && agencyState.placement.workerName === selected.workerName && (
                     <p className="muted small" style={{ margin: '4px 0 0' }}>
                       Put forward by {agencyState.placement.agencyName}{agencyState.placement.putForwardByName ? ` (${agencyState.placement.putForwardByName})` : ''} {when(agencyState.placement.createdAt)}, checked by them against your requirements.
+                      {agencyState.placement.confirmedCredentials?.length ? ` They confirmed: ${agencyState.placement.confirmedCredentials.join(', ')}.` : ''}
                       {selected.status === 'assigned' ? ' Approve to book them, or decline to open the shift again.' : ''}
                     </p>
                   )}

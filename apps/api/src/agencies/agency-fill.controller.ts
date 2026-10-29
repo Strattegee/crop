@@ -162,9 +162,10 @@ async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
   const active = (await db.query<{ n: number }>(`select count(*)::int as n from agency_connections where side = 'employer' and status = 'active'`)).rows[0].n;
   const w = await wordsFor(db);
   const problem = agencyFillProblem({ status: shift.status, equipmentOnly: shift.equipmentOnly, startsAt: new Date(shift.startsAt) }, active, request?.status === 'open', now, w);
-  const placement = request ? (await db.query<{ id: string; agencyName: string; workerName: string; status: Placement; putForwardByName: string | null; createdAt: Date; decidedAt: Date | null }>(
+  const placement = request ? (await db.query<{ id: string; agencyName: string; workerName: string; status: Placement; putForwardByName: string | null; createdAt: Date; decidedAt: Date | null; confirmedCredentials: string[] }>(
     `select p.id, p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "workerName", p.status,
-            p.put_forward_by_name as "putForwardByName", p.created_at as "createdAt", p.decided_at as "decidedAt"
+            p.put_forward_by_name as "putForwardByName", p.created_at as "createdAt", p.decided_at as "decidedAt",
+            coalesce((select array_agg(ct.name order by ct.name) from credential_types ct where ct.id = any(p.credential_type_ids)), '{}') as "confirmedCredentials"
        from agency_placements p join workers w on w.id = p.worker_id where p.request_id = $1`, [request.id])).rows[0] ?? null : null;
   const next = request?.status === 'open' ? rounds.find(r => roundState(r) === 'waiting') ?? null : null;
   const band = timingBand(new Date(shift.startsAt), now, shift.timezone);
