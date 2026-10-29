@@ -1,17 +1,18 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  applyTemplate, archiveTemplate, assign, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  LOOKS, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -126,6 +127,7 @@ export default async function RosterPage({ searchParams }: {
 
   const showLog = sp.log === '1' && span !== 'month';
   // Needs attention starts closed with its counts showing (David, 29 Oct).
+  const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
   const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, coverGaps] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
@@ -347,8 +349,287 @@ export default async function RosterPage({ searchParams }: {
     </section>
   ) : null;
 
+  // Everything above the roster itself: on the normal page it sits on top; on the full page view it folds
+  // into one full-width section that drops down when clicked (David, 29 Oct).
+  const info = (
+    <>
+    <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
+      <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
+      <div><span>Filled</span><strong className="ok">{filled}</strong></div>
+      <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
+      <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
+      <div><span>{tw.one(T.equipment)} hours</span><strong>{fmtHours(equipHours)}</strong></div>
+    </section>
+
+    {changeRequests.length > 0 && (
+      <section className="card roster-requests" aria-label="Changes waiting for approval">
+        <h2 style={{ marginTop: 0 }}>{changeRequests.length === 1 ? '1 change waiting for approval' : `${changeRequests.length} changes waiting for approval`}</h2>
+        <ol>
+          {changeRequests.map(r => (
+            <li key={r.id}>
+              <span>
+                <Link href={url({ shift: r.shiftId })}>{longDate(r.localDate)} {r.localStart}–{r.localEnd} {r.role}</Link>
+                {!site && <span className="muted"> · {r.facilityName}</span>}: <strong>{r.summary}</strong>
+                {r.reason && r.kind !== 'other' && r.kind !== 'cancel' && <span className="muted"> ({r.reason})</span>}
+                <span className="muted small"> asked by {r.requestedByName ?? 'someone'}, {when(r.createdAt)}</span>
+              </span>
+              <span className="req-actions">
+                {r.canDecide && <>
+                  <form action={decideChange.bind(null, r.id, 'approve')}><input type="hidden" name="back" value={here} /><button className="btn small">Approve</button></form>
+                  <form action={decideChange.bind(null, r.id, 'decline')} className="decline">
+                    <input type="hidden" name="back" value={here} />
+                    <input name="note" maxLength={300} placeholder="Why not (optional)" aria-label="Why not (optional)" />
+                    <button className="btn small secondary">Decline</button>
+                  </form>
+                </>}
+                {r.canWithdraw && !r.canDecide && (
+                  <form action={decideChange.bind(null, r.id, 'withdraw')}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Withdraw</button></form>
+                )}
+                {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
+
+    {/* Three panels side by side, closed when the page opens, so the roster itself is near the top (David, 29 Oct).
+        Opening one gives it the full width. */}
+    <div className="roster-trio">
+    {attention && attention.total > 0 ? (() => {
+      return (
+      <AttentionPanel open={false} summary={<>
+          <h2>Needs attention</h2>
+          <span className="muted">
+            {' '}{attention.total} in the next {attention.days} days
+            {attention.urgent > 0 && <> · <strong className="bad">{attention.urgent} within a day</strong></>}
+          </span>
+          <span className="att-toggle muted small" aria-hidden="true" />
+        </>}>
+        {(() => {
+          // Five at first so the roster stays in view; the rest open underneath (David, 29 Oct).
+          const row = (i: (typeof attention.items)[number]) => (
+          <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
+            <span className={`att-kind ${i.kind}`} aria-hidden="true" />
+            <span>
+              <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
+              <br />
+              {/* Opens the shift in its own day or week in a new tab, scrolled to its panel, so the office can work
+                  through several and close each tab when done (David, 29 Oct). */}
+              <Link href={`${url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}#shift-panel`}
+                target="_blank" rel="noopener" title="Opens in a new tab">
+                {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
+              </Link>
+              {!site && <span className="muted"> · {i.shift.facilityName}</span>}
+              {i.shift.areaName && <span className="muted"> · {i.shift.areaName}</span>}
+              <span className={i.urgent ? 'bad small' : 'muted small'}> · {i.startsIn}</span>
+            </span>
+          </li>
+          );
+          const rest = attention.items.slice(ATTENTION_SHOWN);
+          return <>
+            <ol>{attention.items.slice(0, ATTENTION_SHOWN).map(row)}</ol>
+            {rest.length > 0 && (
+              <details className="att-more">
+                <summary>Show {rest.length} more</summary>
+                <ol>{rest.map(row)}</ol>
+              </details>
+            )}
+          </>;
+        })()}
+        {attention.truncated && <p className="muted small">Only the first few hundred {tw.lower(T.shift, true)} were checked. Choose a {tw.lower(T.site)} to see the rest.</p>}
+      </AttentionPanel>
+      );
+    })() : (
+      <section className="card roster-attention quiet" aria-label="Needs attention"><h2>Needs attention</h2> <span className="muted">Nothing in the next 7 days.</span></section>
+    )}
+    <details className="card roster-add" open={shifts.length === 0}>
+      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
+      {activeFacilities.length === 0 ? (
+        <p className="muted">Add a {tw.lower(T.site)} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
+      ) : (
+        <form action={createShifts} className="form-row" style={{ marginTop: 12 }}>
+          <input type="hidden" name="back" value={here} />
+          <label>{tw.one(T.site)}
+            <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+              {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </label>
+          <label>{tw.one(T.area)} <span className="muted">(optional)</span>
+            <select name="areaId" defaultValue="">
+              <option value="">No {tw.lower(T.area)}</option>
+              {details.flatMap(d => d.areas.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{d.name} · {a.name}</option>))}
+            </select>
+          </label>
+          <label>{tw.one(T.role)}
+            <input name="role" placeholder="e.g. Barista" maxLength={60} list="known-roles" />
+            <datalist id="known-roles">
+              {[...new Set(roster.people.flatMap(p => p.roles))].sort().map(r => <option key={r} value={r} />)}
+            </datalist>
+          </label>
+          <label>Shift type <Link href="/settings/shift-types" className="muted small">(change types)</Link>
+            <select name="shiftCodeId" defaultValue="">
+              <option value="">Times below</option>
+              {codes.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.letter ? `${c.letter} · ` : ''}{c.name ?? c.code} {c.startTime}–{c.endTime}{c.facilityName ? ` (${c.facilityName})` : ''}</option>)}
+            </select>
+          </label>
+          <label>Start<input name="startTime" type="time" /></label>
+          <label>End<input name="endTime" type="time" /></label>
+          <label>From<input name="startDate" type="date" required defaultValue={span === 'month' ? range.anchor : days[0]} /></label>
+          <label>Until <span className="muted">(for a block)</span><input name="endDate" type="date" /></label>
+          <fieldset className="weekdays">
+            <legend>Days (for a block)</legend>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
+              <label key={d} className="inline"><input type="checkbox" name="weekdays" value={i + 1} />{d}</label>
+            ))}
+          </fieldset>
+          <label style={{ flex: '0 1 110px' }}>People<input name="quantity" type="number" min={1} max={20} defaultValue={1} /></label>
+          <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />{tw.one(T.equipment)} only</label>
+          {duties.some(d => d.active) && (
+            <fieldset className="weekdays">
+              <legend>Duties <Link href="/settings/shift-duties" className="muted small">(change duties)</Link></legend>
+              {duties.filter(d => d.active).map(d => (
+                <label key={d.id} className="inline" title={d.requirements.some(r => r.severity !== 'optional') ? `Needs ${d.requirements.filter(r => r.severity !== 'optional').map(r => r.typeName).join(', ')}` : undefined}>
+                  <input type="checkbox" name="dutyIds" value={d.id} />{d.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <button type="submit" className="btn">Add</button>
+        </form>
+      )}
+    </details>
+    {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
+      <details className="card roster-templates">
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
+        <p className="muted small">Save a {tw.lower(T.site)}&apos;s usual week as a template, then fill any week from it, or copy last week. Each {tw.lower(T.shift)} gets its usual person where they can work it (waiting for them to confirm) and its usual {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
+        <div className="template-forms">
+          <form action={copyWeek} className="form-row">
+            <input type="hidden" name="back" value={here} />
+            <input type="hidden" name="week" value={week} />
+            <h3>Copy a week into this one</h3>
+            <label>{tw.one(T.site)}
+              <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+                {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+            <label>Copy from the week of<input name="fromWeek" type="date" defaultValue={addDaysIso(week, -7)} /></label>
+            <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
+            <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same {tw.lower(T.equipment)}</label>
+            <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
+            <button className="btn small">Copy week</button>
+          </form>
+          <form action={applyTemplate} className="form-row">
+            <input type="hidden" name="back" value={here} />
+            <input type="hidden" name="week" value={week} />
+            <h3>Fill this week from a template</h3>
+            {templates.length === 0 ? <p className="muted small">No templates yet. Save a week below.</p> : <>
+              <label>Template
+                <select name="templateId" required>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}{!site ? ` (${t.facilityName})` : ''} · {tw.count(t.shifts, T.shift)}</option>)}
+                </select>
+              </label>
+              <label className="inline"><input type="checkbox" name="people" defaultChecked />With the usual people</label>
+              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the usual {tw.lower(T.equipment)}</label>
+              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
+              <button className="btn small">Fill week</button>
+            </>}
+          </form>
+          <form action={saveTemplate} className="form-row">
+            <input type="hidden" name="back" value={here} />
+            <input type="hidden" name="week" value={week} />
+            <h3>Save this week as a template</h3>
+            <label>{tw.one(T.site)}
+              <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
+                {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+            <label>Name<input name="name" required maxLength={80} placeholder="e.g. Usual week" /></label>
+            <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each {tw.lower(T.shift)}</label>
+            <label className="inline"><input type="checkbox" name="equipment" defaultChecked />Remember the {tw.lower(T.equipment)} on each {tw.lower(T.shift)}</label>
+            <button className="btn small secondary">Save template</button>
+          </form>
+        </div>
+        {templates.length > 0 && (
+          <ul className="template-list">
+            {templates.map(t => (
+              <li key={t.id}>
+                <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {tw.count(t.shifts, T.shift)}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.equipmentBookings ? `, ${t.equipmentBookings} ${tw.lower(T.equipment)} ${t.equipmentBookings === 1 ? 'booking' : 'bookings'}` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
+                <form action={archiveTemplate}>
+                  <input type="hidden" name="back" value={here} />
+                  <input type="hidden" name="templateId" value={t.id} />
+                  <button className="btn small secondary" title="Hides the template. Weeks already filled from it don't change.">Put away</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+    )}
+    </div>
+
+    {coverGaps.length > 0 && (
+      <details className="card roster-cover" aria-label="Cover gaps">
+        <summary>
+          <strong>{coverGaps.length === 1 ? '1 cover gap' : `${coverGaps.length} cover gaps`} this {periodWord}</strong>
+          {' '}<Link href="/settings/cover-rules" className="muted small">(cover rules)</Link>
+        </summary>
+        <ol>
+          {coverGaps.map(g => (
+            <li key={`${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`}>
+              <Link href={url({ shift: g.shiftId })}>{longDate(g.localDate)}</Link>{' '}
+              <strong>{g.title}</strong>
+              {!site && <span className="muted"> · {g.facilityName}</span>}
+            </li>
+          ))}
+        </ol>
+      </details>
+    )}
+
+    {showLog && (
+      <section className="card roster-log" aria-label="Changes this week">
+        <h2 style={{ marginTop: 0 }}>Changes this week</h2>
+        {changes.length === 0 ? <p className="muted">Nothing recorded yet.</p> : (
+          <ol>
+            {changes.slice(0, 200).map(c => (
+              <li key={c.id}>
+                <span className="muted small">{when(c.at)}</span>
+                <span>
+                  <Link href={url({ shift: c.shiftId })}>{longDate(c.localDate)} {c.localStart}–{c.localEnd} {c.role}</Link>
+                  {!site && <span className="muted"> · {c.facilityName}</span>}: {c.summary}
+                  <span className="muted"> {byWhom(c)}</span>
+                  {c.afterPublish && <b className="pill live small">after publishing</b>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    )}
+
+
+    {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
+      <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="hidden" name="back" value={here} />
+        <input type="hidden" name="week" value={week} />
+        <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
+        <button className="btn small">Load café demo</button>
+      </form>
+    )}
+
+    {process.env.DEMO_TOOLS === 'on' && open > 0 && span !== 'month' && (
+      <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
+        <input type="hidden" name="back" value={here} />
+        <input type="hidden" name="week" value={week} />
+        <span className="muted small">Demo only:</span>
+        <button className="btn small secondary">Fill open shifts with demo staff</button>
+      </form>
+    )}
+    </>
+  );
+
   return (
-    <div className="roster-page">
+    <div className={`roster-page${full ? ' full' : ''}`}>
       {/* Toolbar in one row (David, 29 Oct, after looking at Deputy): what you're looking at on the left,
           how you look at it in one View menu, the period in the middle. */}
       <div className="roster-head">
@@ -431,286 +712,29 @@ export default async function RosterPage({ searchParams }: {
               </>}
             </div>
           </details>
+          <form action={setFullView.bind(null, !full)} className="tool-full">
+            <input type="hidden" name="back" value={here} />
+            <button className="btn small secondary" title={full ? 'Show the menu and the boxes above the roster again' : 'Hide the menu and fold the boxes above the roster away, for the biggest working space'}>
+              {full ? '⤡ Exit full page' : '⤢ Full page'}
+            </button>
+          </form>
         </div>
       </div>
 
       <Notices error={sp.error} done={sp.done} />
 
 
-      <section className="roster-kpis" aria-label={`Summary for the ${periodWord}`}>
-        <div><span>{tw.many(T.shift)}</span><strong>{peopleShifts.length}</strong></div>
-        <div><span>Filled</span><strong className="ok">{filled}</strong></div>
-        <div><span>Open</span><strong className={open ? 'warn' : ''}>{open}</strong></div>
-        <div><span>Hours rostered</span><strong>{fmtHours(hours)}</strong></div>
-        <div><span>{tw.one(T.equipment)} hours</span><strong>{fmtHours(equipHours)}</strong></div>
-      </section>
-
-      {changeRequests.length > 0 && (
-        <section className="card roster-requests" aria-label="Changes waiting for approval">
-          <h2 style={{ marginTop: 0 }}>{changeRequests.length === 1 ? '1 change waiting for approval' : `${changeRequests.length} changes waiting for approval`}</h2>
-          <ol>
-            {changeRequests.map(r => (
-              <li key={r.id}>
-                <span>
-                  <Link href={url({ shift: r.shiftId })}>{longDate(r.localDate)} {r.localStart}–{r.localEnd} {r.role}</Link>
-                  {!site && <span className="muted"> · {r.facilityName}</span>}: <strong>{r.summary}</strong>
-                  {r.reason && r.kind !== 'other' && r.kind !== 'cancel' && <span className="muted"> ({r.reason})</span>}
-                  <span className="muted small"> asked by {r.requestedByName ?? 'someone'}, {when(r.createdAt)}</span>
-                </span>
-                <span className="req-actions">
-                  {r.canDecide && <>
-                    <form action={decideChange.bind(null, r.id, 'approve')}><input type="hidden" name="back" value={here} /><button className="btn small">Approve</button></form>
-                    <form action={decideChange.bind(null, r.id, 'decline')} className="decline">
-                      <input type="hidden" name="back" value={here} />
-                      <input name="note" maxLength={300} placeholder="Why not (optional)" aria-label="Why not (optional)" />
-                      <button className="btn small secondary">Decline</button>
-                    </form>
-                  </>}
-                  {r.canWithdraw && !r.canDecide && (
-                    <form action={decideChange.bind(null, r.id, 'withdraw')}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Withdraw</button></form>
-                  )}
-                  {!r.canDecide && !r.canWithdraw && <span className="muted small">Waiting for an owner or admin</span>}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {/* Three panels side by side, closed when the page opens, so the roster itself is near the top (David, 29 Oct).
-          Opening one gives it the full width. */}
-      <div className="roster-trio">
-      {attention && attention.total > 0 ? (() => {
-        return (
-        <AttentionPanel open={false} summary={<>
-            <h2>Needs attention</h2>
-            <span className="muted">
-              {' '}{attention.total} in the next {attention.days} days
-              {attention.urgent > 0 && <> · <strong className="bad">{attention.urgent} within a day</strong></>}
-            </span>
-            <span className="att-toggle muted small" aria-hidden="true" />
-          </>}>
-          {(() => {
-            // Five at first so the roster stays in view; the rest open underneath (David, 29 Oct).
-            const row = (i: (typeof attention.items)[number]) => (
-            <li key={`${i.shiftId}:${i.kind}:${i.title}`} className={i.urgent ? 'urgent' : undefined}>
-              <span className={`att-kind ${i.kind}`} aria-hidden="true" />
-              <span>
-                <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
-                <br />
-                {/* Opens the shift in its own day or week in a new tab, scrolled to its panel, so the office can work
-                    through several and close each tab when done (David, 29 Oct). */}
-                <Link href={`${url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}#shift-panel`}
-                  target="_blank" rel="noopener" title="Opens in a new tab">
-                  {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
-                </Link>
-                {!site && <span className="muted"> · {i.shift.facilityName}</span>}
-                {i.shift.areaName && <span className="muted"> · {i.shift.areaName}</span>}
-                <span className={i.urgent ? 'bad small' : 'muted small'}> · {i.startsIn}</span>
-              </span>
-            </li>
-            );
-            const rest = attention.items.slice(ATTENTION_SHOWN);
-            return <>
-              <ol>{attention.items.slice(0, ATTENTION_SHOWN).map(row)}</ol>
-              {rest.length > 0 && (
-                <details className="att-more">
-                  <summary>Show {rest.length} more</summary>
-                  <ol>{rest.map(row)}</ol>
-                </details>
-              )}
-            </>;
-          })()}
-          {attention.truncated && <p className="muted small">Only the first few hundred {tw.lower(T.shift, true)} were checked. Choose a {tw.lower(T.site)} to see the rest.</p>}
-        </AttentionPanel>
-        );
-      })() : (
-        <section className="card roster-attention quiet" aria-label="Needs attention"><h2>Needs attention</h2> <span className="muted">Nothing in the next 7 days.</span></section>
-      )}
-      <details className="card roster-add" open={shifts.length === 0}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
-        {activeFacilities.length === 0 ? (
-          <p className="muted">Add a {tw.lower(T.site)} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
-        ) : (
-          <form action={createShifts} className="form-row" style={{ marginTop: 12 }}>
-            <input type="hidden" name="back" value={here} />
-            <label>{tw.one(T.site)}
-              <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
-                {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-            </label>
-            <label>{tw.one(T.area)} <span className="muted">(optional)</span>
-              <select name="areaId" defaultValue="">
-                <option value="">No {tw.lower(T.area)}</option>
-                {details.flatMap(d => d.areas.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{d.name} · {a.name}</option>))}
-              </select>
-            </label>
-            <label>{tw.one(T.role)}
-              <input name="role" placeholder="e.g. Barista" maxLength={60} list="known-roles" />
-              <datalist id="known-roles">
-                {[...new Set(roster.people.flatMap(p => p.roles))].sort().map(r => <option key={r} value={r} />)}
-              </datalist>
-            </label>
-            <label>Shift type <Link href="/settings/shift-types" className="muted small">(change types)</Link>
-              <select name="shiftCodeId" defaultValue="">
-                <option value="">Times below</option>
-                {codes.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.letter ? `${c.letter} · ` : ''}{c.name ?? c.code} {c.startTime}–{c.endTime}{c.facilityName ? ` (${c.facilityName})` : ''}</option>)}
-              </select>
-            </label>
-            <label>Start<input name="startTime" type="time" /></label>
-            <label>End<input name="endTime" type="time" /></label>
-            <label>From<input name="startDate" type="date" required defaultValue={span === 'month' ? range.anchor : days[0]} /></label>
-            <label>Until <span className="muted">(for a block)</span><input name="endDate" type="date" /></label>
-            <fieldset className="weekdays">
-              <legend>Days (for a block)</legend>
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
-                <label key={d} className="inline"><input type="checkbox" name="weekdays" value={i + 1} />{d}</label>
-              ))}
-            </fieldset>
-            <label style={{ flex: '0 1 110px' }}>People<input name="quantity" type="number" min={1} max={20} defaultValue={1} /></label>
-            <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />{tw.one(T.equipment)} only</label>
-            {duties.some(d => d.active) && (
-              <fieldset className="weekdays">
-                <legend>Duties <Link href="/settings/shift-duties" className="muted small">(change duties)</Link></legend>
-                {duties.filter(d => d.active).map(d => (
-                  <label key={d.id} className="inline" title={d.requirements.some(r => r.severity !== 'optional') ? `Needs ${d.requirements.filter(r => r.severity !== 'optional').map(r => r.typeName).join(', ')}` : undefined}>
-                    <input type="checkbox" name="dutyIds" value={d.id} />{d.name}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <button type="submit" className="btn">Add</button>
-          </form>
-        )}
-      </details>
-      {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
-        <details className="card roster-templates">
-          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
-          <p className="muted small">Save a {tw.lower(T.site)}&apos;s usual week as a template, then fill any week from it, or copy last week. Each {tw.lower(T.shift)} gets its usual person where they can work it (waiting for them to confirm) and its usual {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
-          <div className="template-forms">
-            <form action={copyWeek} className="form-row">
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="week" value={week} />
-              <h3>Copy a week into this one</h3>
-              <label>{tw.one(T.site)}
-                <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
-                  {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
-              </label>
-              <label>Copy from the week of<input name="fromWeek" type="date" defaultValue={addDaysIso(week, -7)} /></label>
-              <label className="inline"><input type="checkbox" name="people" defaultChecked />With the same people</label>
-              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the same {tw.lower(T.equipment)}</label>
-              <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
-              <button className="btn small">Copy week</button>
-            </form>
-            <form action={applyTemplate} className="form-row">
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="week" value={week} />
-              <h3>Fill this week from a template</h3>
-              {templates.length === 0 ? <p className="muted small">No templates yet. Save a week below.</p> : <>
-                <label>Template
-                  <select name="templateId" required>
-                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}{!site ? ` (${t.facilityName})` : ''} · {tw.count(t.shifts, T.shift)}</option>)}
-                  </select>
-                </label>
-                <label className="inline"><input type="checkbox" name="people" defaultChecked />With the usual people</label>
-                <label className="inline"><input type="checkbox" name="equipment" defaultChecked />With the usual {tw.lower(T.equipment)}</label>
-                <label className="inline"><input type="checkbox" name="addToExisting" />Add to the {tw.lower(T.shift, true)} already there</label>
-                <button className="btn small">Fill week</button>
-              </>}
-            </form>
-            <form action={saveTemplate} className="form-row">
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="week" value={week} />
-              <h3>Save this week as a template</h3>
-              <label>{tw.one(T.site)}
-                <select name="facilityId" required defaultValue={site || activeFacilities[0]?.id}>
-                  {activeFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
-              </label>
-              <label>Name<input name="name" required maxLength={80} placeholder="e.g. Usual week" /></label>
-              <label className="inline"><input type="checkbox" name="people" defaultChecked />Remember who works each {tw.lower(T.shift)}</label>
-              <label className="inline"><input type="checkbox" name="equipment" defaultChecked />Remember the {tw.lower(T.equipment)} on each {tw.lower(T.shift)}</label>
-              <button className="btn small secondary">Save template</button>
-            </form>
-          </div>
-          {templates.length > 0 && (
-            <ul className="template-list">
-              {templates.map(t => (
-                <li key={t.id}>
-                  <span><strong>{t.name}</strong> <span className="muted">{t.facilityName} · {tw.count(t.shifts, T.shift)}{t.withPeople ? `, ${t.withPeople} with a usual person` : ''}{t.equipmentBookings ? `, ${t.equipmentBookings} ${tw.lower(T.equipment)} ${t.equipmentBookings === 1 ? 'booking' : 'bookings'}` : ''}{t.createdByName ? ` · saved by ${t.createdByName}` : ''}</span></span>
-                  <form action={archiveTemplate}>
-                    <input type="hidden" name="back" value={here} />
-                    <input type="hidden" name="templateId" value={t.id} />
-                    <button className="btn small secondary" title="Hides the template. Weeks already filled from it don't change.">Put away</button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          )}
-        </details>
-      )}
-      </div>
-
-      {coverGaps.length > 0 && (
-        <details className="card roster-cover" aria-label="Cover gaps">
+      {full ? (
+        <details className="card roster-info">
           <summary>
-            <strong>{coverGaps.length === 1 ? '1 cover gap' : `${coverGaps.length} cover gaps`} this {periodWord}</strong>
-            {' '}<Link href="/settings/cover-rules" className="muted small">(cover rules)</Link>
+            <strong>Summary, alerts and tools</strong>
+            <span className="muted"> · {peopleShifts.length} {tw.lower(T.shift, peopleShifts.length !== 1)} · {open} open</span>
+            {attention && attention.total > 0 && <span className="muted"> · {attention.total} need attention</span>}
+            {attention && attention.urgent > 0 && <strong className="bad"> · {attention.urgent} within a day</strong>}
           </summary>
-          <ol>
-            {coverGaps.map(g => (
-              <li key={`${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`}>
-                <Link href={url({ shift: g.shiftId })}>{longDate(g.localDate)}</Link>{' '}
-                <strong>{g.title}</strong>
-                {!site && <span className="muted"> · {g.facilityName}</span>}
-              </li>
-            ))}
-          </ol>
+          {info}
         </details>
-      )}
-
-      {showLog && (
-        <section className="card roster-log" aria-label="Changes this week">
-          <h2 style={{ marginTop: 0 }}>Changes this week</h2>
-          {changes.length === 0 ? <p className="muted">Nothing recorded yet.</p> : (
-            <ol>
-              {changes.slice(0, 200).map(c => (
-                <li key={c.id}>
-                  <span className="muted small">{when(c.at)}</span>
-                  <span>
-                    <Link href={url({ shift: c.shiftId })}>{longDate(c.localDate)} {c.localStart}–{c.localEnd} {c.role}</Link>
-                    {!site && <span className="muted"> · {c.facilityName}</span>}: {c.summary}
-                    <span className="muted"> {byWhom(c)}</span>
-                    {c.afterPublish && <b className="pill live small">after publishing</b>}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      )}
-
-
-      {process.env.DEMO_TOOLS === 'on' && shifts.length === 0 && roster.people.length === 0 && (
-        <form action={loadDemoWeek} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="hidden" name="back" value={here} />
-          <input type="hidden" name="week" value={week} />
-          <span>This business is empty. Load <strong>The Grand Café</strong>, an invented demo: 32 staff in 15 roles, their certificates (a few expired or missing on purpose), equipment, stock and a week of shifts. It takes about a minute.</span>
-          <button className="btn small">Load café demo</button>
-        </form>
-      )}
-
-      {process.env.DEMO_TOOLS === 'on' && open > 0 && span !== 'month' && (
-        <form action={fillWeekDemo} className="roster-tools" style={{ justifyContent: 'flex-end' }}>
-          <input type="hidden" name="back" value={here} />
-          <input type="hidden" name="week" value={week} />
-          <span className="muted small">Demo only:</span>
-          <button className="btn small secondary">Fill open shifts with demo staff</button>
-        </form>
-      )}
-
-
+      ) : info}
 
       {span === 'month' && (
         <section className="card roster-month" aria-label={monthLabel(range.anchor)}>

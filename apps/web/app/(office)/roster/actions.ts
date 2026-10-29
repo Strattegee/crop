@@ -5,6 +5,9 @@ import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
 import { fillOpenShifts } from '../demo-tools';
 import { T, words } from '../../../lib/terms';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { ROSTER_FULL_COOKIE } from './view';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -213,4 +216,12 @@ export async function decideChange(requestId: string, decision: 'approve' | 'dec
   }, () => decision === 'approve'
     ? (r.applied === false ? `Approved. Make the change on the ${tw.lower(T.shift)} now.` : `Approved and changed.${r.warnings?.length ? ` Note: ${r.warnings.join('. ')}` : ''}`)
     : decision === 'decline' ? 'Declined.' : 'Request withdrawn.');
+}
+
+/** Full page view on or off for this browser; returns to the same roster view. */
+export async function setFullView(on: boolean, f: FormData) {
+  const jar = await cookies();
+  if (on) jar.set(ROSTER_FULL_COOKIE, '1', { path: '/', maxAge: 31536000, sameSite: 'lax' });
+  else jar.delete(ROSTER_FULL_COOKIE);
+  redirect(back(f));
 }
