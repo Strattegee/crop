@@ -13,3 +13,11 @@ export async function putForward(requestId: string, workerId: string, name: stri
     employer = r.employerName;
   }, () => booked ? `${name} is booked with ${employer}.` : `${name} is put forward. ${employer} approves first; you'll see the answer here.`);
 }
+
+/** Takes back the person the business put forward (before the shift starts); the employer's shift opens again. */
+export async function pullOut(requestId: string, name: string, employer: string, form: FormData) {
+  const reason = String(form.get('reason') ?? '').trim();
+  await attempt('/allocations', async () => {
+    await api(`/agency-requests/${requestId}/pull-out`, { method: 'POST', body: { reason: reason || undefined } });
+  }, `${name} is pulled out. ${employer} has been told and can fill it again.`);
+}

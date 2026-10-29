@@ -57,7 +57,7 @@ type AgencyFillState = {
   rounds: { id: string; agencyName: string; position: number; dueAt: string; sentAt: string | null; state: 'sent' | 'waiting' | 'skipped'; skippedReason: string | null; dueIn: string | null }[];
   next: { agencyName: string; dueIn: string } | null;
   activeAgencies: number; canRequest: boolean; problem: string | null;
-  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string } | null;
+  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string } | null;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */

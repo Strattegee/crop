@@ -309,3 +309,10 @@ Newest first. One entry per working session or scheduled run.
 - Also: the privacy policy, worker notice and data processing agreement now say what an employer sees about an agency's worker (name, agency, shift, and that they met the requirements), for the lawyer to check. A test about agency timing that failed late in the evening (Melbourne time) now works at any hour.
 - Next: offering to several of the agency's people at once (first to say yes goes), and emails to the agency when its person is approved, declined or taken off.
 - Waiting on David: the public apply form (spam protection and the form's questions).
+
+## 2026-10-30 early morning, 1:10am Melbourne (scheduled run)
+
+- Shipped: after an agency puts someone forward. On Allocations, the agency can now pull its person out (with an optional reason) until the shift starts: the employer's shift opens again with them shown as pulled out (purple), and the employer's owners and admins get an email with the reason. It's refused once the shift has started ("contact the employer directly") or when the employer has locked the week. The agency's owners and admins now get an email when the employer approves, declines or takes off their person, records them as pulled out, or cancels the shift (never about the agency's own changes, never twice).
+- Also: the privacy policy, worker notice and data processing agreement now mention that the employer sees any reason the agency gives when it pulls a worker out (for the lawyer to check). The reason box asks for no health details.
+- Next: offering a request to several of the agency's people at once (first to say yes goes).
+- Waiting on David: the public apply form (spam protection and the form's questions).

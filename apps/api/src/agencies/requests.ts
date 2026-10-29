@@ -133,7 +133,7 @@ export function agencyRules(
   return { rules, blockAll, unmatched };
 }
 
-export type Placement = 'waiting' | 'booked' | 'declined' | 'removed' | 'cancelled';
+export type Placement = 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled';
 
 /** How a placement reads, from either side ("Booked", "Waiting for Bayside Hospital to approve"). */
 export function placementWords(p: Placement, employerName?: string): string {
@@ -142,6 +142,7 @@ export function placementWords(p: Placement, employerName?: string): string {
     case 'waiting': return employerName ? `Waiting for ${employerName} to approve` : 'Waiting for approval';
     case 'declined': return 'Declined by the employer';
     case 'removed': return 'Taken off the shift by the employer';
+    case 'pulled_out': return 'Pulled out';
     case 'cancelled': return 'The shift was cancelled';
   }
 }
@@ -172,4 +173,58 @@ export function putForwardEmail(p: {
       : `Approve ${p.personName} from ${p.agencyName}? ${p.role} on ${localDay(p.startsAt, p.siteTimezone)}`,
     body: lines.join('\n'),
   };
+}
+
+/**
+ * The email to the agency's owners and admins when the employer approves, declines or takes off the person it put
+ * forward, records them as pulled out, or cancels the shift. Names the agency's own person and the shift only.
+ * Uses the agency's own words.
+ */
+export function placementChangedEmail(p: {
+  employerName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
+  siteTimezone: string; placement: Exclude<Placement, 'waiting'>;
+}, appUrl: string | null, w: Words = DEFAULT_WORDS) {
+  const where = [p.areaName, p.siteName].filter(Boolean).join(', ');
+  const shift = w.lower(T.shift);
+  const day = localDay(p.startsAt, p.siteTimezone);
+  const what: Record<typeof p.placement, { subject: string; line: string }> = {
+    booked: { subject: `${p.employerName} approved ${p.personName}`, line: `${p.employerName} has approved ${p.personName}. They are booked on the ${shift}.` },
+    declined: { subject: `${p.employerName} declined ${p.personName}`, line: `${p.employerName} has declined ${p.personName} for this ${shift}. They are free at that time again.` },
+    removed: { subject: `${p.employerName} took ${p.personName} off ${w.a(T.shift)}`, line: `${p.employerName} has taken ${p.personName} off this ${shift}. They are free at that time again.` },
+    pulled_out: { subject: `${p.employerName} recorded ${p.personName} as pulled out`, line: `${p.employerName} has recorded that ${p.personName} pulled out of this ${shift}. They are free at that time again.` },
+    cancelled: { subject: `${p.employerName} cancelled ${w.a(T.shift)} for ${p.personName}`, line: `${p.employerName} has cancelled this ${shift}, so ${p.personName} isn't needed. They are free at that time again.` },
+  };
+  const lines = [
+    what[p.placement].line,
+    '',
+    `${p.role} at ${where}`,
+    localWhen(p),
+    '',
+    appUrl ? `See it in CROP: ${appUrl.replace(/\/$/, '')}/allocations` : 'See it in CROP under Allocations.',
+  ];
+  return { subject: `${what[p.placement].subject}: ${p.role} on ${day}`, body: lines.join('\n') };
+}
+
+/**
+ * The email to the employer's owners and admins when an agency takes back the person it put forward. The shift is
+ * open again. Uses the employer's own words.
+ */
+export function pulledOutEmail(p: {
+  agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
+  siteTimezone: string; reason: string | null; shiftId: string; weekStart: string;
+}, appUrl: string | null, w: Words = DEFAULT_WORDS) {
+  const where = [p.areaName, p.siteName].filter(Boolean).join(', ');
+  const shift = w.lower(T.shift);
+  const link = appUrl ? `${appUrl.replace(/\/$/, '')}/roster?week=${p.weekStart}&shift=${p.shiftId}#shift-panel` : null;
+  const lines = [
+    `${p.agencyName} has pulled ${p.personName} out of your ${shift}:`,
+    '',
+    `${p.role} at ${where}`,
+    localWhen(p),
+    ...(p.reason ? [`Reason from ${p.agencyName}: ${p.reason}`] : []),
+    '',
+    `The ${shift} is open again. You can put someone on it or send it to your agencies again.`,
+    link ? `Open it in CROP: ${link}` : 'Open it on the roster in CROP.',
+  ];
+  return { subject: `${p.agencyName} pulled ${p.personName} out: ${p.role} on ${localDay(p.startsAt, p.siteTimezone)}`, body: lines.join('\n') };
 }

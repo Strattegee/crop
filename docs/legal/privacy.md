@@ -40,7 +40,7 @@ We do not use employer-provided workforce records to market unrelated products t
 
 ## Disclosure
 
-Information may be available to the relevant employer and authorised users according to roles, our employees with a legitimate support/security need, contracted hosting and technical service providers, professional advisers and authorities where lawfully required. Where a staffing agency using CROPwms supplies a worker to a business it is linked with, the agency puts the worker forward and CROPwms gives that business the worker’s name, the agency’s name and the shift; the agency checks the worker against the business’s requirements and only the result is shared, not the worker’s credentials, documents or contact details. We do not sell workers’ personal information.
+Information may be available to the relevant employer and authorised users according to roles, our employees with a legitimate support/security need, contracted hosting and technical service providers, professional advisers and authorities where lawfully required. Where a staffing agency using CROPwms supplies a worker to a business it is linked with, the agency puts the worker forward and CROPwms gives that business the worker’s name, the agency’s name and the shift (and, if the agency later takes the worker off the shift, any reason the agency gives); the agency checks the worker against the business’s requirements and only the result is shared, not the worker’s credentials, documents or contact details. We do not sell workers’ personal information.
 
 ## Australian storage and overseas disclosure
 
