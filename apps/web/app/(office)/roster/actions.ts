@@ -82,7 +82,8 @@ export async function offer(shiftId: string, f: FormData) {
 /** Agency fill (migration 0040): send an open shift to the business's agencies, first in order now, the rest on the timer. */
 export async function agencyFill(shiftId: string, f: FormData) {
   const tw = await words();
-  await attempt(back(f), () => api(`/shifts/${shiftId}/agency-fill`, { method: 'POST', body: { note: str(f, 'note') } }),
+  const step = Number(str(f, 'stepMinutes'));
+  await attempt(back(f), () => api(`/shifts/${shiftId}/agency-fill`, { method: 'POST', body: { note: str(f, 'note'), stepMinutes: Number.isInteger(step) && step > 0 ? step : undefined } }),
     `Sent to your first ${tw.lower(T.agency)}. The next ones get it in turn if nobody is put forward.`);
 }
 

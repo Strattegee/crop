@@ -5,14 +5,34 @@ import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
  * Design: docs/decisions/2026-10-28-agency-connections-design.md (approved by David 29 Oct), build step 2.
  */
 
-/**
- * Minutes between one agency and the next (David, 26 Oct): the shift starts within 2 hours → 10 minutes;
- * later the same day (the site's date) → 1 hour; the next day or later → 2 hours.
- */
-export function escalationMinutes(startsAt: Date, now: Date, zone: string): number {
-  const ms = startsAt.getTime() - now.getTime();
-  if (ms <= 2 * 3600_000) return 10;
-  return localDate(startsAt, zone) === localDate(now, zone) ? 60 : 120;
+/** How long each agency has a request before the next gets it too, per band (tenant_settings, migration 0045). */
+export type AgencyTiming = { soonMinutes: number; todayMinutes: number; laterMinutes: number };
+/** David's defaults (26 Oct): within 2 hours → 10 minutes; later the same day → 1 hour; the next day or later → 2 hours. */
+export const DEFAULT_AGENCY_TIMING: AgencyTiming = { soonMinutes: 10, todayMinutes: 60, laterMinutes: 120 };
+export const STEP_LIMITS = { soonMinutes: 240, todayMinutes: 720, laterMinutes: 1440 } as const;
+
+export type TimingBand = 'soon' | 'today' | 'later';
+/** Which band a shift falls in: starts within 2 hours, later the same day (the site's date), or the next day or later. */
+export function timingBand(startsAt: Date, now: Date, zone: string): TimingBand {
+  if (startsAt.getTime() - now.getTime() <= 2 * 3600_000) return 'soon';
+  return localDate(startsAt, zone) === localDate(now, zone) ? 'today' : 'later';
+}
+export const BAND_WORDS: Record<TimingBand, string> = {
+  soon: 'starts within 2 hours', today: 'starts later today', later: 'starts tomorrow or later',
+};
+
+/** Minutes between one agency and the next for this shift, from the business's timing (David's defaults if unset). */
+export function escalationMinutes(startsAt: Date, now: Date, zone: string, timing: AgencyTiming = DEFAULT_AGENCY_TIMING): number {
+  const band = timingBand(startsAt, now, zone);
+  return band === 'soon' ? timing.soonMinutes : band === 'today' ? timing.todayMinutes : timing.laterMinutes;
+}
+
+/** "10 minutes", "1 hour", "1 hour 30 minutes", "2 hours". */
+export function minutesWords(mins: number): string {
+  if (mins === 1440) return '1 day';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return [h ? `${h} hour${h === 1 ? '' : 's'}` : '', m ? `${m} minute${m === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') || '0 minutes';
 }
 
 export const localDate = (d: Date, zone: string) =>

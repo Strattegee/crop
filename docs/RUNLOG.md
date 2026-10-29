@@ -318,3 +318,9 @@ Newest first. One entry per working session or scheduled run.
 - Waiting on David: the public apply form (spam protection and the form's questions).
 - Also shipped: agencies offering a request to several of their people at once. On Allocations, tick several people who can go and press "Offer to ticked" (open until the shift starts, or for 30 minutes up to 4 hours). Each gets an email and a text from the agency with their own link (no sign-in). The first to accept is checked again and goes onto the employer's shift (booked, or waiting for approval) and is told which; the others get an email that it has gone. The office can record a yes it heard by phone ("They said yes") or withdraw the offers. Nothing reaches the employer until someone accepts.
 - Next: agency people counting for cover rules and equipment operator checks, or Needs attention on the agency's side.
+
+## 2026-10-30 early morning, 3:20am Melbourne (scheduled run)
+
+- Shipped: each business now sets its own agency fill timing. Settings → Agencies has "How long each agency gets": how long the first agency has a shift before the next one in the list gets it too, chosen separately for shifts starting within 2 hours, later today, and tomorrow or later (David's 10 minutes, 1 hour and 2 hours stay the defaults). Only owners and admins change it. On the roster, sending a shift to agencies uses the business's time for that shift, or the office can pick a different one just for that shift ("Next agency after"), and the panel says the gap used.
+- Next: Needs attention on the agency's side, or agency people counting for cover rules and equipment operator checks.
+- Waiting on David: the public apply form (spam protection and the form's questions).

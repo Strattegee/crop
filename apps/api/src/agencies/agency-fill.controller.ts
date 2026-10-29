@@ -4,14 +4,14 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { text } from '../common/validate.js';
+import { int, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { queueNotification } from '../notifications/notify.js';
 import { actorOf } from '../roster/publishing.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
 import { T, wordsFor } from '../terms/words.js';
-import { agencyFillProblem, agencyRules, escalationMinutes, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
+import { BAND_WORDS, DEFAULT_AGENCY_TIMING, agencyFillProblem, agencyRules, escalationMinutes, minutesWords, timingBand, type AgencyTiming, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
 import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
@@ -139,12 +139,20 @@ export async function tellAgencies(pool: Pool, deliveries: Delivery[]) {
   }
 }
 
+/** This business's agency fill timing (migration 0045), or David's defaults when it has no settings row. */
+export async function agencyTimingOf(db: PoolClient): Promise<AgencyTiming> {
+  const r = (await db.query<AgencyTiming>(
+    `select agency_step_soon_minutes as "soonMinutes", agency_step_today_minutes as "todayMinutes", agency_step_later_minutes as "laterMinutes"
+       from tenant_settings where tenant_id = app_tenant_id()`)).rows[0];
+  return r ?? { ...DEFAULT_AGENCY_TIMING };
+}
+
 type RoundRow = { id: string; connectionId: string; agencyName: string; position: number; dueAt: Date; sentAt: Date | null; sentHow: string | null; skippedAt: Date | null; skippedReason: string | null };
 
 async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
   const shift = await shiftById(db, shiftId);
-  const request = (await db.query<{ id: string; status: string; note: string | null; createdByName: string | null; createdAt: Date; closedAt: Date | null; closedReason: string | null }>(
-    `select id, status, note, created_by_name as "createdByName", created_at as "createdAt", closed_at as "closedAt", closed_reason as "closedReason"
+  const request = (await db.query<{ id: string; status: string; note: string | null; stepMinutes: number | null; createdByName: string | null; createdAt: Date; closedAt: Date | null; closedReason: string | null }>(
+    `select id, status, note, step_minutes as "stepMinutes", created_by_name as "createdByName", created_at as "createdAt", closed_at as "closedAt", closed_reason as "closedReason"
        from agency_requests where shift_id = $1 order by created_at desc limit 1`, [shiftId])).rows[0] ?? null;
   const rounds = request ? (await db.query<RoundRow>(
     `select id, connection_id as "connectionId", agency_name as "agencyName", position, due_at as "dueAt", sent_at as "sentAt", sent_how as "sentHow",
@@ -158,6 +166,8 @@ async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
             p.put_forward_by_name as "putForwardByName", p.created_at as "createdAt", p.decided_at as "decidedAt"
        from agency_placements p join workers w on w.id = p.worker_id where p.request_id = $1`, [request.id])).rows[0] ?? null : null;
   const next = request?.status === 'open' ? rounds.find(r => roundState(r) === 'waiting') ?? null : null;
+  const band = timingBand(new Date(shift.startsAt), now, shift.timezone);
+  const defaultMinutes = escalationMinutes(new Date(shift.startsAt), now, shift.timezone, await agencyTimingOf(db));
   return {
     shiftId,
     request,
@@ -165,6 +175,8 @@ async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
     rounds: rounds.map(r => ({ ...r, state: roundState(r), dueIn: roundState(r) === 'waiting' ? inWords(new Date(r.dueAt).getTime() - now.getTime()) : null })),
     next: next ? { agencyName: next.agencyName, dueAt: next.dueAt, dueIn: inWords(new Date(next.dueAt).getTime() - now.getTime()) } : null,
     activeAgencies: active,
+    /** The gap between agencies if it were sent now: the business's setting for this shift's band (Settings → Agencies). */
+    timing: { band, bandWords: BAND_WORDS[band], defaultMinutes, defaultWords: minutesWords(defaultMinutes) },
     canRequest: problem === null,
     problem,
   };
@@ -190,13 +202,15 @@ export class AgencyFillController {
   }
 
   /**
-   * Send an open shift to agencies (`{ note? }`): the first agency in the business's order gets it now, the next one
-   * after 10 minutes (starts within 2 hours), 1 hour (later today) or 2 hours (tomorrow or later), and so on.
+   * Send an open shift to agencies (`{ note?, stepMinutes? }`): the first agency in the business's order gets it now,
+   * each next one a step later. The step is `stepMinutes` (1–1440) when given, else the business's timing for how soon
+   * the shift starts (Settings → Agencies; defaults 10 minutes within 2 hours, 1 hour later today, 2 hours after).
    */
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/agency-fill')
   async request(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const note = text(body ?? {}, 'note', { max: 300 });
+    const chosenStep = int(body ?? {}, 'stepMinutes', 1, 1440);
     const actor = actorOf(auth);
     const deliveries = await withTenant(this.pool, t.tenantId, async db => {
       await db.query('select 1 from shifts where id = $1 for update', [id]);
@@ -209,10 +223,11 @@ export class AgencyFillController {
       const links = (await db.query<{ connectionId: string; preference: number | null; otherName: string }>(
         `select connection_id as "connectionId", preference, other_name as "otherName" from agency_connections
           where side = 'employer' and status = 'active'`)).rows;
-      const plan = roundSchedule(links, now, escalationMinutes(new Date(shift.startsAt), now, shift.timezone));
+      const step = chosenStep ?? escalationMinutes(new Date(shift.startsAt), now, shift.timezone, await agencyTimingOf(db));
+      const plan = roundSchedule(links, now, step);
       const req = (await db.query<{ id: string }>(
-        `insert into agency_requests(tenant_id, shift_id, note, created_by_name) values ($1,$2,$3,$4) returning id`,
-        [t.tenantId, id, note, actor.name ?? null])).rows[0];
+        `insert into agency_requests(tenant_id, shift_id, note, step_minutes, created_by_name) values ($1,$2,$3,$4,$5) returning id`,
+        [t.tenantId, id, note, step, actor.name ?? null])).rows[0];
       for (const p of plan) {
         await db.query(
           `insert into agency_request_rounds(tenant_id, request_id, connection_id, agency_name, position, due_at)
