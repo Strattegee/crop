@@ -443,8 +443,10 @@ export default async function RosterPage({ searchParams }: {
                 <span>
                   <strong>{i.title}</strong> <span className="muted">· {i.detail}</span>
                   <br />
-                  {/* Opens the shift in its own day or week, whatever is on screen now. */}
-                  <Link href={url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}>
+                  {/* Opens the shift in its own day or week in a new tab, scrolled to its panel, so the office can work
+                      through several and close each tab when done (David, 29 Oct). */}
+                  <Link href={`${url({ ...at(span === 'day' ? 'day' : 'week', span === 'day' ? i.shift.localDate : mondayOf(i.shift.localDate)), shift: i.shiftId })}#shift-panel`}
+                    target="_blank" rel="noopener" title="Opens in a new tab">
                     {longDate(i.shift.localDate)} {i.shift.localStart}–{i.shift.localEnd} {i.shift.role}
                   </Link>
                   {!site && <span className="muted"> · {i.shift.facilityName}</span>}
@@ -852,7 +854,7 @@ export default async function RosterPage({ searchParams }: {
         </DropZone>
 
         {selected && (
-          <aside className="roster-panel card" aria-label="Selected shift">
+          <aside id="shift-panel" className="roster-panel card" aria-label="Selected shift">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <h2 style={{ margin: 0 }}>{selected.role}</h2>
               <Link href={url({ shift: undefined })} className="muted" aria-label="Close">Close</Link>

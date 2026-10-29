@@ -122,7 +122,7 @@ label.inline input[type='checkbox'] { margin: 0; }
 .rcard.booked { border-color: #9ccbad; } .rcard.booked .st { color: var(--ok); }
 .rcard.assigned { border-color: #9cc0d9; } .rcard.assigned .st { color: #1d5f8a; }
 .rcard.open { border: 1.5px dashed var(--warn); } .rcard.open .st { color: var(--warn); }
-.roster-panel { flex: 1 1 320px; max-width: 380px; margin: 0; }
+.roster-panel { flex: 1 1 320px; max-width: 380px; margin: 0; scroll-margin-top: 12px; }
 .roster-panel h3 { font-size: 14px; margin: 14px 0 6px; }
 .roster-panel section { border-top: 1px solid var(--border); margin-top: 10px; }
 .panel-row { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #f0f2f4; font-size: 13px; }
