@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { businessZone, whenIn } from '../../../lib/business';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
+import { putForward } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ type Request = {
   id: string; connectionId: string; employerName: string; siteName: string; siteRegion: string | null; areaName: string | null; role: string;
   when: string; startsIn: string; breakMinutes: number; duties: string[]; requirements: Requirement[]; note: string | null;
   status: 'open' | 'filled' | 'withdrawn' | 'expired'; receivedAt: string; closedAt: string | null; closedReason: string | null; unmatched: number;
+  placedName: string | null; placedByName: string | null; placement: string | null; placementState: string | null;
 };
 
 type Reason = { code: string; message: string };
@@ -21,9 +23,9 @@ const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warn
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
 
 /**
- * Allocations (function code 2200, agency fill first slice): the requests employers have sent this business, soonest
- * first, with what each needs and this business's people checked against it (ready first). Putting people forward
- * comes next.
+ * Allocations (function code 2200, agency fill): the requests employers have sent this business, soonest first, with
+ * what each needs and this business's people checked against it (ready first), each with Put forward (migration 0042:
+ * booked straight away or waiting for the employer's approval, as the employer chose). Closed ones show who went.
  */
 export default async function AllocationsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const [list, tw, zone, sp] = await Promise.all([api<Request[]>('/agency-requests?status=all'), words(), businessZone(), searchParams]);
@@ -40,7 +42,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
         Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
-        Putting someone forward in CROP comes next; for now, call the employer.
+        Put someone forward and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose).
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className="card">
@@ -80,9 +82,14 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
                   <p className="small" style={{ margin: 0 }}><strong>Ready to go ({ready.length})</strong></p>
                   {ready.length === 0 && <p className="muted small" style={{ margin: 0 }}>Nobody meets the requirements for this {shift}.</p>}
                   {ready.slice(0, 8).map(x => (
-                    <div key={x.workerId} className="small">
-                      <Link href={`/workers/${x.workerId}`}>{x.name}</Link> <span className="muted">· {x.roles.join(', ') || 'no role'} · {x.weekHours} h that week</span>
-                      {x.warnings.map(w => <span key={w.message} className="warnline"> ⚠ {w.message}</span>)}
+                    <div key={x.workerId} className="small panel-row" style={{ alignItems: 'center' }}>
+                      <span>
+                        <Link href={`/workers/${x.workerId}`}>{x.name}</Link> <span className="muted">· {x.roles.join(', ') || 'no role'} · {x.weekHours} h that week</span>
+                        {x.warnings.map(w => <span key={w.message} className="warnline"> ⚠ {w.message}</span>)}
+                      </span>
+                      <form action={putForward.bind(null, r.id, x.workerId, x.name)}>
+                        <button className="btn small secondary" title={`Put ${x.name} on ${r.employerName}'s ${shift}`}>Put forward</button>
+                      </form>
                     </div>
                   ))}
                   {ready.length > 8 && <p className="muted small" style={{ margin: 0 }}>and {ready.length - 8} more</p>}
@@ -108,7 +115,10 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
               {closed.map(r => (
                 <tr key={r.id}>
                   <td>{r.role} · {r.siteName}</td><td>{r.employerName}</td><td>{r.when}</td>
-                  <td>{CLOSED[r.status] ?? r.status}{r.closedReason ? <span className="muted"> · {r.closedReason}</span> : null}</td>
+                  <td>
+                    {r.placedName ? <><strong>{r.placedName}</strong> · {r.placementState ?? r.placement}{r.placedByName ? <span className="muted"> · put forward by {r.placedByName}</span> : null}</>
+                      : <>{CLOSED[r.status] ?? r.status}{r.closedReason ? <span className="muted"> · {r.closedReason}</span> : null}</>}
+                  </td>
                 </tr>
               ))}
             </tbody>

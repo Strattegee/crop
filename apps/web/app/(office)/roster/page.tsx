@@ -36,13 +36,16 @@ type Shift = {
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
   offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
   coveringWorkerId?: string | null; coveringName?: string | null;
+  /** The agency the person on it came from (agency fill, migration 0042). */
+  agencyName?: string | null;
 };
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
 type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' | 'optional' }[] };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
-type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; equipment?: Equip[]; leave?: Leave[] };
+type AgencyPerson = { id: string; name: string; agencyName: string; rosteredHours: number };
+type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; agencyPeople?: AgencyPerson[]; equipment?: Equip[]; leave?: Leave[] };
 type Facility = { id: string; name: string; active: boolean };
 type FacilityDetail = Facility & { areas: { id: string; name: string; active: boolean }[] };
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; letter?: string | null; startTime: string; endTime: string; active: boolean };
@@ -54,6 +57,7 @@ type AgencyFillState = {
   rounds: { id: string; agencyName: string; position: number; dueAt: string; sentAt: string | null; state: 'sent' | 'waiting' | 'skipped'; skippedReason: string | null; dueIn: string | null }[];
   next: { agencyName: string; dueIn: string } | null;
   activeAgencies: number; canRequest: boolean; problem: string | null;
+  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string } | null;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
@@ -73,14 +77,14 @@ type EquipCandidate = { equipmentId: string; name: string; typeName: string; eli
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
 /**
  * The ribbon: Steve's colour for each stage of a shift (26 Oct). Grey unfilled, pale yellow offered,
- * darker yellow allocated (waiting for them), pink accepted (when the business approves first; not used yet),
+ * darker yellow allocated (waiting for them), pink accepted (an agency put someone forward and the business approves first),
  * purple the person pulled out, green booked, red cancelled.
  */
 function stage(s: Shift, tw: Words): { cls: string; label: string } {
   if (s.status === 'cancelled') return { cls: 'cancelled', label: 'Cancelled' };
   if (s.equipmentOnly) return s.status === 'open' ? { cls: 'unfilled', label: `Needs ${tw.lower(T.equipment)}` } : { cls: 'booked', label: `${tw.one(T.equipment)} booked` };
   if (s.status === 'booked') return { cls: 'booked', label: 'Booked' };
-  if (s.status === 'assigned') return { cls: 'allocated', label: 'Allocated' };
+  if (s.status === 'assigned') return s.agencyName ? { cls: 'accepted', label: 'To approve' } : { cls: 'allocated', label: 'Allocated' };
   if (s.pulledOutName) return { cls: 'pulled', label: 'Pulled out' };
   if (s.offersPending) return { cls: 'offered', label: `Offered to ${s.offersPending}` };
   return { cls: 'unfilled', label: 'Unfilled' };
@@ -229,7 +233,10 @@ export default async function RosterPage({ searchParams }: {
       groups.push({ key: fac, title: fac, rows });
     }
   } else {
-    groups.push({ key: 'people', title: tw.many(T.worker), rows: [...roster.people.map(p => personRow(p, shifts)), openRow('all', shifts),
+    groups.push({ key: 'people', title: tw.many(T.worker), rows: [...roster.people.map(p => personRow(p, shifts)),
+      ...(roster.agencyPeople ?? []).map((p): Row => ({ key: p.id, label: p.name, kind: 'person', sub: `${tw.one(T.agency)} · ${p.agencyName}`,
+        cells: cellsFor(s => s.workerId === p.id, shifts), balance: { text: `${fmtHours(p.rosteredHours)} h`, cls: '' } })),
+      openRow('all', shifts),
       ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this ${periodWord}`, cells: cellsFor(() => true, cancelled) }] : [])] });
   }
   if (equipment.length) {
@@ -304,7 +311,7 @@ export default async function RosterPage({ searchParams }: {
     href: url({ shift: s.id }), 'data-shift': s.id,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
-    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
   const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
@@ -939,7 +946,7 @@ export default async function RosterPage({ searchParams }: {
               <section><h3>Cancelled</h3><p style={{ margin: 0 }}>{selected.cancelledReason || 'No reason recorded.'}</p></section>
             ) : panelRefusal ? (<>
               <section>
-                {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.status === 'booked' ? 'booked' : 'waiting to confirm'}</span></p>}
+                {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></p>}
                 {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>{tw.one(T.equipment)}: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
                 <p className="notice" style={{ margin: '0 0 8px' }}>{panelRefusal}</p>
                 {pendingForShift ? (
@@ -977,17 +984,28 @@ export default async function RosterPage({ searchParams }: {
             {!selected.equipmentOnly && (
               <section>
                 <h3>Person</h3>
-                {selected.workerId ? (
+                {selected.workerId ? (<>
                   <div className="panel-row">
-                    <span><strong>{selected.workerName}</strong> <span className="muted">· {selected.status === 'booked' ? 'booked' : 'waiting to confirm'}</span></span>
+                    <span><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></span>
                     <span style={{ display: 'flex', gap: 6 }}>
                       {selected.status === 'assigned' && (
-                        <form action={confirm.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small">Confirm</button></form>
+                        <form action={confirm.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small">{selected.agencyName ? 'Approve' : 'Confirm'}</button></form>
                       )}
+                      {selected.agencyName && selected.status === 'assigned' ? (
+                        <form action={unassign.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small secondary" title={`Tells ${selected.agencyName}; the shift is open again`}>Decline</button></form>
+                      ) : (<>
                       <form action={unassign.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Remove</button></form>
                       <form action={unassign.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><input type="hidden" name="pulledOut" value="1" /><button className="btn small secondary" title="They can't do it: the shift shows purple until it's filled again">They pulled out</button></form>
+                      </>)}
                     </span>
                   </div>
+                  {selected.agencyName && agencyState?.placement && agencyState.placement.workerName === selected.workerName && (
+                    <p className="muted small" style={{ margin: '4px 0 0' }}>
+                      Put forward by {agencyState.placement.agencyName}{agencyState.placement.putForwardByName ? ` (${agencyState.placement.putForwardByName})` : ''} {when(agencyState.placement.createdAt)}, checked by them against your requirements.
+                      {selected.status === 'assigned' ? ' Approve to book them, or decline to open the shift again.' : ''}
+                    </p>
+                  )}
+                  </>
                 ) : (
                   <>
                     {selected.pulledOutName && <p className="notice error" style={{ margin: '0 0 8px' }}>{selected.pulledOutName} pulled out. Fill it again below.</p>}
@@ -1189,7 +1207,9 @@ function AgencyFillSection({ st, shiftId, here, when, tw }: { st: AgencyFillStat
         </>
       )}
       {!open && closed && (
-        <p className="muted small" style={{ margin: '0 0 6px' }}>Last sent {when(closed.createdAt)}: {closed.closedReason ?? closed.status}.</p>
+        <p className="muted small" style={{ margin: '0 0 6px' }}>
+          Last sent {when(closed.createdAt)}: {st.placement ? `${st.placement.agencyName} put forward ${st.placement.workerName} (${st.placement.state.toLowerCase()})` : closed.closedReason ?? closed.status}.
+        </p>
       )}
       {!open && st.canRequest && (
         <form action={agencyFill.bind(null, shiftId)} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

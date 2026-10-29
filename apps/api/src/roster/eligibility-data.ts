@@ -126,7 +126,16 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
             to_char(s.starts_at at time zone f.timezone, 'Dy DD Mon HH24:MI') || '–' || to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as label
        from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
       where sa.worker_id = any($1) and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
-        and (s.starts_at at time zone f.timezone)::date between $2::date - 1 and $3::date + 1`,
+        and (s.starts_at at time zone f.timezone)::date between $2::date - 1 and $3::date + 1
+     union all
+     -- Shifts at employers this business supplies (agency fill, migration 0042): the person is busy then too.
+     select i.placed_worker_id, i.id, i.role, i.starts_at, i.ends_at, i.employer_name || ', ' || i.site_name,
+            to_char(i.starts_at at time zone i.site_timezone, 'YYYY-MM-DD'),
+            (extract(epoch from (i.ends_at - i.starts_at)) / 3600 - i.break_minutes / 60.0)::float8,
+            to_char(i.starts_at at time zone i.site_timezone, 'Dy DD Mon HH24:MI') || '–' || to_char(i.ends_at at time zone i.site_timezone, 'HH24:MI')
+       from agency_inbox i
+      where i.placed_worker_id = any($1) and i.placement in ('waiting', 'booked')
+        and (i.starts_at at time zone i.site_timezone)::date between $2::date - 1 and $3::date + 1`,
     [ids, windows[0].from, windows[1].to])).rows) {
     const list = others.get(o.worker_id) ?? [];
     list.push({ id: o.id, role: o.role, startsAt: o.starts_at, endsAt: o.ends_at, localDate: o.local_date, hours: o.hours, facilityName: o.facility, label: o.label });
