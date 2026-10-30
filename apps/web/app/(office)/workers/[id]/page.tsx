@@ -25,6 +25,7 @@ type Credential = {
   id: string; credentialTypeId: string; typeName: string; number: string | null; notes?: string | null; issuedBy?: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
+  addedInApp?: boolean;
   documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
 };
 type Worker = {
@@ -212,6 +213,7 @@ export default async function WorkerPage({ params, searchParams }: {
                     <Badge label={VERIFICATION_LABEL[c.verification]} />
                     {c.verification === 'verified' && c.verifiedAt && <div className="muted" style={{ fontSize: 12 }}>{formatDate(c.verifiedAt)}{c.verificationNote ? ` · ${c.verificationNote}` : ''}</div>}
                     {c.verification === 'rejected' && <div className="muted" style={{ fontSize: 12 }}>{c.rejectionReason}</div>}
+                    {c.addedInApp && c.verification === 'unverified' && <div className="muted" style={{ fontSize: 12 }}>Added by them in the app</div>}
                   </td>
                   {canVerify && (
                     <td style={{ minWidth: 220 }}>

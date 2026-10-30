@@ -7,6 +7,7 @@ import { api, ApiError, SignedOut } from './src/api';
 import { finishSignIn, loadSession, signOut } from './src/auth';
 import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config';
 import { AvailabilityTab } from './src/AvailabilityTab';
+import { CredentialsTab } from './src/CredentialsTab';
 import { styles } from './src/styles';
 import { businessesOf, byDay, dayLabel, offerCloses, roleLine, STATE_LABEL, timeRange, type MyOffer, type MyShift } from './src/format';
 
@@ -14,7 +15,8 @@ import { businessesOf, byDay, dayLabel, offerCloses, roleLine, STATE_LABEL, time
 WebBrowser.maybeCompleteAuthSession();
 
 type Me = { email: string; memberships: { tenantSlug: string; tenantName: string; role: string }[] };
-type My = { business: string; firstName: string; today: string; word: { one: string; many: string; lower: string; lowerMany: string } };
+type Word = { one: string; many: string; lower: string; lowerMany: string };
+type My = { business: string; firstName: string; today: string; word: Word; credentialWord?: Word };
 type Phase = 'loading' | 'signedOut' | 'choose' | 'ready';
 
 export default function App() {
@@ -109,7 +111,7 @@ export default function App() {
 function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
   tenant: string; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
 }) {
-  const [tab, setTab] = useState<'shifts' | 'offers' | 'availability'>('shifts');
+  const [tab, setTab] = useState<'shifts' | 'offers' | 'availability' | 'credentials'>('shifts');
   const [my, setMy] = useState<My | null>(null);
   const [shifts, setShifts] = useState<MyShift[]>([]);
   const [offers, setOffers] = useState<MyOffer[]>([]);
@@ -163,16 +165,18 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
         {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
       </View>
       <View style={styles.tabs}>
-        {(['shifts', 'offers', 'availability'] as const).map(t => (
+        {(['shifts', 'offers', 'availability', 'credentials'] as const).map(t => (
           <Pressable key={t} style={[styles.tab, tab === t && styles.tabOn]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>
-              {t === 'shifts' ? `My ${word.lowerMany}` : t === 'offers' ? `Offers${offers.length ? ` (${offers.length})` : ''}` : 'Availability'}
+            <Text style={[styles.tabText, tab === t && styles.tabTextOn]} numberOfLines={1} adjustsFontSizeToFit>
+              {t === 'shifts' ? `My ${word.lowerMany}` : t === 'offers' ? `Offers${offers.length ? ` (${offers.length})` : ''}` : t === 'availability' ? 'Availability' : (my?.credentialWord?.many ?? 'Credentials')}
             </Text>
           </Pressable>
         ))}
       </View>
       {tab === 'availability' ? (
         <AvailabilityTab tenant={tenant} word={word} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
+      ) : tab === 'credentials' ? (
+        <CredentialsTab tenant={tenant} word={my?.credentialWord ?? { one: 'Credential', many: 'Credentials', lower: 'credential', lowerMany: 'credentials' }} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
