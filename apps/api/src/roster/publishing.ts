@@ -37,6 +37,7 @@ export function changeSummary(c: { kind: ChangeKind; workerName: string | null; 
     case 'created': return 'Shift added';
     case 'assigned': return c.via === 'agency' ? `${who} put forward by the agency, waiting for approval` : `${who} put on the shift`;
     case 'booked': return c.via === 'link' ? `${who} accepted the offer (reply link) and is booked`
+      : c.via === 'app' ? `${who} accepted the offer in the app and is booked`
       : c.via === 'agency' ? `${who} put forward by the agency and booked` : `${who} booked`;
     case 'confirmed': return `${who} confirmed`;
     case 'unassigned': return `${who} taken off the shift`;

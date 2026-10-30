@@ -7,7 +7,8 @@ import { eligibilityForShift } from './eligibility-data.js';
 import { closePendingOffers } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
 
-export type ReplyVia = 'office' | 'link';
+/** office (recorded by the office), link (a one-off reply link) or app (the person, signed in to the worker app). */
+export type ReplyVia = 'office' | 'link' | 'app';
 
 export async function contacts(db: PoolClient, ids: string[]) {
   return new Map((await db.query<{ id: string; first: string; email: string | null; phone: string | null }>(
@@ -30,21 +31,21 @@ export async function acceptOffer(db: PoolClient, tenant: { tenantId: string; te
   const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [ref.shift_id])).rows[0];
   const offer = (await db.query<{ status: string; expires_at: Date | null }>('select status, expires_at from shift_offers where id = $1 for update', [offerId])).rows[0];
   if (shift.status === 'cancelled') throw new ConflictException(`This ${sh} is cancelled`);
-  if (offer.status === 'accepted') throw new ConflictException(via === 'link' ? `You've already accepted this ${sh}` : 'This offer has already been accepted');
+  if (offer.status === 'accepted') throw new ConflictException(via !== 'office' ? `You've already accepted this ${sh}` : 'This offer has already been accepted');
   if (shift.status !== 'open') throw new ConflictException(`This ${sh} has already been filled`);
   const state = offerState(offer.status, offer.expires_at);
-  if (state === 'expired') throw new ConflictException(via === 'link'
+  if (state === 'expired') throw new ConflictException(via !== 'office'
     ? `This offer has expired. Contact ${tenantName} if you'd still like the ${sh}.`
     : `This offer has expired. Offer the ${sh} again if they still want it.`);
   if (state !== 'pending') throw new ConflictException('This offer is closed');
   // Locking the worker serialises their bookings, so two overlapping shifts can't both be accepted.
   const worker = (await db.query<{ status: string; name: string }>(
     `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [ref.worker_id])).rows[0];
-  if (worker.status !== 'active') throw new ConflictException(via === 'link' ? `This offer is closed. Contact ${tenantName} for details.` : `${worker.name} isn't active`);
+  if (worker.status !== 'active') throw new ConflictException(via !== 'office' ? `This offer is closed. Contact ${tenantName} for details.` : `${worker.name} isn't active`);
   const [check] = await eligibilityForShift(db, tenantId, ref.shift_id, [ref.worker_id]);
   if (!check.eligible) {
     // The person sees a plain reason without the detail of their records; the office sees the full reasons.
-    throw new ConflictException(via === 'link'
+    throw new ConflictException(via !== 'office'
       ? `You can't be booked for this ${sh} right now. Contact ${tenantName} to sort it out.`
       : check.blocks.map(b => b.message).join('. '));
   }
@@ -81,7 +82,7 @@ export async function declineOffer(db: PoolClient, offerId: string, by: string |
   if (!r.rowCount) {
     const o = (await db.query<{ status: string; expires_at: Date | null }>('select status, expires_at from shift_offers where id = $1', [offerId])).rows[0];
     if (!o) throw new NotFoundException('Offer not found');
-    if (via === 'link' && o.status === 'declined') throw new ConflictException(`You've already said no to this ${(await wordsFor(db)).lower(T.shift)}`);
+    if (via !== 'office' && o.status === 'declined') throw new ConflictException(`You've already said no to this ${(await wordsFor(db)).lower(T.shift)}`);
     if (offerState(o.status, o.expires_at) === 'expired') throw new ConflictException('This offer has expired');
     throw new ConflictException('This offer is closed');
   }

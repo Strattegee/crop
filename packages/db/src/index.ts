@@ -16,8 +16,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface Actor {
   id?: string | null;
   name?: string | null;
-  /** office (signed in), link (a one-off reply link) or system. */
-  via?: 'office' | 'link' | 'system';
+  /** office (signed in), link (a one-off reply link), app (the person in the worker app) or system. */
+  via?: 'office' | 'link' | 'app' | 'system';
   /** Their role in the business (owner, admin, allocator…), for rules such as who may change a published roster. */
   role?: string | null;
 }
