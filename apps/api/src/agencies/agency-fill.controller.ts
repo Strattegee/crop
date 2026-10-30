@@ -18,7 +18,7 @@ type Delivery = { agency_tenant_id: string; inbox_id: string };
 
 export const INBOX_COLS = `id, connection_id as "connectionId", employer_name as "employerName", site_name as "siteName", site_region as "siteRegion",
   site_timezone as "siteTimezone", area_name as "areaName", role, starts_at as "startsAt", ends_at as "endsAt", break_minutes as "breakMinutes",
-  duties, requirements, note, status, received_at as "receivedAt", closed_at as "closedAt", closed_reason as "closedReason",
+  duties, requirements, note, gender_requested as "genderRequested", status, received_at as "receivedAt", closed_at as "closedAt", closed_reason as "closedReason",
   placed_worker_id as "placedWorkerId", placed_name as "placedName", placed_by_name as "placedByName", placed_at as "placedAt", placement, placement_at as "placementAt"`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,8 +32,8 @@ export type InboxRow = InboxShift & { id: string; connectionId: string; siteRegi
  */
 export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[], opts: { evenIfClosed?: boolean } = {}) {
   const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
-    requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number }>(
-    `select connection_id, employer_name, role, starts_at, ends_at, status, requirements,
+    requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number; gender_requested: 'F' | 'M' | null }>(
+    `select connection_id, employer_name, role, starts_at, ends_at, status, requirements, gender_requested,
             to_char(starts_at at time zone site_timezone, 'YYYY-MM-DD') as local_date,
             to_char(starts_at at time zone site_timezone, 'HH24:MI') as local_start,
             (extract(epoch from (ends_at - starts_at)) / 3600 - break_minutes / 60.0)::float8 as hours
@@ -46,7 +46,8 @@ export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId
   const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
   // `evenIfClosed`: checking the person already put forward (Needs attention); the placement itself is this shift (`id`), so it isn't double booking.
   const people = r.status !== 'open' && !opts.evenIfClosed ? [] : rankCandidates(await eligibilityForFacts(db, tenantId,
-    { id: inboxId, role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours },
+    { id: inboxId, role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours,
+      genderRequested: r.gender_requested },
     { onlyRules: rules, roleWarnOnly: true, blockAll, workerIds }));
   // (Asking about one person: whether they are active is checked when they are put forward.)
   return { status: r.status, unmatched, people };

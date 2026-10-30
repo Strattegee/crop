@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 type Requirement = { name: string; severity: 'hard' | 'warning' | 'optional'; forDuty: string | null; credentialTypeId: string | null };
 type Request = {
   id: string; connectionId: string; employerName: string; siteName: string; siteRegion: string | null; areaName: string | null; role: string;
-  startsAt: string; when: string; startsIn: string; breakMinutes: number; duties: string[]; requirements: Requirement[]; note: string | null;
+  startsAt: string; when: string; startsIn: string; breakMinutes: number; duties: string[]; requirements: Requirement[]; note: string | null; genderRequested?: 'F' | 'M' | null;
   status: 'open' | 'filled' | 'withdrawn' | 'expired'; receivedAt: string; closedAt: string | null; closedReason: string | null; unmatched: number;
   placedName: string | null; placedByName: string | null; placement: string | null; placementState: string | null;
 };
@@ -23,6 +23,7 @@ type Offer = { id: string; workerId: string; workerName: string; state: string; 
 const OFFER_STATE: Record<string, string> = { pending: 'waiting for a reply', expired: 'expired', accepted: 'accepted', declined: 'said no', withdrawn: 'withdrawn', filled: 'filled' };
 
 const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
+const GENDER_ASKED = { F: 'A female worker requested', M: 'A male worker requested' } as const;
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
 
 /**
@@ -71,6 +72,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
             </p>
             <p style={{ margin: '2px 0' }}>{r.when}{r.breakMinutes ? ` (${r.breakMinutes} min break)` : ''} <span className="muted">· starts {r.startsIn}</span></p>
             {r.duties.length > 0 && <p className="small" style={{ margin: '2px 0' }}>Duties: {r.duties.join(', ')}</p>}
+            {r.genderRequested && <p className="small" style={{ margin: '2px 0' }}>{GENDER_ASKED[r.genderRequested]}</p>}
             {r.note && <p className="small" style={{ margin: '2px 0' }}>Note from {r.employerName}: {r.note}</p>}
             {r.requirements.length > 0 && (
               <ul className="small" style={{ margin: '4px 0 0', paddingLeft: 18 }}>
