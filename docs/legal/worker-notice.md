@@ -6,7 +6,7 @@ CROPwms is provided by Strattegee Pty Ltd. Your employer uses it to manage certa
 
 ## What information might appear?
 
-Your name, work contact details, workplace or role, shifts and rosters, availability, attendance or timesheets, and credentials may appear if your employer has enabled those features. The app also uses limited login, security, diagnostic and notification information to work properly.
+Your name, work contact details, workplace or role, shifts and rosters, availability, attendance or timesheets, credentials and, if your employer records it, your gender (used when a client asks for a worker of a particular gender) may appear if your employer has enabled those features. The app also uses limited login, security, diagnostic and notification information to work properly.
 
 ## Who sees it?
 

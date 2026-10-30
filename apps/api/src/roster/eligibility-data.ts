@@ -43,13 +43,13 @@ export interface Candidate {
 
 /** The facts about a shift that eligibility needs (within withTenant). */
 export async function loadShiftFacts(db: PoolClient, shiftId: string): Promise<ShiftFacts & { id: string }> {
-  const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; local_start: string; hours: number }>(
-    `select s.id, s.role, s.starts_at, s.ends_at, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
+  const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; local_start: string; hours: number; gender_requested: 'F' | 'M' | null }>(
+    `select s.id, s.role, s.gender_requested, s.starts_at, s.ends_at, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
             to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as local_start,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours
        from shifts s join facilities f on f.id = s.facility_id where s.id = $1`, [shiftId])).rows[0];
   if (!s) throw new NotFoundException('Shift not found');
-  return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, localStart: s.local_start, hours: s.hours };
+  return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, localStart: s.local_start, hours: s.hours, genderRequested: s.gender_requested };
 }
 
 /** Operator credentials needed by the equipment booked on a shift. */
@@ -98,8 +98,8 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   roleWarnOnly?: boolean; blockAll?: string[];
 }): Promise<Candidate[]> {
   const { workerIds } = opts;
-  const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null }>(
-    `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
+  const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null; gender: 'F' | 'M' | null }>(
+    `select w.id, w.gender, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
        from workers w
        left join lateral (select employment_type from employment_terms e
                            where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
@@ -159,7 +159,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
       availability: availability.get(w.id), leave: leave.get(w.id) ?? [], employment: employment.get(w.id) ?? [],
-      roleWarnOnly: opts.roleWarnOnly,
+      roleWarnOnly: opts.roleWarnOnly, gender: w.gender,
     });
     for (const message of opts.blockAll ?? []) {
       e.blocks.push({ code: 'credential', message });

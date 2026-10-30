@@ -6,7 +6,7 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   agencyFill, agencyFillNext, agencyFillWithdraw, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
@@ -14,7 +14,7 @@ import { minutesWords, requestStepChoices } from '../../../lib/agency-timing';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
-  addDaysIso,
+  addDaysIso, shiftMarkers,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,9 @@ type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null; shiftLetter?: string | null;
   role: string; status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
-  equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string }[];
+  equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string; vehicle?: boolean }[];
+  /** Gender requested by whoever asked for the shift, and the gender of the person on it (David, 30 Oct). */
+  genderRequested?: 'F' | 'M' | null; workerGender?: 'F' | 'M' | null; itemCount?: number;
   offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
   coveringWorkerId?: string | null; coveringName?: string | null;
   /** The agency the person on it came from (agency fill, migration 0042). */
@@ -315,11 +317,16 @@ export default async function RosterPage({ searchParams }: {
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
     title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
+  // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
+  const marks = (s: Shift) => {
+    const list = s.status === 'cancelled' ? [] : shiftMarkers(s);
+    return list.length ? <span className="mks">{list.map(m => <b key={m.key} className={`mk ${m.cls}`} title={m.title} aria-label={m.title}>{m.letter}</b>)}</span> : null;
+  };
   const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
-    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
+    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{marks(s)}{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
   ) : (<>
     <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-    <span className="st">{stage(s, tw).label}</span>
+    <span className="st">{stage(s, tw).label}{marks(s)}</span>
     {kind === 'area' ? (<>
       <span className={`ln who-on${s.workerName || s.equipmentOnly ? '' : ' unfilled'}`}>{s.equipmentOnly ? s.role : s.workerName ?? 'Unfilled'}</span>
       {!s.equipmentOnly && <span className="ln rl">{s.role}</span>}
@@ -512,6 +519,13 @@ export default async function RosterPage({ searchParams }: {
             ))}
           </fieldset>
           <label style={{ flex: '0 1 110px' }}>People<input name="quantity" type="number" min={1} max={20} defaultValue={1} /></label>
+          <label style={{ flex: '0 1 150px' }}>Gender requested
+            <select name="genderRequested" defaultValue="">
+              <option value="">No preference</option>
+              <option value="F">Female (F)</option>
+              <option value="M">Male (M)</option>
+            </select>
+          </label>
           <label className="inline" style={{ flex: '0 1 auto' }}><input type="checkbox" name="equipmentOnly" />{tw.one(T.equipment)} only</label>
           {duties.some(d => d.active) && (
             <fieldset className="weekdays">
@@ -1076,6 +1090,23 @@ export default async function RosterPage({ searchParams }: {
               </section>
             )}
 
+            {!selected.equipmentOnly && (
+              <section>
+                <h3>Gender requested</h3>
+                <form action={setGender.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="hidden" name="back" value={here} />
+                  <label className="sr-only" htmlFor="genderRequested">Gender requested for this {tw.lower(T.shift)}</label>
+                  <select id="genderRequested" name="genderRequested" defaultValue={selected.genderRequested ?? ''}>
+                    <option value="">No preference</option>
+                    <option value="F">Female (F)</option>
+                    <option value="M">Male (M)</option>
+                  </select>
+                  <button className="btn small secondary">Save</button>
+                </form>
+                <p className="muted small" style={{ margin: '4px 0 0' }}>When whoever asked for the {tw.lower(T.shift)} needs a particular gender. Anyone else gets a warning, not a block.</p>
+              </section>
+            )}
+
             {!selected.equipmentOnly && (() => {
               // Steve's "T" line: who this shift covers (e.g. someone on leave). People away that day come first.
               const choices = coveringChoices(roster.people, roster.leave ?? [], selected.localDate,
@@ -1166,7 +1197,7 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <div className="roster-legend">
-        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><i className="leave-key" /> Leave</span>
+        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g">F</b>/<b className="mk mk-g">M</b> gender requested (or of the person on it)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><i className="leave-key" /> Leave</span>
         <span><i className="rb accepted" /> Accepted (when approval is on)</span>
       </div>
 

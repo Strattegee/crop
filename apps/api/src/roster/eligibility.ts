@@ -8,7 +8,8 @@
  * - the shift would take them over their visa's hours in a fortnight (any 14 days starting on a Monday).
  * - approved leave on the shift date (availability.ts).
  * Warnings (shown, not blocking): warning-level credential rules, credentials expiring soon,
- * less rest between shifts than the business's minimum, requested leave, and not being available.
+ * less rest between shifts than the business's minimum, requested leave, not being available, and a gender other
+ * than the one requested for the shift, or none recorded (David, 30 Oct).
  */
 import { addDays, credentialStatus, type ComplianceIssue, type CredentialFacts } from '../workforce/compliance.js';
 import { employmentReason, type TermDates } from './employment.js';
@@ -24,6 +25,25 @@ export interface ShiftFacts {
   hours: number;
   /** Site-local start time (HH:MM), for availability (AM / PM / night). */
   localStart?: string;
+  /** F or M when whoever asked for the shift asked for a gender (David, 30 Oct). */
+  genderRequested?: Gender | null;
+}
+
+export type Gender = 'F' | 'M';
+const GENDER_WORD: Record<Gender, string> = { F: 'female', M: 'male' };
+
+/**
+ * A warning when a shift asks for a gender and the person is recorded as the other one, or not recorded.
+ * `personGender` undefined = nobody to check. Never a block: the client may agree, so the office decides.
+ */
+export function genderReason(name: string, requested: Gender | null | undefined, personGender: Gender | null | undefined): Reason | null {
+  if (!requested || personGender === undefined || personGender === requested) return null;
+  return {
+    code: 'gender',
+    message: personGender
+      ? `A ${GENDER_WORD[requested]} worker was requested for this shift; ${name} is recorded as ${GENDER_WORD[personGender]}`
+      : `A ${GENDER_WORD[requested]} worker was requested for this shift; ${name}'s gender isn't recorded`,
+  };
 }
 
 export interface OtherShift extends ShiftFacts {
@@ -56,12 +76,14 @@ export interface EligibilityInput {
   employment?: TermDates[];
   /** A different role is a warning, not a block (an agency's roles are named by the agency, not the employer). */
   roleWarnOnly?: boolean;
+  /** F, M or null (not recorded); leave out to skip the gender check. */
+  gender?: Gender | null;
 }
 
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
 
 export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
-  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment';
+  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 
@@ -112,6 +134,9 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
     if (i.severity === 'hard' && i.problem !== 'expiring') blocks.push({ code, message });
     else warnings.push({ code, message });
   }
+
+  const g = genderReason(p.name, shift.genderRequested, p.gender);
+  if (g) warnings.push(g);
 
   const employed = employmentReason(p.name, shift.localDate, p.employment ?? []);
   if (employed) (employed.hard ? blocks : warnings).push({ code: 'employment', message: employed.message });

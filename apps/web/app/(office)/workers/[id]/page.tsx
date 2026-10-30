@@ -29,7 +29,7 @@ type Credential = {
 };
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
-  status: string; roles: string[]; compliance: string; credentials: Credential[];
+  gender?: 'F' | 'M' | null; status: string; roles: string[]; compliance: string; credentials: Credential[];
   issues: { typeName: string; severity: string; problem: string }[];
   optional?: { credentialTypeId: string; typeName: string; held: boolean }[];
 };
@@ -256,6 +256,13 @@ export default async function WorkerPage({ params, searchParams }: {
           <label>Preferred name<input name="preferredName" defaultValue={w.preferredName ?? ''} maxLength={100} /></label>
           <label>Email<input name="email" type="email" defaultValue={w.email ?? ''} maxLength={200} /></label>
           <label>Mobile<input name="phone" defaultValue={w.phone ?? ''} maxLength={30} /></label>
+          <label>Gender <span className="muted">(optional)</span>
+            <select name="gender" defaultValue={w.gender ?? ''}>
+              <option value="">Not recorded</option>
+              <option value="F">Female</option>
+              <option value="M">Male</option>
+            </select>
+          </label>
           <label>Roles<input name="roles" defaultValue={w.roles.join(', ')} maxLength={200} /></label>
           <label>Status
             <select name="status" defaultValue={w.status}>

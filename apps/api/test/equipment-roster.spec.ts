@@ -97,7 +97,7 @@ describe('equipment on the roster', () => {
 
     // Nobody on the shift yet: a forklift can be booked, with a warning that it needs an operator.
     const b = await http().post(`/shifts/${mon}/equipment`).set(as('alloc')).send({ equipmentId: fork1 }).expect(200);
-    expect(b.body.equipment).toEqual([{ id: fork1, name: 'Forklift 1', typeName: 'Forklift' }]);
+    expect(b.body.equipment).toEqual([{ id: fork1, name: 'Forklift 1', typeName: 'Forklift', vehicle: false }]);
     expect(b.body.status).toBe('open'); // status follows the person
     expect(b.body.warnings).toEqual(['Forklift 1 needs an operator holding a Forklift licence; nobody is on this shift yet']);
     await http().post(`/shifts/${mon}/equipment`).set(as('alloc')).send({ equipmentId: fork1 }).expect(409); // already on it

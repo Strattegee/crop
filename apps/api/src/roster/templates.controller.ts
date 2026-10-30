@@ -43,7 +43,7 @@ async function slotsFromWeek(db: PoolClient, facilityId: string, weekStart: stri
             to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "startTime",
             to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "endTime",
             s.break_minutes as "breakMinutes", s.area_id as "areaId", s.shift_code_id as "shiftCodeId", s.role,
-            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes,
+            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes, s.gender_requested as "genderRequested",
             coalesce((select json_agg(se.equipment_id order by se.created_at) from shift_assignments se
                        where se.shift_id = s.id and se.resource_kind = 'equipment' and se.status in ('assigned', 'confirmed')), '[]'::json) as "equipmentIds",
             coalesce((select json_agg(dl.duty_id) from shift_duty_links dl where dl.shift_id = s.id), '[]'::json) as "dutyIds"
@@ -80,11 +80,11 @@ async function createFromSlots(
   const result: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
   for (const p of planWeek(slots, weekStart)) {
     const id = (await db.query<{ id: string }>(
-      `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person)
-       values ($1, $2, $3, $4, $5, ($6::date + $7::time) at time zone $8, ($6::date + $9::int + $10::time) at time zone $8, $11, $12, $13, $14)
+      `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person, gender_requested)
+       values ($1, $2, $3, $4, $5, ($6::date + $7::time) at time zone $8, ($6::date + $9::int + $10::time) at time zone $8, $11, $12, $13, $14, $15)
        returning id`,
       [tenantId, f.id, p.areaId, p.shiftCodeId, p.role, p.date, p.startTime, f.timezone, p.overnight ? 1 : 0, p.endTime,
-        p.breakMinutes, p.notes, auth.userId, p.needsPerson])).rows[0].id;
+        p.breakMinutes, p.notes, auth.userId, p.needsPerson, p.needsPerson ? p.genderRequested ?? null : null])).rows[0].id;
     result.created++;
     // Duties first, so eligibility for the usual person sees what the shift needs. Switched-off duties are dropped.
     if (p.dutyIds?.length) {
@@ -202,11 +202,11 @@ export class RosterTemplatesController {
       }
       const rows = slots.map(s => ({ ...s, id: randomUUID() }));
       await db.query(
-        `insert into roster_template_shifts(id, tenant_id, template_id, weekday, start_time, end_time, break_minutes, area_id, shift_code_id, role, needs_person, worker_id, notes)
+        `insert into roster_template_shifts(id, tenant_id, template_id, weekday, start_time, end_time, break_minutes, area_id, shift_code_id, role, needs_person, worker_id, notes, gender_requested)
          select x.id, $1, $2, x.weekday, x."startTime"::time, x."endTime"::time, x."breakMinutes", x."areaId", x."shiftCodeId", x.role, x."needsPerson",
-                case when $4 and x."needsPerson" then x."workerId" end, x.notes
+                case when $4 and x."needsPerson" then x."workerId" end, x.notes, x."genderRequested"
            from json_to_recordset($3::json) as x(id uuid, weekday int, "startTime" text, "endTime" text, "breakMinutes" int, "areaId" uuid,
-                "shiftCodeId" uuid, role text, "needsPerson" boolean, "workerId" uuid, notes text)`,
+                "shiftCodeId" uuid, role text, "needsPerson" boolean, "workerId" uuid, notes text, "genderRequested" text)`,
         [t.tenantId, id, JSON.stringify(rows), people]);
       const duties = rows.flatMap(r => (r.dutyIds ?? []).map(d => ({ s: r.id, d })));
       if (duties.length) {
@@ -259,6 +259,7 @@ export class RosterTemplatesController {
       const slots = (await db.query<Slot>(
         `select weekday, to_char(start_time, 'HH24:MI') as "startTime", to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes",
                 area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId", notes,
+                gender_requested as "genderRequested",
                 coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds",
                 coalesce((select json_agg(td.duty_id) from roster_template_duties td where td.template_shift_id = ts.id), '[]'::json) as "dutyIds"
            from roster_template_shifts ts where template_id = $1`, [id])).rows;

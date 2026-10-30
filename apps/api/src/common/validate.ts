@@ -22,7 +22,7 @@ const LABELS: Record<string, string> = {
   homeFacilityId: 'Home site', equipmentOnly: 'Equipment only', dueOn: 'Due date', operatorCredentialTypeId: 'Operator credential',
   unit: 'Unit', sku: 'SKU', unitCostCents: 'Unit cost (cents)', chargeCents: 'Charge to client (cents)', tracksStock: 'Count stock', active: 'Active',
   shiftId: 'Shift', workerIds: 'People', expiresInMinutes: 'Offer open for (minutes)', notify: 'Send messages',
-  weekStart: 'Week', toWeek: 'Week to fill', fromWeek: 'Week to copy', people: 'Include people', addToExisting: 'Add to the shifts already there', kind: 'Type of leave', endsOn: 'End date', approved: 'Approved', periods: 'Times of day', days: 'Days', change: 'Change',
+  weekStart: 'Week', toWeek: 'Week to fill', fromWeek: 'Week to copy', people: 'Include people', addToExisting: 'Add to the shifts already there', kind: 'Type of leave', endsOn: 'End date', approved: 'Approved', gender: 'Gender', genderRequested: 'Gender requested', periods: 'Times of day', days: 'Days', change: 'Change',
 };
 const label = (key: string) => LABELS[key] ?? key;
 
@@ -91,4 +91,11 @@ export function isTimeZone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** F or M; blank or null = not recorded / no request (David, 30 Oct). */
+export const GENDERS = ['F', 'M'] as const;
+export type Gender = typeof GENDERS[number];
+export function gender(body: Body, key: string): Gender | null {
+  return oneOf(body, key, GENDERS);
 }

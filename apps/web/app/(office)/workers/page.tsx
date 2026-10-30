@@ -43,6 +43,13 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           <label>Last name<input name="lastName" required maxLength={100} /></label>
           <label>Email<input name="email" type="email" maxLength={200} /></label>
           <label>Mobile<input name="phone" maxLength={30} /></label>
+          <label>Gender <span className="muted">(optional)</span>
+            <select name="gender" defaultValue="">
+              <option value="">Not recorded</option>
+              <option value="F">Female</option>
+              <option value="M">Male</option>
+            </select>
+          </label>
           <label>Roles<input name="roles" placeholder="e.g. RN, EN, AIN" maxLength={200} /></label>
           {canSetEmployment && <>
             <label>Employment

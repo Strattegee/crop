@@ -343,3 +343,39 @@ export function addShiftsWhen(dates: string[]): string {
   if (dates.length === 1) return ` on ${shortDate(dates[0])}`;
   return ` on ${dates.length} days, ${shortDate(dates[0])} to ${shortDate(dates[dates.length - 1])}`;
 }
+
+/** What a card needs for its marker letters (David, 30 Oct). */
+export type MarkerShift = {
+  genderRequested?: 'F' | 'M' | null; workerId?: string | null; workerName?: string | null; workerGender?: 'F' | 'M' | null;
+  equipment?: { name: string; vehicle?: boolean }[]; itemCount?: number; duties?: { name: string }[];
+};
+export type Marker = { key: string; letter: string; title: string; cls: string };
+const GENDER_WORD = { F: 'female', M: 'male' } as const;
+
+/**
+ * Letters beside the A/P/N letter so the rosterer sees a shift is more than labour (David, 30 Oct):
+ * F/M = gender requested by whoever asked for the shift (marked when the person on it is recorded otherwise or not
+ * at all), or the person's own gender when nothing was requested; V = vehicles booked, E = other equipment,
+ * I = items given out or used, D = duties.
+ */
+export function shiftMarkers(s: MarkerShift): Marker[] {
+  const out: Marker[] = [];
+  if (s.genderRequested) {
+    const want = GENDER_WORD[s.genderRequested];
+    const off = !!s.workerId && s.workerGender !== s.genderRequested;
+    const who = s.workerName ?? 'The person on it';
+    out.push({
+      key: 'g', letter: s.genderRequested, cls: `mk-g${off ? ' warn' : ''}`,
+      title: `${want[0].toUpperCase()}${want.slice(1)} worker requested${off ? (s.workerGender ? `; ${who} is recorded as ${GENDER_WORD[s.workerGender]}` : `; ${who}'s gender isn't recorded`) : ''}`,
+    });
+  } else if (s.workerId && s.workerGender) {
+    out.push({ key: 'g', letter: s.workerGender, cls: 'mk-g soft', title: `${s.workerName ?? 'The person on it'} is ${GENDER_WORD[s.workerGender]}` });
+  }
+  const vehicles = (s.equipment ?? []).filter(e => e.vehicle);
+  const other = (s.equipment ?? []).filter(e => !e.vehicle);
+  if (vehicles.length) out.push({ key: 'v', letter: 'V', cls: 'mk-v', title: `Vehicle: ${vehicles.map(e => e.name).join(', ')}` });
+  if (other.length) out.push({ key: 'e', letter: 'E', cls: 'mk-e', title: `Equipment: ${other.map(e => e.name).join(', ')}` });
+  if (s.itemCount) out.push({ key: 'i', letter: 'I', cls: 'mk-i', title: `${s.itemCount} ${s.itemCount === 1 ? 'item' : 'items'} given out or used` });
+  if (s.duties?.length) out.push({ key: 'd', letter: 'D', cls: 'mk-d', title: `Duties: ${s.duties.map(d => d.name).join(', ')}` });
+  return out;
+}

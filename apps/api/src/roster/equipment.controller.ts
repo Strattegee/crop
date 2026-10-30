@@ -6,7 +6,7 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { date, oneOf, text } from '../common/validate.js';
+import { bool, date, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
@@ -29,7 +29,7 @@ function uuidOrNull(body: Record<string, unknown>, key: string, label: string): 
 
 const isUnique = (e: unknown) => (e as { code?: string }).code === '23505';
 
-const TYPE_COLS = `et.id, et.name, et.active, et.operator_credential_type_id as "operatorCredentialTypeId", ct.name as "operatorCredentialName"`;
+const TYPE_COLS = `et.id, et.name, et.active, et.is_vehicle as "vehicle", et.operator_credential_type_id as "operatorCredentialTypeId", ct.name as "operatorCredentialName"`;
 const TYPE_FROM = `equipment_types et left join credential_types ct on ct.id = et.operator_credential_type_id`;
 
 async function checkCredentialType(db: PoolClient, id: string | null | undefined) {
@@ -57,11 +57,12 @@ export class EquipmentTypesController {
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { required: true, max: 80 })!;
     const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator credential') ?? null;
+    const vehicle = bool(body, 'vehicle') ?? false;
     return withTenant(this.pool, t.tenantId, async db => {
       await checkCredentialType(db, op);
       try {
         const { id } = (await db.query<{ id: string }>(
-          'insert into equipment_types(tenant_id, name, operator_credential_type_id) values ($1,$2,$3) returning id', [t.tenantId, name, op])).rows[0];
+          'insert into equipment_types(tenant_id, name, operator_credential_type_id, is_vehicle) values ($1,$2,$3,$4) returning id', [t.tenantId, name, op, vehicle])).rows[0];
         return (await db.query(`select ${TYPE_COLS} from ${TYPE_FROM} where et.id = $1`, [id])).rows[0];
       } catch (e) {
         if (isUnique(e)) throw new BadRequestException(`There is already an equipment type called ${name}`);
@@ -77,13 +78,15 @@ export class EquipmentTypesController {
     const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator credential');
     const active = body?.active;
     if (active !== undefined && typeof active !== 'boolean') throw new BadRequestException('Active must be true or false');
+    const vehicle = bool(body, 'vehicle');
     return withTenant(this.pool, t.tenantId, async db => {
       await checkCredentialType(db, op);
       try {
         const r = await db.query(
           `update equipment_types set name = coalesce($2, name), active = coalesce($3, active),
-                  operator_credential_type_id = case when $4 then $5::uuid else operator_credential_type_id end
-            where id = $1`, [id, name, active ?? null, op !== undefined, op ?? null]);
+                  operator_credential_type_id = case when $4 then $5::uuid else operator_credential_type_id end,
+                  is_vehicle = coalesce($6, is_vehicle)
+            where id = $1`, [id, name, active ?? null, op !== undefined, op ?? null, vehicle]);
         if (!r.rowCount) throw new NotFoundException('Equipment type not found');
       } catch (e) {
         if (isUnique(e)) throw new BadRequestException(`There is already an equipment type called ${name}`);
