@@ -115,6 +115,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 
 ## Questions for David and Steve (new, 26 Oct night)
 - Steve (29 Oct): the covering line says "Covering Sandra Harrison" without the kind of leave (we never show leave kinds, since personal leave can mean health). Is that enough, or should the office be able to add a short note?
+- David (30 Oct), talking to Steve: more letters on shift cards so the rosterer sees a shift is more than labour, e.g. a gender letter (healthcare: some clients need a carer of a particular gender) and letters for vehicles, equipment and items (contractors' jobs can need several). Proposal: small marker chips beside the A/P/N letter, worked out from data the shift already has (equipment and vehicles booked, items, duties) plus a new "carer gender" requirement on the shift or client. Gender needs decisions first: who sets it (client, site or shift), must have vs preference, and recording a worker's gender only with consent; it changes the privacy policy and DPA, and the anti-discrimination exemption for personal care needs checking by the lawyer. Held until Steve's view.
 - (Answered 27 Oct: yes, and built.) When a week is published staff get their shifts by email and text; after changes, publishing again tells the people affected.
 
 ## Questions for David and Steve (sent 26 Oct; answered the same evening, see docs/decisions/2026-10-26-steve-answers.md; all answered)
