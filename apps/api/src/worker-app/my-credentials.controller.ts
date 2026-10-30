@@ -16,7 +16,9 @@ import { appliesTo, credentialStatus } from '../workforce/compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { T, wordsFor } from '../terms/words.js';
 import { requireLinked } from './worker-app.controller.js';
+import { tellOffice } from './tell-office.js';
 import {
+  appCredentialEmail,
   myAddRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine,
 } from './worker-app.js';
 
@@ -95,8 +97,8 @@ export class MyCredentialsController {
       const w = await requireLinked(db, auth);
       // One add at a time per person, so two quick presses can't both get past the "already waiting" check.
       await db.query('select 1 from workers where id = $1 for update', [w.id]);
-      const type = (await db.query<{ name: string; has_expiry: boolean; has_number: boolean }>(
-        'select name, has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
+      const type = (await db.query<{ name: string; category: string; has_expiry: boolean; has_number: boolean }>(
+        'select name, category, has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
       if (!type) throw new NotFoundException('Not found: choose again');
       if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
       if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this credential');
@@ -112,6 +114,9 @@ export class MyCredentialsController {
          values ($1,$2,$3,$4,$5,$6,$7) returning id`,
         [t.tenantId, w.id, typeId, fields.number, fields.issueDate, fields.expiryDate, fields.issuedBy])).rows[0];
       await event(db, t.tenantId, row.id, auth.userId, 'created', { ...fields, via: 'app' });
+      // Owners and admins check it, so they hear about it (never the number; a vaccination is only "a vaccination record").
+      const m = appCredentialEmail({ name: w.name, workerId: w.id, typeName: type.name, category: type.category }, process.env.APP_URL ?? '', await wordsFor(db));
+      await tellOffice(db, t.tenantId, { ...m, template: 'app_credential_added', dedupeKey: `app-credential:${row.id}`, createdBy: auth.userId, exceptEmail: auth.email });
       return { id: row.id, typeName: type.name, check: 'to_check' };
     });
   }

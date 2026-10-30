@@ -16,7 +16,7 @@ type Log = { messages: Message[]; smsThisMonth: number; smsMonthlyCap: number; e
 const STATUS: Record<string, [string, 'ok' | 'warn' | 'bad' | 'neutral']> = {
   queued: ['Queued', 'neutral'], sending: ['Sending', 'neutral'], sent: ['Sent', 'ok'], failed: ['Failed', 'bad'], skipped: ['Not sent', 'warn'],
 };
-const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled', roster_published: 'Roster published', change_request: 'Change request', change_request_decided: 'Change request decided', onboarding_request: 'Onboarding request' };
+const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled', roster_published: 'Roster published', change_request: 'Change request', change_request_decided: 'Change request decided', onboarding_request: 'Onboarding request', app_leave_request: 'Leave asked for in the app', app_credential_added: 'Added in the app' };
 
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {

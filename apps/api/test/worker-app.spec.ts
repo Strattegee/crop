@@ -8,8 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { changeSummary } from '../src/roster/publishing.js';
+import { makeWords } from '../src/terms/words.js';
 import {
-  appAccessRefusal, appAccessState, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
+  appAccessRefusal, appAccessState, appCredentialEmail, appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
 } from '../src/worker-app/worker-app.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -39,6 +40,29 @@ describe('worker app: pure rules', () => {
     expect(myLeaveCancelRefusal('requested')).toBeNull();
     expect(myLeaveCancelRefusal('approved')).toBe('This leave is approved. Contact the office to cancel it.');
     expect(myLeaveCancelRefusal('declined')).toBe('This leave is already declined');
+  });
+
+  it('words the emails to the office about leave and credentials from the app', () => {
+    const one = appLeaveEmail({ name: 'Ana Example', workerId: 'w1', startsOn: '2026-11-09', endsOn: '2026-11-11', shiftsDuring: 1 }, 'https://crop.test/');
+    expect(one.subject).toBe('Leave request from Ana Example: Mon 9 Nov to Wed 11 Nov');
+    expect(one.body).toContain('1 shift of theirs falls in those days and will need cover if it is approved.');
+    expect(one.body).toContain('open the Leave page: https://crop.test/leave');
+    expect(one.body).not.toMatch(/annual|personal|note/i);
+    const none = appLeaveEmail({ name: 'Ana Example', workerId: 'w1', startsOn: '2026-11-09', endsOn: '2026-11-09', shiftsDuring: 0 }, '');
+    expect(none.subject).toBe('Leave request from Ana Example: Mon 9 Nov');
+    expect(none.body).toContain('They have no shifts on the roster in those days.');
+    expect(none.body).toContain('open the Leave page in CROP.');
+    const jobs = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1050, singular: 'Ticket', plural: 'Tickets' }]);
+    expect(appLeaveEmail({ name: 'Ana', workerId: 'w1', startsOn: '2026-11-09', endsOn: '2026-11-10', shiftsDuring: 2 }, '', jobs).body)
+      .toContain('2 jobs of theirs fall in those days');
+
+    const c = appCredentialEmail({ name: 'Ana Example', workerId: 'w1', typeName: 'White Card', category: 'licence' }, 'https://crop.test', jobs);
+    expect(c.subject).toBe('Ana Example added a ticket in the app');
+    expect(c.body).toContain('Ana Example has added White Card in the CROP app.');
+    expect(c.body).toContain('open their page: https://crop.test/workers/w1');
+    const v = appCredentialEmail({ name: 'Ana Example', workerId: 'w1', typeName: 'Influenza Vaccination', category: 'vaccination' }, '');
+    expect(v.subject).toBe('Ana Example added a vaccination record in the app');
+    expect(`${v.subject}\n${v.body}`).not.toMatch(/influenza/i);
   });
 });
 
@@ -252,6 +276,12 @@ describe('worker app: access, my shifts and offers', () => {
     const asked = await http().post('/my/leave').set(as('ana')).send({ kind: 'annual', startsOn: start, endsOn: addDaysTo(start, 2), note: 'Family wedding' }).expect(201);
     expect(asked.body).toMatchObject({ kind: 'annual', startsOn: start, endsOn: addDaysTo(start, 2), days: 3, status: 'requested', shiftsDuring: 1 });
     expect(asked.body.workerName).toBeUndefined();
+    // Owners and admins (not allocators) get an email, without the kind of leave or the note.
+    const told = (await owner.query(`select to_address as to, template, subject, body from notifications where template = 'app_leave_request'`)).rows;
+    expect(told.map(n => n.to)).toEqual(['admin@x.com']);
+    expect(told[0].body).toContain('Ana Example has asked for leave in the CROP app');
+    expect(told[0].body).toContain('1 shift of theirs falls in those days');
+    expect(`${told[0].subject} ${told[0].body}`).not.toMatch(/annual|wedding/i);
     // Even an "approved" flag can't approve it.
     const again = await http().post('/my/leave').set(as('ana')).send({ kind: 'annual', startsOn: start, endsOn: start, approved: true }).expect(409);
     expect(again.body.message).toBe('You already have leave on some of those days');

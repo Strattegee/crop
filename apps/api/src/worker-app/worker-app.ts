@@ -2,6 +2,8 @@
  * Worker app (backlog item 9): pure rules for what a signed-in person sees about their own work.
  * Data access is in worker-app.controller.ts.
  */
+import { fmtDate } from '../roster/eligibility.js';
+import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 
 export type AppAccessState = 'none' | 'invited' | 'active';
 
@@ -115,4 +117,51 @@ export function myNeedLine(i: { typeName: string; problem: string; credentialTyp
 /** Whether the person can do something about a requirement in the app (add or replace a credential). */
 export function myNeedAddable(i: { problem: string; credentialTypeId: string }): boolean {
   return i.credentialTypeId !== 'right-to-work' && ['missing', 'rejected', 'expired', 'expiring'].includes(i.problem);
+}
+
+/**
+ * Emails to the office when something arrives from the app (owners and admins, who decide leave and check credentials).
+ * Never the leave kind or the person's note (it may hold health details), never a credential's number, and a
+ * vaccination is only "a vaccination record". The person's name is fine: the email goes to their own business.
+ */
+const officeLink = (appUrl: string, path: string) => (appUrl ? `${appUrl.replace(/\/+$/, '')}${path}` : null);
+
+export function appLeaveEmail(
+  p: { name: string; workerId: string; startsOn: string; endsOn: string; shiftsDuring: number },
+  appUrl: string, w: Words = DEFAULT_WORDS,
+) {
+  const days = p.startsOn === p.endsOn ? fmtDate(p.startsOn) : `${fmtDate(p.startsOn)} to ${fmtDate(p.endsOn)}`;
+  const shifts = p.shiftsDuring === 0
+    ? `They have no ${w.lower(T.shift, true)} on the ${w.lower(T.roster)} in those days.`
+    : `${w.count(p.shiftsDuring, T.shift)} of theirs ${p.shiftsDuring === 1 ? 'falls' : 'fall'} in those days and will need cover if it is approved.`;
+  const link = officeLink(appUrl, '/leave');
+  return {
+    subject: `Leave request from ${p.name}: ${days}`,
+    body: [
+      `${p.name} has asked for leave in the CROP app: ${days}.`,
+      shifts,
+      ``,
+      link ? `To approve or decline it, open the Leave page: ${link}` : `To approve or decline it, open the Leave page in CROP.`,
+      ``,
+      `CROP Workforce Management`,
+    ].join('\n'),
+  };
+}
+
+export function appCredentialEmail(
+  p: { name: string; workerId: string; typeName: string; category: string },
+  appUrl: string, w: Words = DEFAULT_WORDS,
+) {
+  const what = p.category === 'vaccination' ? 'a vaccination record' : p.typeName;
+  const link = officeLink(appUrl, `/workers/${p.workerId}`);
+  return {
+    subject: `${p.name} added ${p.category === 'vaccination' ? 'a vaccination record' : w.a(T.credential)} in the app`,
+    body: [
+      `${p.name} has added ${what} in the CROP app. It doesn't count until an owner or admin checks it.`,
+      ``,
+      link ? `To check it, open their page: ${link}` : `To check it, open their page in CROP.`,
+      ``,
+      `CROP Workforce Management`,
+    ].join('\n'),
+  };
 }

@@ -365,3 +365,10 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: push notifications in the app, or an email to the office when leave or a credential arrives from the app.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
+## 2026-10-31 early morning, 12:20am Melbourne (scheduled run)
+
+- Shipped: when someone asks for leave or adds a credential in the worker app, the business's owners and admins now get an email straight away. The leave email gives the person's name, the dates and how many of their shifts fall in them, with a link to the Leave page; it never says the kind of leave or repeats their note. The credential email names what they added (a vaccination is only "a vaccination record") with a link to their page to check it.
+- Next: push notifications in the app need an Expo account and Apple/Google push keys (outside services), so they wait for David; next unheld work is manager mode in the app (item 9a) or the agency and onboarding follow-ups.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
