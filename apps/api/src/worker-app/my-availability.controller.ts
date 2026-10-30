@@ -13,7 +13,9 @@ import { availabilityOf, clearDate, leaveById, recordLeave, saveDate, savePatter
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
 import { requireLinked } from './worker-app.controller.js';
-import { myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal } from './worker-app.js';
+import { tellOffice } from './tell-office.js';
+import { appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal } from './worker-app.js';
+import { wordsFor } from '../terms/words.js';
 
 const today = async (db: PoolClient, tenantId: string) => todayIn((await loadSettings(db, tenantId)).timezone);
 
@@ -100,6 +102,9 @@ export class MyAvailabilityController {
         tenantId: t.tenantId, workerId: w.id, kind, startsOn, endsOn, approved: false, note, userId: auth.userId,
         overlapMessage: 'You already have leave on some of those days',
       });
+      // Owners and admins decide it, so they hear about it straight away (never the kind or the note).
+      const m = appLeaveEmail({ name: w.name, workerId: w.id, startsOn, endsOn, shiftsDuring: rostered.length }, process.env.APP_URL ?? '', await wordsFor(db));
+      await tellOffice(db, t.tenantId, { ...m, template: 'app_leave_request', dedupeKey: `app-leave:${leave.id}`, createdBy: auth.userId, exceptEmail: auth.email });
       // Only how many: the shifts themselves may be in weeks not yet published.
       return { ...mine(leave), shiftsDuring: rostered.length };
     });

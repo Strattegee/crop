@@ -136,6 +136,8 @@ describe('my credentials in the worker app', () => {
       .send({ credentialTypeId: firstAid, expiryDate: addDays(today, 300), issueDate: today, issuedBy: 'Example Training' }).expect(201);
     expect(r.body).toMatchObject({ typeName: 'First aid', check: 'to_check' });
     anaFirstAid = r.body.id;
+    const told = (await owner.query(`select to_address as to, subject from notifications where template = 'app_credential_added'`)).rows;
+    expect(told).toEqual([{ to: 'admin@x.com', subject: 'Ana Example added a credential in the app' }]);
     const again = await http().post('/my/credentials').set(as('ana')).send({ credentialTypeId: firstAid, expiryDate: addDays(today, 200) }).expect(409);
     expect(again.body.message).toMatch(/^You've already added a First aid that the office hasn't checked yet/);
 
