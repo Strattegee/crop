@@ -421,3 +421,15 @@ body:has(.roster-page.full) .appbar { display: none; }
 .rcard.bar .ln.who-on { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ribbon tr.row-area td { vertical-align: top; }
 .ribbon tr.row-area td .rcard + .rcard { margin-top: 4px; }
+
+/* Marker letters on shift cards (David, 30 Oct): F/M gender, V vehicle, E equipment, I items, D duties. */
+.rcard .mks { float: right; display: inline-flex; gap: 2px; margin-left: 4px; }
+.mk { letter-spacing: 0; text-transform: none; display: inline-block; min-width: 13px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px; font-weight: 800; text-align: center; font-style: normal; color: #fff; }
+.mk.mk-g { background: #7b3fa0; }
+.mk.mk-g.soft { background: #e7d9f0; color: #4d2466; }
+.mk.mk-g.warn { background: #c62828; }
+.mk.mk-v { background: #00695c; }
+.mk.mk-e { background: #5d4037; }
+.mk.mk-i { background: #1565c0; }
+.mk.mk-d { background: #455a64; }
+.ribbon-key .mk, .roster-key .mk { margin: 0 2px; }

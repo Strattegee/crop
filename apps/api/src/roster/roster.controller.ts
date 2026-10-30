@@ -6,7 +6,8 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { bool, date, int, oneOf, text } from '../common/validate.js';
+import { bool, date, gender, int, oneOf, text } from '../common/validate.js';
+import { genderReason } from './eligibility.js';
 import { APP_POOL } from '../database/database.module.js';
 import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
@@ -78,11 +79,14 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
   (select coalesce(pw.preferred_name, pw.first_name) || ' ' || pw.last_name from shift_assignments px join workers pw on pw.id = px.worker_id
     where px.shift_id = s.id and px.resource_kind = 'worker' and px.status = 'removed' and px.removed_reason = 'pulled_out'
     order by px.ended_at desc limit 1) as "pulledOutName",
-  coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name) order by e.name)
+  coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'typeName', et.name, 'vehicle', et.is_vehicle) order by e.name)
               from shift_assignments ea join equipment e on e.id = ea.equipment_id join equipment_types et on et.id = e.equipment_type_id
              where ea.shift_id = s.id and ea.resource_kind = 'equipment' and ea.status in ('assigned', 'confirmed')), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', d.id, 'name', d.name) order by lower(d.name))
               from shift_duty_links dl join shift_duties d on d.id = dl.duty_id where dl.shift_id = s.id), '[]'::json) as duties,
+  s.gender_requested as "genderRequested", w.gender as "workerGender",
+  (select count(*)::int from (select m.item_id from stock_movements m where m.shift_id = s.id and m.kind in ('issued', 'used', 'returned')
+                               group by m.item_id having sum(m.quantity) <> 0) x) as "itemCount",
   s.covering_worker_id as "coveringWorkerId",
   (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from workers cw where cw.id = s.covering_worker_id) as "coveringName"`;
 export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
@@ -392,6 +396,8 @@ export class ShiftsController {
     }
     const dutyIds = [...new Set((dutiesRaw as string[] | null | undefined) ?? [])];
     if (dutyIds.length > 20) throw new BadRequestException('Choose 20 duties or fewer');
+    // Gender requested by whoever asked for the shift (David, 30 Oct): a warning for anyone else, never a block.
+    const genderRequested = equipmentOnly ? null : gender(body, 'genderRequested');
 
     return this.tx(t, auth, async db => {
       const facility = (await db.query<{ timezone: string }>('select timezone from facilities where id = $1', [facilityId])).rows[0];
@@ -413,15 +419,15 @@ export class ShiftsController {
       if (startTime === endTime) throw new BadRequestException('Start and end times must be different');
       const overnight = endTime < startTime;
       const ids = (await db.query<{ id: string }>(
-        `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person)
+        `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person, gender_requested)
          select $1, $2, $3, $4, $5,
                 (d + $7::time) at time zone $6,
                 (d + $9::int + $8::time) at time zone $6,
-                $10, $11, $12, $15
+                $10, $11, $12, $15, $16
            from unnest($13::date[]) d, generate_series(1, $14::int)
          returning id`,
         [t.tenantId, facilityId, areaId, shiftCodeId, role, facility.timezone, startTime, endTime, overnight ? 1 : 0,
-          breakMinutes ?? 0, notes, auth.userId, dates, quantity, !equipmentOnly],
+          breakMinutes ?? 0, notes, auth.userId, dates, quantity, !equipmentOnly, genderRequested],
       )).rows.map(r => r.id);
       if (dutyIds.length) {
         const ok = (await db.query<{ n: number }>('select count(*)::int as n from shift_duties where id = any($1) and active', [dutyIds])).rows[0].n;
@@ -539,6 +545,25 @@ export class ShiftsController {
       }
       if (shift.coveringWorkerId !== workerId) await db.query('update shifts set covering_worker_id = $2, updated_at = now() where id = $1', [id, workerId]);
       return shiftById(db, id);
+    });
+  }
+
+  /**
+   * The gender asked for by whoever requested the shift (David, 30 Oct): F, M or null for no request. Logged like any
+   * shift change. Returns the shift and the person on it's warning, if any (never a block: the office decides).
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('shifts/:id/gender')
+  setGender(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const requested = gender(body ?? {}, 'genderRequested');
+    return this.tx(t, auth, async db => {
+      const shift = await shiftById(db, id);
+      if (shift.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
+      if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works an equipment-only shift');
+      if (shift.genderRequested !== requested) await db.query('update shifts set gender_requested = $2, updated_at = now() where id = $1', [id, requested]);
+      const after = await shiftById(db, id);
+      const personWarning = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined)?.message ?? null;
+      return { ...after, personWarning };
     });
   }
 

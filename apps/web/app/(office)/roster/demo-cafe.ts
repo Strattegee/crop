@@ -164,7 +164,7 @@ export async function loadCafeDemo(week: string, today: string) {
   await post('/cover-rules', { credentialTypeId: types['Food Safety Supervisor Certificate'], facilityId: site }).catch(() => undefined);
 
   // Equipment and consumables.
-  const vanType = (await post('/equipment-types', { name: 'Van', operatorCredentialTypeId: types['Driver Licence (Car)'] })).id;
+  const vanType = (await post('/equipment-types', { name: 'Van', operatorCredentialTypeId: types['Driver Licence (Car)'], vehicle: true })).id;
   const espressoType = (await post('/equipment-types', { name: 'Espresso machine' })).id;
   const van = (await post('/equipment', { equipmentTypeId: vanType, name: 'Catering van', registration: 'DEMO01', homeFacilityId: site })).id;
   await post(`/equipment/${van}/checks`, { name: 'Registration', dueOn: addDays(today, 21) });

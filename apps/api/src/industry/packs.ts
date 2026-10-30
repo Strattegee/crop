@@ -15,7 +15,7 @@ export type ItemCategory = 'ppe' | 'fuel' | 'sundries' | 'tools' | 'other';
 export interface PackCredential { name: string; code: string; category: Category; number: boolean; expiry: boolean; method: string }
 export interface PackRole { name: string; area: string; must?: string[]; should?: string[]; optional?: string[] }
 export interface PackShiftCode { code: string; letter?: string; name: string; start: string; end: string; breakMinutes: number }
-export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string }
+export interface PackEquipmentType { name: string; operatorCredential?: string; note?: string; /** Shows as V on roster cards (30 Oct). */ vehicle?: boolean }
 /** A shift duty (migration 0029): something a shift may involve, with the credentials it needs (must = blocks, should = warning, optional = listed, never checked). */
 export interface PackDuty { name: string; description: string; must?: string[]; should?: string[]; optional?: string[] }
 export interface PackItem { name: string; category: ItemCategory; unit: string; costCents: number; reorderLevel?: number }
@@ -81,7 +81,7 @@ export const PACKS: IndustryPack[] = [
       { code: 'PM', letter: 'PM', name: 'Afternoon', start: '13:30', end: '22:00', breakMinutes: 30 },
       { code: 'ND', letter: 'ND', name: 'Night duty', start: '21:30', end: '07:30', breakMinutes: 30 },
     ],
-    equipmentTypes: [{ name: 'Pool car', operatorCredential: 'Driver Licence (C, car)' }, { name: 'Patient lifter', note: 'Track service and test-and-tag dates' }],
+    equipmentTypes: [{ name: 'Pool car', vehicle: true, operatorCredential: 'Driver Licence (C, car)' }, { name: 'Patient lifter', note: 'Track service and test-and-tag dates' }],
     items: [
       { name: 'Nitrile gloves (box of 100)', category: 'ppe', unit: 'box', costCents: 1100, reorderLevel: 20 },
       { name: 'Surgical masks (box of 50)', category: 'ppe', unit: 'box', costCents: 900, reorderLevel: 10 },
@@ -136,7 +136,7 @@ export const PACKS: IndustryPack[] = [
       { code: 'K-PM', letter: 'KL', name: 'Kitchen late', start: '14:00', end: '22:00', breakMinutes: 30 },
     ],
     equipmentTypes: [
-      { name: 'Catering van', operatorCredential: 'Driver Licence (C, car)' },
+      { name: 'Catering van', vehicle: true, operatorCredential: 'Driver Licence (C, car)' },
       { name: 'Espresso machine', note: 'Track service and test-and-tag dates' },
       { name: 'Combi oven', note: 'Track service dates' },
     ],
@@ -198,7 +198,7 @@ export const PACKS: IndustryPack[] = [
       { name: 'Excavator (5 t)', operatorCredential: 'Plant Ticket: Excavator (VOC)' },
       { name: 'Excavator (20 t)', operatorCredential: 'Plant Ticket: Excavator (VOC)' },
       { name: 'Skid steer loader', operatorCredential: 'Plant Ticket: Skid Steer Loader (VOC)' },
-      { name: 'Tipper truck', operatorCredential: 'Driver Licence (HR, heavy rigid)' },
+      { name: 'Tipper truck', vehicle: true, operatorCredential: 'Driver Licence (HR, heavy rigid)' },
       { name: 'Franna crane', operatorCredential: 'High Risk Work Licence: Non-slewing Mobile Crane (CN)' },
       { name: 'Boom lift (11 m or more)', operatorCredential: 'High Risk Work Licence: Boom-type EWP 11 m or more (WP)' },
       { name: 'Scissor lift', operatorCredential: 'EWP Operator Training (under 11 m)' },
@@ -262,9 +262,9 @@ export const PACKS: IndustryPack[] = [
       { name: 'Reach truck', operatorCredential: 'Reach Truck Training' },
       { name: 'Order picker', operatorCredential: 'High Risk Work Licence: Order Picker (LO)' },
       { name: 'Electric pallet jack', note: 'Track service dates' },
-      { name: 'Delivery van', operatorCredential: 'Driver Licence (C, car)' },
-      { name: 'Rigid truck (MR)', operatorCredential: 'Driver Licence (MR, medium rigid)' },
-      { name: 'Rigid truck (HR)', operatorCredential: 'Driver Licence (HR, heavy rigid)' },
+      { name: 'Delivery van', vehicle: true, operatorCredential: 'Driver Licence (C, car)' },
+      { name: 'Rigid truck (MR)', vehicle: true, operatorCredential: 'Driver Licence (MR, medium rigid)' },
+      { name: 'Rigid truck (HR)', vehicle: true, operatorCredential: 'Driver Licence (HR, heavy rigid)' },
     ],
     items: [
       { name: 'Hi-vis vest', category: 'ppe', unit: 'each', costCents: 1200, reorderLevel: 10 },
@@ -307,10 +307,10 @@ export const PACKS: IndustryPack[] = [
       { code: 'NIGHT', letter: 'N', name: 'Night works', start: '20:00', end: '05:00', breakMinutes: 30 },
     ],
     equipmentTypes: [
-      { name: 'TMA truck', operatorCredential: 'Truck Mounted Attenuator (TMA) Training' },
-      { name: 'Traffic ute', operatorCredential: 'Driver Licence (C, car)' },
-      { name: 'Arrow board trailer', note: 'Towed; track registration' },
-      { name: 'Variable message sign (VMS) trailer', note: 'Towed; track registration' },
+      { name: 'TMA truck', vehicle: true, operatorCredential: 'Truck Mounted Attenuator (TMA) Training' },
+      { name: 'Traffic ute', vehicle: true, operatorCredential: 'Driver Licence (C, car)' },
+      { name: 'Arrow board trailer', vehicle: true, note: 'Towed; track registration' },
+      { name: 'Variable message sign (VMS) trailer', vehicle: true, note: 'Towed; track registration' },
       { name: 'Portable traffic lights (pair)', note: 'Track service dates' },
     ],
     items: [
@@ -347,7 +347,7 @@ export const PACKS: IndustryPack[] = [
     equipmentTypes: [
       { name: 'Ride-on floor scrubber', operatorCredential: 'Floor Machine Competency' },
       { name: 'Pressure washer', note: 'Track service and test-and-tag dates' },
-      { name: 'Service van', operatorCredential: 'Driver Licence (C, car)' },
+      { name: 'Service van', vehicle: true, operatorCredential: 'Driver Licence (C, car)' },
     ],
     items: [
       { name: 'Multipurpose cleaner (5 L)', category: 'sundries', unit: 'drum', costCents: 2400, reorderLevel: 4 },
@@ -382,7 +382,7 @@ export const PACKS: IndustryPack[] = [
       { code: 'N12', letter: 'N', name: 'Night (12 h)', start: '19:00', end: '07:00', breakMinutes: 30 },
       { code: 'VENUE', letter: 'V', name: 'Venue night', start: '20:00', end: '03:00', breakMinutes: 0 },
     ],
-    equipmentTypes: [{ name: 'Patrol car', operatorCredential: 'Driver Licence (C, car)' }, { name: 'Two-way radio', note: 'Issue per shift' }],
+    equipmentTypes: [{ name: 'Patrol car', vehicle: true, operatorCredential: 'Driver Licence (C, car)' }, { name: 'Two-way radio', note: 'Issue per shift' }],
     items: [{ name: 'Body-worn camera batteries', category: 'tools', unit: 'each', costCents: 4500, reorderLevel: 4 }, { name: 'Security uniform shirt', category: 'ppe', unit: 'each', costCents: 4200, reorderLevel: 6 }],
     duties: [
       { name: 'Licensed venue', description: 'Crowd control where alcohol is served', must: ['Security Licence: Crowd Controller'], should: ['Responsible Service of Alcohol (RSA)'] },

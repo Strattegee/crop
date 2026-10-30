@@ -20,6 +20,8 @@ export interface Slot {
   equipmentIds: string[];
   /** Duties the shift carries (migration 0029); they always go with it, before anyone is put on. */
   dutyIds?: string[];
+  /** F or M when a gender was requested (migration 0048); it goes with the shift. */
+  genderRequested?: 'F' | 'M' | null;
 }
 
 export interface PlannedShift extends Slot {

@@ -4,7 +4,7 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { date, email, oneOf, text, textList } from '../common/validate.js';
+import { date, email, gender, oneOf, text, textList } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { credentialStatus, optionalFor, todayIn } from './compliance.js';
 import { loadSettings } from './settings.js';
@@ -14,7 +14,7 @@ import { beginOnboarding } from './onboarding.controller.js';
 const STATUSES = ['active', 'onboarding', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
-  w.email, w.phone, w.status, w.roles, w.notes, w.created_at as "createdAt"`;
+  w.email, w.phone, w.status, w.roles, w.notes, w.gender, w.created_at as "createdAt"`;
 const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name as "typeName", t.category,
   t.verification_method as "verificationMethod", t.verification_url as "verificationUrl",
   c.number, c.issued_by as "issuedBy", to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
@@ -83,12 +83,13 @@ export class WorkersController {
       text(body, 'phone', { max: 30 }),
       textList(body, 'roles') ?? [],
       text(body, 'notes', { max: 2000 }),
+      gender(body, 'gender'),
     ];
     return withTenant(this.pool, t.tenantId, async db => {
       try {
         const row = (await db.query<{ id: string }>(
-          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes)
-           values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${WORKER_COLUMNS}`, values,
+          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${WORKER_COLUMNS}`, values,
         )).rows[0];
         if (!checklistId) return row;
         await beginOnboarding(db, t.tenantId, auth, row.id, checklistId, true);
@@ -139,6 +140,7 @@ export class WorkersController {
              phone = case when $8::boolean then $9 else phone end,
              roles = coalesce($10, roles), status = coalesce($11::worker_status, status),
              notes = case when $12::boolean then $13 else notes end,
+             gender = case when $14::boolean then $15 else gender end,
              updated_at = now()
            where id = $1 returning ${WORKER_COLUMNS}`,
           [id, text(body, 'firstName', { max: 100 }), text(body, 'lastName', { max: 100 }),
@@ -146,7 +148,8 @@ export class WorkersController {
             body && 'email' in body, email(body, 'email'),
             body && 'phone' in body, text(body, 'phone', { max: 30 }),
             textList(body, 'roles'), oneOf(body, 'status', STATUSES),
-            body && 'notes' in body, text(body, 'notes', { max: 2000 })],
+            body && 'notes' in body, text(body, 'notes', { max: 2000 }),
+            body && 'gender' in body, gender(body, 'gender')],
         )).rows[0];
         if (!row) throw new NotFoundException('worker not found');
         return row;

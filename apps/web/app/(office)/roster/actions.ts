@@ -34,6 +34,7 @@ export async function createShifts(f: FormData) {
       ...(single ? { date: startDate } : { startDate, endDate, weekdays: weekdays.length ? weekdays : undefined }),
       quantity: Number(str(f, 'quantity') ?? 1), notes: str(f, 'notes'),
       dutyIds: f.getAll('dutyIds').map(String).filter(Boolean),
+      genderRequested: equipmentOnly ? undefined : str(f, 'genderRequested') ?? undefined,
     },
   })).created;
   }, () => `${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}.`);
@@ -144,6 +145,15 @@ export async function setCovering(shiftId: string, f: FormData) {
   await attempt(back(f), async () => {
     name = (await api<{ coveringName: string | null }>(`/shifts/${shiftId}/covering`, { method: 'PUT', body: { workerId } })).coveringName;
   }, () => name ? `Now covering ${name}.` : 'Not covering anyone.');
+}
+
+/** Gender requested for a shift (David, 30 Oct). A different or unrecorded gender on the person is a warning. */
+export async function setGender(shiftId: string, f: FormData) {
+  const genderRequested = str(f, 'genderRequested') ?? null;
+  let warning: string | null = null;
+  await attempt(back(f), async () => {
+    warning = (await api<{ personWarning: string | null }>(`/shifts/${shiftId}/gender`, { method: 'PUT', body: { genderRequested } })).personWarning;
+  }, () => `${genderRequested === 'F' ? 'Female worker requested.' : genderRequested === 'M' ? 'Male worker requested.' : 'No gender requested.'}${warning ? ` Note: ${warning}.` : ''}`);
 }
 
 /** Staging only (DEMO_TOOLS=on): fills an empty business with an invented café so the roster can be shown. */

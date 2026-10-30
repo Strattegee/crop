@@ -63,7 +63,7 @@ async function applyPack(db: PoolClient, tenantId: string, userId: string, pack:
   for (const et of pack.equipmentTypes) {
     const op = et.operatorCredential ? typeIds.get(et.operatorCredential) ?? null : null;
     const r = await db.query(
-      `insert into equipment_types(tenant_id, name, operator_credential_type_id) values ($1,$2,$3) on conflict do nothing`, [tenantId, et.name, op]);
+      `insert into equipment_types(tenant_id, name, operator_credential_type_id, is_vehicle) values ($1,$2,$3,$4) on conflict do nothing`, [tenantId, et.name, op, !!et.vehicle]);
     added.equipmentTypes += r.rowCount ?? 0;
   }
   for (const it of pack.items) {

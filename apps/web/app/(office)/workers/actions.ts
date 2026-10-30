@@ -12,7 +12,7 @@ export async function addWorker(f: FormData) {
     id = (await api<{ id: string }>('/workers', {
       method: 'POST',
       body: {
-        firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), email: str(f, 'email'), phone: str(f, 'phone'), roles: roles(f),
+        firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), email: str(f, 'email'), phone: str(f, 'phone'), roles: roles(f), gender: str(f, 'gender'),
         onboardingChecklistId: str(f, 'onboardingChecklistId'),
       },
     })).id;
@@ -43,6 +43,7 @@ export async function updateWorker(id: string, f: FormData) {
     body: {
       firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), preferredName: str(f, 'preferredName') ?? null,
       email: str(f, 'email') ?? null, phone: str(f, 'phone') ?? null, roles: roles(f), status: str(f, 'status'),
+      gender: str(f, 'gender') ?? null,
     },
   }), 'Details saved.');
 }

@@ -3,14 +3,14 @@ import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
-import { addEquipment, addType } from './actions';
+import { addEquipment, addType, setTypeVehicle } from './actions';
 import { EQ_STATUS, STATE } from './labels';
 
 export const dynamic = 'force-dynamic';
 
 type Check = { name: string; dueOn: string; state: string };
 type Equip = { id: string; name: string; assetNumber: string | null; registration: string | null; status: string; typeName: string; operatorCredentialName: string | null; homeFacilityName: string | null; checkState: string; checks: Check[] };
-type EType = { id: string; name: string; active: boolean; operatorCredentialName?: string | null };
+type EType = { id: string; name: string; active: boolean; vehicle?: boolean; operatorCredentialName?: string | null };
 type CredType = { id: string; name: string; active: boolean };
 type Facility = { id: string; name: string; active: boolean };
 const d = (s: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${s}T00:00:00Z`));
@@ -72,13 +72,23 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
       </div>
       <details className="card">
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Equipment types ({types.length})</summary>
-        <ul style={{ margin: '10px 0' }}>{types.map(t => <li key={t.id}>{t.name}{t.operatorCredentialName && <span className="muted"> · operator needs {t.operatorCredentialName}</span>}{!t.active && <span className="muted"> (not in use)</span>}</li>)}</ul>
+        <ul style={{ margin: '10px 0' }}>{types.map(t => (
+          <li key={t.id}>
+            {t.name}{t.vehicle && <span className="muted"> · vehicle (V on the roster)</span>}{t.operatorCredentialName && <span className="muted"> · operator needs {t.operatorCredentialName}</span>}{!t.active && <span className="muted"> (not in use)</span>}
+            {canEdit && (
+              <form action={setTypeVehicle.bind(null, t.id, !t.vehicle)} style={{ display: 'inline', marginLeft: 8 }}>
+                <button className="btn small secondary">{t.vehicle ? 'Not a vehicle' : 'Mark as a vehicle'}</button>
+              </form>
+            )}
+          </li>
+        ))}</ul>
         {canEdit && (
           <form action={addType} className="form-row">
             <label>New type<input name="name" required maxLength={80} placeholder="e.g. Scissor lift" /></label>
             <label>Operator must hold <span className="muted">(optional)</span>
               <select name="operatorCredentialTypeId" defaultValue=""><option value="">Nothing special</option>{creds.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
             </label>
+            <label className="inline"><input type="checkbox" name="vehicle" />Vehicle <span className="muted">(shows V on the roster)</span></label>
             <button className="btn small secondary">Add type</button>
           </form>
         )}
