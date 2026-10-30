@@ -338,3 +338,10 @@ Newest first. One entry per working session or scheduled run.
 - Next: the worker app's sign-in and shifts, or the requirements email for agencies not on CROP.
 - Waiting on David: the public apply form (spam protection and the form's questions).
 
+
+## 2026-10-30 midday, 12:20pm Melbourne (scheduled run)
+
+- Shipped: the first slice of the worker app. On a person's page, owners and admins press "Give app access"; the person then signs in to the CROP app with that email (only once it is verified) and sees their shifts for the next four weeks in weeks the office has published (booked, or to be confirmed), plus their open offers, which they can accept or decline in the app. The office sees "accepted the offer in the app" in the shift's history, and the after-publishing lock applies as for reply links.
+- Not yet tried on a phone: that needs a development build, which needs an Expo account (an outside service).
+- Next: availability and leave in the app, then my credentials with upload.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.

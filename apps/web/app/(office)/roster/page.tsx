@@ -68,7 +68,7 @@ type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' 
 type ChangeRequest = { id: string; shiftId: string; kind: string; status: string; summary: string; reason: string | null; requestedByName: string | null; createdAt: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string; canDecide: boolean; canWithdraw: boolean };
 type Change = { id: string; kind: string; summary: string; afterPublish: boolean; actorName: string | null; via: string; at: string; shiftId: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string };
 const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
-const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.actorName ? `by ${c.actorName}` : '';
+const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.via === 'app' ? 'in the app' : c.actorName ? `by ${c.actorName}` : '';
 /** A saved usual week for one site (migration 0023). */
 type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
 /** What a shift used, one line per item and holder (`GET /shifts/:id/items?byPerson=true`). */
@@ -1028,7 +1028,7 @@ export default async function RosterPage({ searchParams }: {
                     )}
                     {declinedOffers.length > 0 && (
                       <p className="muted small" style={{ margin: 0 }}>
-                        Said no: {declinedOffers.map(o => `${o.workerName ?? o.name ?? ''}${o.respondedVia === 'link' ? ' (by link)' : ''}`).join(', ')}
+                        Said no: {declinedOffers.map(o => `${o.workerName ?? o.name ?? ''}${o.respondedVia === 'link' ? ' (by link)' : o.respondedVia === 'app' ? ' (in the app)' : ''}`).join(', ')}
                       </p>
                     )}
                     {bankReady.length > 0 && (

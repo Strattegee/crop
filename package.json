@@ -7,7 +7,7 @@
     "dev": "pnpm -r --parallel --filter ./apps/api --filter ./apps/web dev",
     "build": "pnpm -r --filter=!@crop/mobile build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --filter=!@crop/mobile test",
+    "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @crop/db migrate"
   }
 }
