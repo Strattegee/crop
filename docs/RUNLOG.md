@@ -379,3 +379,10 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: filling shifts from the phone (assign a ready person, offer to bank and casual staff, confirm, cancel) and a day/week roster view.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
+## 2026-10-31 morning, 6:15am Melbourne (scheduled run)
+
+- Shipped: filling shifts from the phone in manager mode. Tapping anything in Needs attention opens that shift: put on someone who can work it (ready people first, any warnings asked about first), offer it to several bank and casual staff at once, mark someone as confirmed or approve an agency's person, take someone off, record that they pulled out, cancel it with a reason, and call or text the person on it. When a published week only lets owners and admins change it, the same buttons send them a request to approve instead.
+- Not yet tried on a phone (needs the development build).
+- Next: a day and week roster view in the app, publishing the week from the phone, and the covering line.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
