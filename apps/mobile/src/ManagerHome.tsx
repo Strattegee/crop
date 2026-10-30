@@ -5,6 +5,7 @@ import {
   approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, KIND_LABEL, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
   type Attention, type ChangeRequest, type LeaveRequest, type Term,
 } from './manager';
+import { ShiftScreen } from './ShiftScreen';
 import { styles } from './styles';
 
 type Tab = 'today' | 'requests';
@@ -27,6 +28,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [today, setToday] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openShift, setOpenShift] = useState<string | null>(null);
   const decider = canDecide(role);
 
   const load = useCallback(async () => {
@@ -82,6 +84,11 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const confirm = (title: string, run: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', onPress: run }]);
 
+  if (openShift) {
+    return <ShiftScreen tenant={tenant} shiftId={openShift} today={today} word={word} onSignedOut={onSignedOut}
+      onBack={() => { setOpenShift(null); load(); }} />;
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
@@ -108,17 +115,18 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
           <>
             <Text style={[styles.muted, { marginBottom: 8 }]}>{attentionHeading(attention)}</Text>
             {attention.items.map(i => (
-              <View key={`${i.kind}-${i.shiftId}`} style={[styles.card, i.urgent && styles.urgent]}>
+              <Pressable key={`${i.kind}-${i.shiftId}`} style={[styles.card, i.urgent && styles.urgent]} onPress={() => setOpenShift(i.shiftId)}
+                accessibilityRole="button" accessibilityHint={`Opens the ${word.lower} to fill or change it`}>
                 <Text style={[styles.badge, i.urgent ? styles.badgeUrgent : styles.badgeWaiting, { marginTop: 0, marginBottom: 6 }]}>
                   {KIND_LABEL[i.kind]} · {i.startsIn}
                 </Text>
                 <Text style={styles.cardTitle}>{i.title}</Text>
                 {!!i.detail && <Text>{i.detail}</Text>}
                 <Text style={[styles.muted, styles.small]}>{shiftWhere(i.shift, today)}</Text>
-              </View>
+                <Text style={[styles.link, styles.small]}>Open ›</Text>
+              </Pressable>
             ))}
             {attention.truncated && <Text style={[styles.muted, styles.small]}>The list was cut short; the roster on the web has the rest.</Text>}
-            <Text style={[styles.muted, styles.small, { marginTop: 12 }]}>To put someone on a {word.lower}, use the roster on the web for now. Doing it here is coming next.</Text>
           </>
         )}
 
