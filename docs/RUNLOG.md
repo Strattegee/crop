@@ -352,3 +352,9 @@ Newest first. One entry per working session or scheduled run.
 - Next: my credentials with upload in the app, or possibly an email to the office when leave is asked for in the app.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
 - (30 Oct, with David) Shipped marker letters on roster cards so the rosterer sees a shift is more than labour: F/M for gender, V vehicles, E other equipment, I items, D duties. A shift can record the gender the client asked for (when adding shifts, or in the shift panel); each worker can have a gender recorded (F, M or not recorded). Someone of the other gender, or with none recorded, shows as a warning, never a block. Templates and copied weeks keep the request. Equipment types can be marked as vehicles (template vans, utes and trucks already are). Privacy policy, data processing terms and worker notice now mention gender. Next: carry the request to agencies.
+
+## 2026-10-30 evening, 6:10pm Melbourne (scheduled run)
+
+- Shipped: when a shift asks for a female or male worker and the employer sends it to agencies, the agency now sees that too: on Allocations, in the email it gets, and as a warning (never a block) on its people of another gender or with none recorded. If the employer changes the request while agencies still hold the shift, their copies follow. Only the request goes to the agency, never anyone's own gender.
+- Next: my credentials with upload in the worker app, or the requirements email for agencies not on CROP.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.

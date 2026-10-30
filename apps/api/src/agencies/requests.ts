@@ -88,7 +88,14 @@ export type InboxShift = {
   startsAt: Date; endsAt: Date; duties: string[];
   requirements: Array<{ name: string; severity: 'hard' | 'warning' | 'optional'; forDuty: string | null; credentialTypeId: string | null }>;
   note: string | null;
+  /** F or M when the employer asked for a gender (migration 0049); a warning for the agency's people, never a block. */
+  genderRequested?: 'F' | 'M' | null;
 };
+
+/** "A female worker requested" for the request's gender, or null. */
+export function genderRequestWords(g: 'F' | 'M' | null | undefined): string | null {
+  return g === 'F' ? 'A female worker requested' : g === 'M' ? 'A male worker requested' : null;
+}
 
 /** "Tue 3 Nov" in the site's time zone. */
 export function localDay(d: Date, zone: string): string {
@@ -116,6 +123,7 @@ export function requestArrivedEmail(s: InboxShift, appUrl: string | null, w: Wor
     `${s.role} at ${where}`,
     localWhen(s),
     ...(s.duties.length ? [`Duties: ${s.duties.join(', ')}`] : []),
+    ...(genderRequestWords(s.genderRequested) ? [genderRequestWords(s.genderRequested)!] : []),
     ...(s.note ? [`Note from ${s.employerName}: ${s.note}`] : []),
     '',
     unmatched ? `${unmatched} of its requirements ${unmatched === 1 ? "isn't" : "aren't"} matched to your credentials yet.` : null,
