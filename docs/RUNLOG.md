@@ -372,3 +372,10 @@ Newest first. One entry per working session or scheduled run.
 - Next: push notifications in the app need an Expo account and Apple/Google push keys (outside services), so they wait for David; next unheld work is manager mode in the app (item 9a) or the agency and onboarding follow-ups.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
 
+
+## 2026-10-31 early morning, 3:20am Melbourne (scheduled run)
+
+- Shipped: the first part of manager mode in the app. Owners, admins and allocators who sign in to the CROP app now see a Needs attention list (the same one as the web roster: nobody on it, not confirmed, someone who can't work it, cover gaps; most urgent first) and a Requests tab with leave and roster changes waiting. Owners and admins can approve or decline them on the phone; approving leave says how many shifts now need someone else. A manager who is also rostered can switch to their own shifts and back.
+- Not yet tried on a phone (needs the development build).
+- Next: filling shifts from the phone (assign a ready person, offer to bank and casual staff, confirm, cancel) and a day/week roster view.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
