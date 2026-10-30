@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, businessesOf, byDay, dayLabel, offerCloses, roleLine, timeRange } from '../src/format';
+import {
+  addDays, businessesOf, byDay, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+} from '../src/format';
 
 describe('worker app formatting', () => {
   it('names days plainly', () => {
@@ -30,5 +32,36 @@ describe('worker app formatting', () => {
 
   it('lists the businesses from /me', () => {
     expect(businessesOf({ memberships: [{ tenantSlug: 'cafe', tenantName: 'Demo Cafe', role: 'worker' }] })).toEqual([{ slug: 'cafe', name: 'Demo Cafe' }]);
+  });
+});
+
+describe('availability and leave in the app', () => {
+  it('words a day plainly', () => {
+    expect(periodsLabel(undefined)).toBe('Not said');
+    expect(periodsLabel([])).toBe('Not available');
+    expect(periodsLabel(['night', 'am'])).toBe('AM, Night');
+    expect(periodsLabel(['am', 'pm', 'night'])).toBe('Any time');
+  });
+
+  it('switches parts of a day on and off', () => {
+    expect(toggleDay(undefined, 'pm')).toEqual(['pm']);
+    expect(toggleDay(['pm'], 'am')).toEqual(['am', 'pm']);
+    expect(toggleDay(['pm'], 'pm')).toEqual([]);
+    expect(toggleDay(['am', 'pm'], 'off')).toEqual([]);
+    expect(toggleDay([], 'off')).toBeUndefined();
+    expect(chipOn([], 'off')).toBe(true);
+    expect(chipOn(undefined, 'off')).toBe(false);
+    expect(chipOn(['am'], 'am')).toBe(true);
+  });
+
+  it('sends only the days with something said', () => {
+    expect(patternBody({ 1: [], 3: ['am'], 5: undefined })).toEqual({ days: [{ weekday: 1, periods: [] }, { weekday: 3, periods: ['am'] }] });
+  });
+
+  it('words leave', () => {
+    expect(leaveDates({ startsOn: '2026-11-02', endsOn: '2026-11-02' })).toBe('Mon 2 Nov');
+    expect(leaveDates({ startsOn: '2026-11-02', endsOn: '2026-11-04' })).toBe('Mon 2 Nov – Wed 4 Nov (3 days)');
+    expect(leaveAskedMessage(0, { lower: 'shift', lowerMany: 'shifts' })).toBe('The office will let you know once it has been decided.');
+    expect(leaveAskedMessage(2, { lower: 'job', lowerMany: 'jobs' })).toBe("You're on 2 jobs in those days. The office will let you know once it has been decided.");
   });
 });

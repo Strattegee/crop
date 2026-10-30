@@ -32,3 +32,31 @@ export function appAccessRefusal(w: { status: string; email: string | null; name
 
 /** The range of days the app asks for, checked: at most 62 days, end not before start. */
 export const MAX_MY_DAYS = 62;
+
+/** How far ahead someone can change their availability or ask for leave in the app (days from today). */
+export const MY_AHEAD_DAYS = 366;
+
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
+/** Why a person can't change their availability for a date in the app, or null when they can. */
+export function myDateRefusal(onDate: string, today: string): string | null {
+  if (onDate < today) return 'Choose today or a later date';
+  if (dayDiff(today, onDate) > MY_AHEAD_DAYS) return 'Choose a date within the next year';
+  return null;
+}
+
+/** Why a person can't ask for this leave in the app, or null when they can. */
+export function myLeaveRefusal(startsOn: string, endsOn: string, today: string): string | null {
+  if (endsOn < startsOn) return 'The leave ends before it starts';
+  if (startsOn < today) return 'Leave can start today at the earliest. For days already gone, contact the office.';
+  if (dayDiff(today, startsOn) > MY_AHEAD_DAYS) return 'Ask for leave starting within the next year';
+  if (dayDiff(startsOn, endsOn) > 366) return 'Leave can be at most a year at a time';
+  return null;
+}
+
+/** Why a person can't withdraw their own leave in the app, or null when they can (only requests still waiting). */
+export function myLeaveCancelRefusal(status: string): string | null {
+  if (status === 'requested') return null;
+  if (status === 'approved') return 'This leave is approved. Contact the office to cancel it.';
+  return `This leave is already ${status}`;
+}

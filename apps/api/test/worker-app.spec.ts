@@ -8,7 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { changeSummary } from '../src/roster/publishing.js';
-import { appAccessRefusal, appAccessState, myShiftState, notLinkedMessage } from '../src/worker-app/worker-app.js';
+import {
+  appAccessRefusal, appAccessState, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
+} from '../src/worker-app/worker-app.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('worker app: pure rules', () => {
@@ -25,7 +27,22 @@ describe('worker app: pure rules', () => {
     expect(changeSummary({ kind: 'booked', workerName: 'Ana Example', equipmentName: null, detail: null, via: 'app' }))
       .toBe('Ana Example accepted the offer in the app and is booked');
   });
+
+  it('checks dates for availability and leave asked for in the app', () => {
+    expect(myDateRefusal('2026-11-01', '2026-11-02')).toBe('Choose today or a later date');
+    expect(myDateRefusal('2026-11-02', '2026-11-02')).toBeNull();
+    expect(myDateRefusal('2028-01-01', '2026-11-02')).toBe('Choose a date within the next year');
+    expect(myLeaveRefusal('2026-11-05', '2026-11-04', '2026-11-02')).toBe('The leave ends before it starts');
+    expect(myLeaveRefusal('2026-11-01', '2026-11-04', '2026-11-02')).toMatch(/^Leave can start today at the earliest/);
+    expect(myLeaveRefusal('2026-11-02', '2026-11-02', '2026-11-02')).toBeNull();
+    expect(myLeaveRefusal('2026-11-03', '2028-01-01', '2026-11-02')).toBe('Leave can be at most a year at a time');
+    expect(myLeaveCancelRefusal('requested')).toBeNull();
+    expect(myLeaveCancelRefusal('approved')).toBe('This leave is approved. Contact the office to cancel it.');
+    expect(myLeaveCancelRefusal('declined')).toBe('This leave is already declined');
+  });
 });
+
+const addDaysTo = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 /** The Monday at least a week ahead, plus `weeks` weeks, plus `day` days (YYYY-MM-DD). */
 function ahead(weeks: number, day = 0): string {
@@ -193,5 +210,70 @@ describe('worker app: access, my shifts and offers', () => {
     const r = await http().post(`/my/offers/${offer.id}/accept`).set(as('ana')).expect(409);
     expect(r.body.message).toBe("This roster can't be changed now. Please contact the office.");
     await http().patch('/settings').set(as('admin')).send({ publishedChanges: 'open' }).expect(200);
+  });
+
+  it('lets them set their usual week and changes for particular dates, which the office and eligibility see', async () => {
+    const empty = (await http().get('/my/availability').set(as('ana')).expect(200)).body;
+    expect(empty).toMatchObject({ pattern: [], dates: [], leave: [] });
+    expect(empty.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Not on Mondays at all, Tuesdays mornings only.
+    await http().put('/my/availability/pattern').set(as('ana')).send({ days: [{ weekday: 1, periods: [] }, { weekday: 2, periods: ['am'] }] }).expect(200);
+    const bad = await http().put('/my/availability/pattern').set(as('ana')).send({ days: [{ weekday: 8, periods: [] }] }).expect(400);
+    expect(bad.body.message).toBe('Each day needs a weekday from 1 (Monday) to 7 (Sunday)');
+    const office = (await http().get(`/workers/${ana}/availability`).set(as('alloc')).expect(200)).body;
+    expect(office.pattern).toEqual([{ weekday: 1, periods: [] }, { weekday: 2, periods: ['am'] }]);
+
+    const monday = ahead(5);
+    const s = await shift(monday);
+    let ready = (await http().get(`/shifts/${s}/candidates`).set(as('alloc')).expect(200)).body;
+    const anaRow = (rows: { workerId?: string; id?: string; warnings: { code: string }[] }[]) => rows.find(r => (r.workerId ?? r.id) === ana)!;
+    const list = (b: unknown) => (Array.isArray(b) ? b : (b as { candidates: [] }).candidates);
+    expect(anaRow(list(ready)).warnings.map(w => w.code)).toContain('availability');
+    // A change for that Monday: free all day.
+    const d = await http().put(`/my/availability/dates/${monday}`).set(as('ana')).send({ periods: ['am', 'pm', 'night'], note: 'Swapped with my sister' }).expect(200);
+    expect(d.body).toEqual({ date: monday, periods: ['am', 'pm', 'night'], note: 'Swapped with my sister' });
+    ready = (await http().get(`/shifts/${s}/candidates`).set(as('alloc')).expect(200)).body;
+    expect(anaRow(list(ready)).warnings.map(w => w.code)).not.toContain('availability');
+    expect((await http().get('/my/availability').set(as('ana')).expect(200)).body.dates).toEqual([d.body]);
+    await http().delete(`/my/availability/dates/${monday}`).set(as('ana')).expect(204);
+    expect((await http().get('/my/availability').set(as('ana')).expect(200)).body.dates).toEqual([]);
+    // Days already gone can't be changed.
+    const past = await http().put('/my/availability/dates/2026-01-05').set(as('ana')).send({ periods: [] }).expect(400);
+    expect(past.body.message).toBe('Choose today or a later date');
+    // Someone not linked to a person has nothing to set.
+    await http().put('/my/availability/pattern').set(as('alloc')).send({ days: [] }).expect(404);
+    await http().put('/my/availability/pattern').set(as('ana')).send({ days: [] }).expect(200);
+  });
+
+  it('lets them ask for leave, which waits for an owner or admin, and withdraw it while it waits', async () => {
+    const start = ahead(6);
+    const s = await shift(addDaysTo(start, 1));
+    await http().post(`/shifts/${s}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
+    const asked = await http().post('/my/leave').set(as('ana')).send({ kind: 'annual', startsOn: start, endsOn: addDaysTo(start, 2), note: 'Family wedding' }).expect(201);
+    expect(asked.body).toMatchObject({ kind: 'annual', startsOn: start, endsOn: addDaysTo(start, 2), days: 3, status: 'requested', shiftsDuring: 1 });
+    expect(asked.body.workerName).toBeUndefined();
+    // Even an "approved" flag can't approve it.
+    const again = await http().post('/my/leave').set(as('ana')).send({ kind: 'annual', startsOn: start, endsOn: start, approved: true }).expect(409);
+    expect(again.body.message).toBe('You already have leave on some of those days');
+    const past = await http().post('/my/leave').set(as('ana')).send({ kind: 'personal', startsOn: '2026-01-05', endsOn: '2026-01-06' }).expect(400);
+    expect(past.body.message).toMatch(/^Leave can start today at the earliest/);
+    // The office sees the request; the shift now warns.
+    const waiting = (await http().get('/leave?status=requested').set(as('alloc')).expect(200)).body;
+    expect(waiting.map((l: { id: string; workerName: string }) => [l.id, l.workerName])).toEqual([[asked.body.id, 'Ana Example']]);
+    const mine = (await http().get('/my/availability').set(as('ana')).expect(200)).body.leave;
+    expect(mine.map((l: { id: string; status: string }) => [l.id, l.status])).toEqual([[asked.body.id, 'requested']]);
+    // Ben can't withdraw Ana's leave; Ana can while it waits.
+    await http().post(`/my/leave/${asked.body.id}/cancel`).set(as('ben')).expect(404);
+    const gone = await http().post(`/my/leave/${asked.body.id}/cancel`).set(as('ana')).expect(200);
+    expect(gone.body.status).toBe('cancelled');
+    expect((await http().get('/my/availability').set(as('ana')).expect(200)).body.leave).toEqual([]);
+    // Once approved, only the office can cancel it.
+    const next = await http().post('/my/leave').set(as('ana')).send({ kind: 'other', startsOn: start, endsOn: start }).expect(201);
+    await http().post(`/leave/${next.body.id}/approve`).set(as('admin')).expect(200);
+    const refused = await http().post(`/my/leave/${next.body.id}/cancel`).set(as('ana')).expect(409);
+    expect(refused.body.message).toBe('This leave is approved. Contact the office to cancel it.');
+    expect((await http().get('/my/availability').set(as('ana')).expect(200)).body.leave.map((l: { status: string }) => l.status)).toEqual(['approved']);
+    // Another business's worker account can't reach it.
+    await http().post(`/my/leave/${next.body.id}/cancel`).set(as('other')).expect(404);
   });
 });

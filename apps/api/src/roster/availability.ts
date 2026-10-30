@@ -86,3 +86,23 @@ export function parsePeriods(v: unknown): Period[] | null {
   if (!Array.isArray(v) || v.some(p => typeof p !== 'string' || !(PERIODS as readonly string[]).includes(p))) return null;
   return PERIODS.filter(p => (v as string[]).includes(p));
 }
+
+/**
+ * Checks a weekly pattern from a request body: [{ weekday: 1–7 (Monday = 1), periods: ['am', 'pm', 'night'] }].
+ * Returns the days, or a plain message saying what is wrong.
+ */
+export function parseDays(raw: unknown): { weekday: number; periods: Period[] }[] | string {
+  if (!Array.isArray(raw)) return 'Days must be a list';
+  const days: { weekday: number; periods: Period[] }[] = [];
+  for (const d of raw) {
+    const weekday = (d as Record<string, unknown>)?.weekday;
+    const periods = parsePeriods((d as Record<string, unknown>)?.periods);
+    if (typeof weekday !== 'number' || !Number.isInteger(weekday) || weekday < 1 || weekday > 7) {
+      return 'Each day needs a weekday from 1 (Monday) to 7 (Sunday)';
+    }
+    if (!periods) return 'Times of day must be a list of am, pm and night';
+    days.push({ weekday, periods });
+  }
+  if (new Set(days.map(d => d.weekday)).size !== days.length) return 'Each weekday can only appear once';
+  return days;
+}

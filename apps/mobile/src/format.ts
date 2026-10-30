@@ -79,3 +79,71 @@ export const STATE_LABEL: Record<MyShift['state'], string> = { booked: 'Booked',
 export function businessesOf(me: { memberships: { tenantSlug: string; tenantName: string; role: string }[] }) {
   return me.memberships.map(m => ({ slug: m.tenantSlug, name: m.tenantName }));
 }
+
+// Availability and leave (the Availability tab).
+
+export type Period = 'am' | 'pm' | 'night';
+export const PERIODS: Period[] = ['am', 'pm', 'night'];
+export const PERIOD_LABEL: Record<Period, string> = { am: 'AM', pm: 'PM', night: 'Night' };
+/** Monday = 1 … Sunday = 7, as the API counts them. */
+export const WEEKDAYS: { weekday: number; name: string }[] =
+  ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name, i) => ({ weekday: i + 1, name }));
+
+/** A day's availability in words: nothing said, not available, any time, or the parts of the day. */
+export function periodsLabel(periods: Period[] | undefined): string {
+  if (!periods) return 'Not said';
+  if (periods.length === 0) return 'Not available';
+  if (periods.length === PERIODS.length) return 'Any time';
+  return PERIODS.filter(p => periods.includes(p)).map(p => PERIOD_LABEL[p]).join(', ');
+}
+
+export type DayChip = Period | 'off';
+
+/**
+ * What a day becomes when a chip is pressed: a part of the day switches on or off (switching off the last one
+ * leaves "not available"); Off makes the day not available, or, pressed again, nothing said.
+ */
+export function toggleDay(current: Period[] | undefined, chip: DayChip): Period[] | undefined {
+  if (chip === 'off') return current && current.length === 0 ? undefined : [];
+  const now = current ?? [];
+  const next = now.includes(chip) ? now.filter(p => p !== chip) : [...now, chip];
+  return PERIODS.filter(p => next.includes(p));
+}
+
+/** Whether a chip shows as on for a day. */
+export function chipOn(current: Period[] | undefined, chip: DayChip): boolean {
+  if (chip === 'off') return !!current && current.length === 0;
+  return !!current && current.includes(chip);
+}
+
+/** The usual week as the API takes it: days with nothing said are left out. */
+export function patternBody(week: Record<number, Period[] | undefined>): { days: { weekday: number; periods: Period[] }[] } {
+  return {
+    days: WEEKDAYS.filter(d => week[d.weekday] !== undefined).map(d => ({ weekday: d.weekday, periods: week[d.weekday]! })),
+  };
+}
+
+export type LeaveKind = 'annual' | 'personal' | 'long_service' | 'unpaid' | 'other';
+export const LEAVE_KINDS: LeaveKind[] = ['annual', 'personal', 'long_service', 'unpaid', 'other'];
+export const LEAVE_KIND_LABEL: Record<LeaveKind, string> = {
+  annual: 'Annual', personal: 'Personal', long_service: 'Long service', unpaid: 'Unpaid', other: 'Other',
+};
+export const LEAVE_STATUS_LABEL: Record<string, string> = {
+  requested: 'Waiting for approval', approved: 'Approved', declined: 'Declined', cancelled: 'Withdrawn',
+};
+
+export interface MyLeave { id: string; kind: LeaveKind; startsOn: string; endsOn: string; days: number; status: string; note: string | null }
+
+/** "Mon 2 Nov" for one day, "Mon 2 Nov – Wed 4 Nov (3 days)" for more. */
+export function leaveDates(l: { startsOn: string; endsOn: string }): string {
+  if (l.startsOn === l.endsOn) return dayLabel(l.startsOn);
+  const days = Math.round((Date.parse(`${l.endsOn}T00:00:00Z`) - Date.parse(`${l.startsOn}T00:00:00Z`)) / 86_400_000) + 1;
+  return `${dayLabel(l.startsOn)} – ${dayLabel(l.endsOn)} (${days} days)`;
+}
+
+/** What the app says after asking for leave. */
+export function leaveAskedMessage(shiftsDuring: number, word: { lower: string; lowerMany: string }): string {
+  const base = 'The office will let you know once it has been decided.';
+  if (shiftsDuring === 0) return base;
+  return `You're on ${shiftsDuring} ${shiftsDuring === 1 ? word.lower : word.lowerMany} in those days. ${base}`;
+}

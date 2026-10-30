@@ -37,7 +37,7 @@ export async function linkedWorker(db: PoolClient, userId: string): Promise<Link
   return (await db.query<LinkedWorker>(`select ${cols} from workers where id = $1 and user_id = $2`, [inv.worker_id, userId])).rows[0] ?? null;
 }
 
-async function requireLinked(db: PoolClient, auth: AuthContext): Promise<LinkedWorker> {
+export async function requireLinked(db: PoolClient, auth: AuthContext): Promise<LinkedWorker> {
   const w = await linkedWorker(db, auth.userId);
   if (!w) throw new NotFoundException(notLinkedMessage(auth.tenant!.tenantName));
   return w;
