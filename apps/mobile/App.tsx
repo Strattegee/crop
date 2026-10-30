@@ -8,6 +8,8 @@ import { finishSignIn, loadSession, signOut } from './src/auth';
 import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config';
 import { AvailabilityTab } from './src/AvailabilityTab';
 import { CredentialsTab } from './src/CredentialsTab';
+import { ManagerHome } from './src/ManagerHome';
+import { roleOf, startMode, type Mode } from './src/manager';
 import { styles } from './src/styles';
 import { businessesOf, byDay, dayLabel, offerCloses, roleLine, STATE_LABEL, timeRange, type MyOffer, type MyShift } from './src/format';
 
@@ -102,14 +104,41 @@ export default function App() {
         </ScrollView>
       )}
       {phase === 'ready' && tenant && me && (
-        <Home tenant={tenant} switchable={me.memberships.length > 1} onSwitch={() => setPhase('choose')} onSignOut={out} onSignedOut={() => setPhase('signedOut')} />
+        <Ready key={tenant} tenant={tenant} me={me} onSwitch={() => setPhase('choose')} onSignOut={out} onSignedOut={() => setPhase('signedOut')} />
       )}
     </SafeAreaView>
   );
 }
 
-function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
-  tenant: string; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
+/**
+ * One app for everyone (David, 29 Oct): owners, admins and allocators open in manager mode; workers see their own
+ * shifts. A manager who is also rostered (their sign-in is linked to a person in the business) can switch between the two.
+ */
+function Ready({ tenant, me, onSwitch, onSignOut, onSignedOut }: {
+  tenant: string; me: Me; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
+}) {
+  const role = roleOf(me, tenant);
+  const [mode, setMode] = useState<Mode>(startMode(role));
+  const [linked, setLinked] = useState(false);
+  const switchable = me.memberships.length > 1;
+  const business = me.memberships.find(m => m.tenantSlug === tenant)?.tenantName ?? '';
+
+  useEffect(() => {
+    if (mode !== 'manager') return;
+    // Is this manager also a rostered person here? Only then offer their own shifts.
+    api('/my', { tenant }).then(() => setLinked(true), () => setLinked(false));
+  }, [tenant, mode]);
+
+  if (mode === 'manager' && role) {
+    return <ManagerHome tenant={tenant} business={business} role={role} onMyShifts={linked ? () => setMode('worker') : null}
+      switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut} />;
+  }
+  return <Home tenant={tenant} switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut}
+    onManager={startMode(role) === 'manager' ? () => setMode('manager') : null} />;
+}
+
+function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager }: {
+  tenant: string; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void; onManager: (() => void) | null;
 }) {
   const [tab, setTab] = useState<'shifts' | 'offers' | 'availability' | 'credentials'>('shifts');
   const [my, setMy] = useState<My | null>(null);
@@ -162,7 +191,10 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
           <Text style={styles.heading}>{my ? `Hi ${my.firstName}` : ' '}</Text>
           <Text style={styles.muted}>{my?.business ?? ''}</Text>
         </View>
-        {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          {onManager && <Pressable onPress={onManager}><Text style={styles.link}>Run the roster</Text></Pressable>}
+          {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
+        </View>
       </View>
       <View style={styles.tabs}>
         {(['shifts', 'offers', 'availability', 'credentials'] as const).map(t => (

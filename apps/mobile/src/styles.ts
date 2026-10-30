@@ -22,6 +22,8 @@ export const styles = StyleSheet.create({
   badge: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden', fontSize: 13 },
   badgeBooked: { backgroundColor: '#d3f0dc', color: '#11592b' },
   badgeWaiting: { backgroundColor: '#fbefc4', color: '#6b5300' },
+  badgeUrgent: { backgroundColor: '#fde2e0', color: '#8a1c12' },
+  urgent: { borderColor: '#e8a29b' },
   row: { flexDirection: 'row', gap: 10, marginTop: 12 },
   grow: { flex: 1 },
   button: { backgroundColor: NAVY, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, alignItems: 'center', marginTop: 16, minHeight: 44 },
