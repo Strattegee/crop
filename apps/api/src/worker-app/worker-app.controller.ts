@@ -127,6 +127,7 @@ export class MyController {
       return {
         business: t.tenantName, firstName: w.firstName, name: w.name, today: todayIn(settings.timezone),
         word: { one: words.one(T.shift), many: words.many(T.shift), lower: words.lower(T.shift), lowerMany: words.lower(T.shift, true) },
+        credentialWord: { one: words.one(T.credential), many: words.many(T.credential), lower: words.lower(T.credential), lowerMany: words.lower(T.credential, true) },
       };
     });
   }

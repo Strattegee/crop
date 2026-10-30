@@ -60,3 +60,59 @@ export function myLeaveCancelRefusal(status: string): string | null {
   if (status === 'approved') return 'This leave is approved. Contact the office to cancel it.';
   return `This leave is already ${status}`;
 }
+
+// ---- My credentials (backlog item 9: credentials with upload) ----
+
+/** How the app shows one of the person's credentials: checked by the office, waiting to be checked, or not accepted. */
+export type MyCheckState = 'checked' | 'to_check' | 'not_accepted';
+export function myCheckState(verification: string): MyCheckState {
+  return verification === 'verified' ? 'checked' : verification === 'rejected' ? 'not_accepted' : 'to_check';
+}
+
+/** Most files someone can add to one credential from the app. */
+export const MY_MAX_FILES = 10;
+
+/** Why the person can't add a credential of this type in the app, or null when they can. */
+export function myAddRefusal(a: { typeName: string; waiting: boolean }): string | null {
+  if (a.waiting) return `You've already added a ${a.typeName} that the office hasn't checked yet. Add a photo or file to that one instead.`;
+  return null;
+}
+
+/** Dates someone gives for their own credential: an expiry already gone or an issue date still to come are refused. */
+export function myCredentialDatesRefusal(issueDate: string | null, expiryDate: string | null, today: string): string | null {
+  if (issueDate && issueDate > today) return 'The issue date is in the future';
+  if (expiryDate && expiryDate < today) return 'This has already run out. Add it once you have the new one.';
+  return null;
+}
+
+/** Why the person can't add a photo or file to this credential in the app, or null when they can. */
+export function myEvidenceRefusal(verification: string, files: number, word = 'credential'): string | null {
+  if (verification === 'verified') return `The office has already checked this one. If you have a new one, add it as a new ${word}.`;
+  if (verification === 'rejected') return `This one wasn't accepted. Add it again as a new ${word}, or contact the office.`;
+  if (files >= MY_MAX_FILES) return `You can add up to ${MY_MAX_FILES} files to one ${word}`;
+  return null;
+}
+
+/**
+ * One line telling the person what they need to do about a requirement that isn't met (from workerCompliance's issues).
+ * Right to work is recorded by the office, so the app only says to contact them. Vaccinations are named by their type,
+ * which the person sees on their own phone only (never in a message).
+ */
+export function myNeedLine(i: { typeName: string; problem: string; credentialTypeId: string; forDuty?: string }): string {
+  if (i.credentialTypeId === 'right-to-work') {
+    return i.problem === 'unverified' ? 'Right to work: the office is checking it' : 'Right to work: please contact the office';
+  }
+  switch (i.problem) {
+    case 'missing': return `Add your ${i.typeName}`;
+    case 'rejected': return `Your ${i.typeName} wasn't accepted: add it again or contact the office`;
+    case 'expired': return `Your ${i.typeName} has run out: add the new one`;
+    case 'expiring': return `Your ${i.typeName} runs out soon: add the new one when you have it`;
+    case 'unverified': return `${i.typeName}: waiting for the office to check it`;
+    default: return `${i.typeName}: please contact the office`;
+  }
+}
+
+/** Whether the person can do something about a requirement in the app (add or replace a credential). */
+export function myNeedAddable(i: { problem: string; credentialTypeId: string }): boolean {
+  return i.credentialTypeId !== 'right-to-work' && ['missing', 'rejected', 'expired', 'expiring'].includes(i.problem);
+}

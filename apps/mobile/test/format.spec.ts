@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, businessesOf, byDay, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+  addDays, businessesOf, byDay, dateFromParts, expiryLine, filesLine, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
 describe('worker app formatting', () => {
@@ -63,5 +63,24 @@ describe('availability and leave in the app', () => {
     expect(leaveDates({ startsOn: '2026-11-02', endsOn: '2026-11-04' })).toBe('Mon 2 Nov – Wed 4 Nov (3 days)');
     expect(leaveAskedMessage(0, { lower: 'shift', lowerMany: 'shifts' })).toBe('The office will let you know once it has been decided.');
     expect(leaveAskedMessage(2, { lower: 'job', lowerMany: 'jobs' })).toBe("You're on 2 jobs in those days. The office will let you know once it has been decided.");
+  });
+
+  it('words credentials and reads dates from day, month and year boxes', () => {
+    expect(longDate('2027-11-03')).toBe('3 Nov 2027');
+    expect(expiryLine({ expiryDate: null, status: 'valid' })).toBe('No expiry date');
+    expect(expiryLine({ expiryDate: '2027-11-03', status: 'valid' })).toBe('Runs out 3 Nov 2027');
+    expect(expiryLine({ expiryDate: '2026-11-03', status: 'expiring' })).toBe('Runs out soon: 3 Nov 2026');
+    expect(expiryLine({ expiryDate: '2026-10-03', status: 'expired' })).toBe('Ran out 3 Oct 2026');
+    expect(filesLine({ files: ['a.pdf'], needsEvidence: true, check: 'to_check' })).toBe('1 file added');
+    expect(filesLine({ files: [], needsEvidence: true, check: 'to_check' })).toBe('Add a photo or file so the office can check it');
+    expect(filesLine({ files: [], needsEvidence: true, check: 'checked' })).toBeNull();
+    expect(dateFromParts('', '', '')).toBe('');
+    expect(dateFromParts('3', '11', '2027')).toBe('2027-11-03');
+    expect(dateFromParts('31', '2', '2027')).toBeNull();
+    expect(dateFromParts('3', '', '2027')).toBeNull();
+    expect(dateFromParts('3', '11', '27')).toBeNull();
+    expect(uploadName('Licence.pdf', 'application/pdf')).toBe('Licence.pdf');
+    expect(uploadName(null, 'image/jpeg')).toBe('photo.jpg');
+    expect(uploadName('', 'image/png')).toBe('photo.png');
   });
 });

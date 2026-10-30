@@ -147,3 +147,58 @@ export function leaveAskedMessage(shiftsDuring: number, word: { lower: string; l
   if (shiftsDuring === 0) return base;
   return `You're on ${shiftsDuring} ${shiftsDuring === 1 ? word.lower : word.lowerMany} in those days. ${base}`;
 }
+
+// ---- My credentials ----
+
+export type CheckState = 'checked' | 'to_check' | 'not_accepted';
+export const CHECK_LABEL: Record<CheckState, string> = { checked: 'Checked', to_check: 'Waiting for the office to check', not_accepted: 'Not accepted' };
+export type Level = 'hard' | 'warning' | 'optional';
+export const LEVEL_LABEL: Record<Level, string> = { hard: 'Needed', warning: 'Recommended', optional: 'Optional' };
+
+export interface MyCredential {
+  id: string; credentialTypeId: string; typeName: string; number: string | null; issuedBy: string | null;
+  issueDate: string | null; expiryDate: string | null; check: CheckState; status: 'valid' | 'expiring' | 'expired';
+  needsEvidence: boolean; files: string[]; canAddFiles: boolean;
+}
+export interface MyNeed { credentialTypeId: string; typeName: string; must: boolean; problem: string; line: string; canAdd: boolean }
+export interface CredentialType { id: string; name: string; hasNumber: boolean; hasExpiry: boolean; level: Level | null }
+
+/** "3 Nov 2027" from YYYY-MM-DD. */
+export function longDate(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/** The expiry line on a credential card. */
+export function expiryLine(c: { expiryDate: string | null; status: 'valid' | 'expiring' | 'expired' }): string {
+  if (!c.expiryDate) return 'No expiry date';
+  if (c.status === 'expired') return `Ran out ${longDate(c.expiryDate)}`;
+  return `${c.status === 'expiring' ? 'Runs out soon: ' : 'Runs out '}${longDate(c.expiryDate)}`;
+}
+
+/** What to say under a credential about its files. */
+export function filesLine(c: { files: string[]; needsEvidence: boolean; check: CheckState }): string | null {
+  if (c.files.length) return `${c.files.length} file${c.files.length === 1 ? '' : 's'} added`;
+  if (c.check === 'to_check' && c.needsEvidence) return 'Add a photo or file so the office can check it';
+  return null;
+}
+
+/**
+ * A date from separate day, month and year boxes (no order of day and month to guess, whatever the country),
+ * as YYYY-MM-DD; '' when all three are blank, null when it isn't a real date.
+ */
+export function dateFromParts(day: string, month: string, year: string): string | null | '' {
+  const [d, m, y] = [day.trim(), month.trim(), year.trim()];
+  if (!d && !m && !y) return '';
+  if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !/^\d{4}$/.test(y)) return null;
+  const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  const t = Date.parse(`${iso}T00:00:00Z`);
+  return Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== iso ? null : iso;
+}
+
+/** A file name for an upload: the picked name, or one made from its type ("photo.jpg"). */
+export function uploadName(name: string | null | undefined, mimeType: string | null | undefined): string {
+  if (name && name.trim()) return name.trim();
+  const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : mimeType === 'image/heic' ? 'heic' : 'jpg';
+  return `photo.${ext}`;
+}

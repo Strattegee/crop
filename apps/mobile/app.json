@@ -23,6 +23,16 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "crop"
+    "scheme": "crop",
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "CROP uses the camera so you can take a photo of a licence or certificate for your employer to check.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ]
   }
 }

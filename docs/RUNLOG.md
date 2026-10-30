@@ -358,3 +358,10 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: when a shift asks for a female or male worker and the employer sends it to agencies, the agency now sees that too: on Allocations, in the email it gets, and as a warning (never a block) on its people of another gender or with none recorded. If the employer changes the request while agencies still hold the shift, their copies follow. Only the request goes to the agency, never anyone's own gender.
 - Next: my credentials with upload in the worker app, or the requirements email for agencies not on CROP.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
+## 2026-10-30 night, 9:15pm Melbourne (scheduled run)
+
+- Shipped: credentials in the worker app. A fourth tab shows what the person's role still needs ("Add your First aid", "Your RSA runs out soon"), their credentials with expiry and whether the office has checked them, lets them add one (number, issued by, dates) and add a photo from the camera or a file (PDF or image, up to 10 MB). Nothing they add counts until an owner or admin checks it; the person's page says "Added by them in the app". They can't change or remove anything the office has checked.
+- Not yet tried on a phone (needs the development build).
+- Next: push notifications in the app, or an email to the office when leave or a credential arrives from the app.
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it; checking the worker app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.

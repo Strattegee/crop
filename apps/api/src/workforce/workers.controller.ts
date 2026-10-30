@@ -19,7 +19,8 @@ const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name a
   t.verification_method as "verificationMethod", t.verification_url as "verificationUrl",
   c.number, c.issued_by as "issuedBy", to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
   c.evidence, c.verification, c.verified_at as "verifiedAt", c.verification_note as "verificationNote",
-  c.rejection_reason as "rejectionReason", c.notes, c.updated_at as "updatedAt"`;
+  c.rejection_reason as "rejectionReason", c.notes, c.updated_at as "updatedAt",
+  exists (select 1 from credential_events e where e.worker_credential_id = c.id and e.action = 'created' and e.details->>'via' = 'app') as "addedInApp"`;
 
 type Row = Record<string, unknown>;
 
