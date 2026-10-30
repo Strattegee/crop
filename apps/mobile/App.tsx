@@ -2,10 +2,12 @@ import * as AuthSession from 'expo-auth-session';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { api, ApiError, SignedOut } from './src/api';
 import { finishSignIn, loadSession, signOut } from './src/auth';
 import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config';
+import { AvailabilityTab } from './src/AvailabilityTab';
+import { styles } from './src/styles';
 import { businessesOf, byDay, dayLabel, offerCloses, roleLine, STATE_LABEL, timeRange, type MyOffer, type MyShift } from './src/format';
 
 // Closes the sign-in browser window when it returns to the app.
@@ -107,7 +109,7 @@ export default function App() {
 function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
   tenant: string; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
 }) {
-  const [tab, setTab] = useState<'shifts' | 'offers'>('shifts');
+  const [tab, setTab] = useState<'shifts' | 'offers' | 'availability'>('shifts');
   const [my, setMy] = useState<My | null>(null);
   const [shifts, setShifts] = useState<MyShift[]>([]);
   const [offers, setOffers] = useState<MyOffer[]>([]);
@@ -161,14 +163,17 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
         {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
       </View>
       <View style={styles.tabs}>
-        {(['shifts', 'offers'] as const).map(t => (
+        {(['shifts', 'offers', 'availability'] as const).map(t => (
           <Pressable key={t} style={[styles.tab, tab === t && styles.tabOn]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
             <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>
-              {t === 'shifts' ? `My ${word.lowerMany}` : `Offers${offers.length ? ` (${offers.length})` : ''}`}
+              {t === 'shifts' ? `My ${word.lowerMany}` : t === 'offers' ? `Offers${offers.length ? ` (${offers.length})` : ''}` : 'Availability'}
             </Text>
           </Pressable>
         ))}
       </View>
+      {tab === 'availability' ? (
+        <AvailabilityTab tenant={tenant} word={word} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
+      ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
         {tab === 'shifts' && !error && (shifts.length === 0
@@ -208,6 +213,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
           )))}
         <SignOutLink onPress={onSignOut} />
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -215,35 +221,3 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut }: {
 function SignOutLink({ onPress }: { onPress: () => void }) {
   return <Pressable onPress={onPress} style={{ marginTop: 24, alignSelf: 'center' }}><Text style={styles.link}>Sign out</Text></Pressable>;
 }
-
-const NAVY = '#1f3a5f';
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#f6f7f9' },
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { fontSize: 32, fontWeight: '700', color: NAVY },
-  heading: { fontSize: 20, fontWeight: '700', color: NAVY },
-  muted: { color: '#5d6775' },
-  small: { fontSize: 13, marginTop: 4 },
-  error: { color: '#b42318', marginVertical: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingBottom: 8 },
-  tabs: { flexDirection: 'row', marginHorizontal: 16, borderRadius: 8, backgroundColor: '#e6e9ee', padding: 3 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
-  tabOn: { backgroundColor: '#fff' },
-  tabText: { color: '#5d6775', fontWeight: '600' },
-  tabTextOn: { color: NAVY },
-  list: { padding: 16, paddingBottom: 48 },
-  day: { fontWeight: '700', marginTop: 12, marginBottom: 6, color: NAVY },
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e1e4e8' },
-  cardTitle: { fontSize: 17, fontWeight: '600', marginBottom: 2 },
-  badge: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden', fontSize: 13 },
-  badgeBooked: { backgroundColor: '#d3f0dc', color: '#11592b' },
-  badgeWaiting: { backgroundColor: '#fbefc4', color: '#6b5300' },
-  row: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  grow: { flex: 1 },
-  button: { backgroundColor: NAVY, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, alignItems: 'center', marginTop: 16, minHeight: 44 },
-  secondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: NAVY },
-  secondaryText: { color: NAVY },
-  disabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  link: { color: NAVY, textDecorationLine: 'underline', fontWeight: '600' },
-});

@@ -31,6 +31,7 @@ import { ShiftDutiesController } from './roster/duties.controller.js';
 import { CoverRulesController } from './roster/cover-rules.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
 import { AppAccessController, MyController } from './worker-app/worker-app.controller.js';
+import { MyAvailabilityController } from './worker-app/my-availability.controller.js';
 import { OnboardingChecklistsController, WorkerOnboardingController } from './workforce/onboarding.controller.js';
 
 @Module({
@@ -42,7 +43,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController, AttentionController, ShiftDutiesController, CoverRulesController,
     OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController, AgencyAttentionController, AgencyOffersController, AgencyOfferLinksController,
-    AppAccessController, MyController,
+    AppAccessController, MyController, MyAvailabilityController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator],
 })
