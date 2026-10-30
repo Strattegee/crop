@@ -386,3 +386,10 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: a day and week roster view in the app, publishing the week from the phone, and the covering line.
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
+## 2026-10-31 morning, 9:15am Melbourne (scheduled run)
+
+- Shipped: the roster on the phone in manager mode. A new Roster tab shows one week at a time (this week, next, or any other), for every site or one, a day at a time or the whole week; each shift says who is on it (or Unfilled) and its stage, and each day shows how many are still unfilled. Tapping a shift opens it to fill or change, as from Needs attention. The tab also shows whether each site's week is a draft or live (and how many changes since publishing), with the same Publish week / Publish changes button as the web, telling staff or not.
+- Not yet tried on a phone (needs the development build).
+- Next: the covering line from the phone, then the agency and onboarding follow-ups (push alerts wait for the Expo account).
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.

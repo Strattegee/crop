@@ -5,10 +5,12 @@ import {
   approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, KIND_LABEL, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
   type Attention, type ChangeRequest, type LeaveRequest, type Term,
 } from './manager';
+import { currentWeek, firstDay, termWord } from './roster';
+import { RosterTab, type RosterView } from './RosterTab';
 import { ShiftScreen } from './ShiftScreen';
 import { styles } from './styles';
 
-type Tab = 'today' | 'requests';
+type Tab = 'today' | 'roster' | 'requests';
 
 /**
  * Manager mode (backlog item 9a, first slice): for owners, admins and allocators running the roster from a phone.
@@ -29,6 +31,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openShift, setOpenShift] = useState<string | null>(null);
+  const [rosterView, setRosterView] = useState<RosterView | null>(null);
   const decider = canDecide(role);
 
   const load = useCallback(async () => {
@@ -46,7 +49,13 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       setLeave(l);
       setChanges(c);
       setTerms(t);
-      setToday(todayIn(s?.timezone));
+      const day = todayIn(s?.timezone);
+      setToday(day);
+      setRosterView(v => {
+        if (v) return v;
+        const weekStart = currentWeek(day, new Date().toISOString().slice(0, 10));
+        return { weekStart, day: firstDay(weekStart, day), facilityId: null };
+      });
     } catch (e) {
       if (e instanceof SignedOut) onSignedOut();
       else setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -60,6 +69,9 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   }, [load]);
 
   const word = shiftWord(terms);
+  const people = termWord(terms, 'worker', 'Worker', 'Workers');
+  const siteWord = termWord(terms, 'site', 'Site', 'Sites');
+  const rosterWord = termWord(terms, 'roster', 'Roster', 'Rosters');
 
   const act = async (path: string, done: (result: unknown) => string) => {
     setBusy(true);
@@ -102,12 +114,16 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         </View>
       </View>
       <View style={styles.tabs}>
-        {(['today', 'requests'] as const).map(t => (
+        {(['today', 'roster', 'requests'] as const).map(t => (
           <Pressable key={t} style={[styles.tab, tab === t && styles.tabOn]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'today' ? 'Needs attention' : requestsTab(leave.length, changes.length)}</Text>
+            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'today' ? 'Needs attention' : t === 'roster' ? rosterWord.one : requestsTab(leave.length, changes.length)}</Text>
           </Pressable>
         ))}
       </View>
+      {tab === 'roster' && rosterView ? (
+        <RosterTab tenant={tenant} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord}
+          busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
+      ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -173,6 +189,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
 
         <Pressable onPress={onSignOut} style={{ marginTop: 24, alignSelf: 'center' }}><Text style={styles.link}>Sign out</Text></Pressable>
       </ScrollView>
+      )}
     </View>
   );
 }
