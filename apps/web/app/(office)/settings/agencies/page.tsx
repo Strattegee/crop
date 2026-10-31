@@ -250,7 +250,7 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
                   <td className="small">
                     {l.statusWords}
                     <div><Link href={`/settings/agencies/${l.connectionId}`} className="btn small secondary" style={{ marginTop: 4 }}>
-                      {l.status === 'active' ? 'See matches' : 'Match requirements'}
+                      {l.status === 'active' ? 'Matches and who is ready' : 'Match requirements'}
                     </Link></div>
                   </td>
                   <td>{canEdit && <EndForm link={l} />}</td>
