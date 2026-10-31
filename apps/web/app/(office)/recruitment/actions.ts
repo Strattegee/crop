@@ -23,10 +23,24 @@ export async function addApplicant(f: FormData) {
 }
 
 export async function moveTo(workerId: string, stage: string, label: string, f: FormData) {
-  await attempt(BACK, () => api(`/workers/${workerId}/stage`, { method: 'POST', body: { stage, note: str(f, 'note') } }), label);
+  await moveFrom(BACK, workerId, stage, label, f);
+}
+
+/** The same move from another page (the person's page passes its own address so it comes back there). */
+export async function moveFrom(back: string, workerId: string, stage: string, label: string, f: FormData) {
+  await attempt(back, () => api(`/workers/${workerId}/stage`, { method: 'POST', body: { stage, note: str(f, 'note') } }), label);
+}
+
+/** A card dropped on another column of the board (called from the board's client part). */
+export async function dropOnStage(workerId: string, stage: string, label: string) {
+  await attempt(BACK, () => api(`/workers/${workerId}/stage`, { method: 'POST', body: { stage } }), label);
 }
 
 export async function startOnboarding(workerId: string, f: FormData) {
-  await attempt(BACK, () => api(`/workers/${workerId}/onboarding`, { method: 'POST', body: { checklistId: str(f, 'checklistId'), hold: true } }),
+  await startOnboardingFrom(BACK, workerId, f);
+}
+
+export async function startOnboardingFrom(back: string, workerId: string, f: FormData) {
+  await attempt(back, () => api(`/workers/${workerId}/onboarding`, { method: 'POST', body: { checklistId: str(f, 'checklistId'), hold: true } }),
     'Onboarding started. They stay off the roster until it is finished.');
 }

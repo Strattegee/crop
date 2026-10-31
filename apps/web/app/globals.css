@@ -512,6 +512,15 @@ tr.grp-row th { background: #f3f5f7; text-align: left; font-size: 12px; text-tra
 .rinline select, .rinline input { font-size: 13px; padding: 4px 6px; max-width: 160px; }
 .rmore summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .rmore[open] { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.rdrag[draggable='true'] { cursor: grab; }
+.rdrag[draggable='true']:active { cursor: grabbing; }
+.rboard[data-over='applied'] .rcol-applied, .rboard[data-over='screening'] .rcol-screening,
+.rboard[data-over='interview'] .rcol-interview, .rboard[data-over='offer'] .rcol-offer { outline: 2px dashed var(--accent, #2b6cb0); outline-offset: -2px; background: #e4ecf7; }
+.rboard.moving { opacity: 0.6; pointer-events: none; }
+.rhist { list-style: none; margin: 0; padding: 0; }
+.rhist li { display: flex; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
+.rhist li:first-child { border-top: 0; }
+.rhist time { flex: 0 0 150px; color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { .rboard { grid-template-columns: repeat(6, 82vw); } }
 
 /* Dashboards (David, 31 Oct): one per job focus; numbers across the top, colour only when off target. */
