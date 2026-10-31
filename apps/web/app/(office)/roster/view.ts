@@ -365,11 +365,11 @@ export function shiftMarkers(s: MarkerShift): Marker[] {
     const off = !!s.workerId && s.workerGender !== s.genderRequested;
     const who = s.workerName ?? 'The person on it';
     out.push({
-      key: 'g', letter: s.genderRequested, cls: `mk-g${off ? ' warn' : ''}`,
+      key: 'g', letter: s.genderRequested, cls: `mk-g ${s.genderRequested.toLowerCase()}${off ? ' warn' : ''}`,
       title: `${want[0].toUpperCase()}${want.slice(1)} worker requested${off ? (s.workerGender ? `; ${who} is recorded as ${GENDER_WORD[s.workerGender]}` : `; ${who}'s gender isn't recorded`) : ''}`,
     });
   } else if (s.workerId && s.workerGender) {
-    out.push({ key: 'g', letter: s.workerGender, cls: 'mk-g soft', title: `${s.workerName ?? 'The person on it'} is ${GENDER_WORD[s.workerGender]}` });
+    out.push({ key: 'g', letter: s.workerGender, cls: `mk-g soft ${s.workerGender.toLowerCase()}`, title: `${s.workerName ?? 'The person on it'} is ${GENDER_WORD[s.workerGender]}` });
   }
   const vehicles = (s.equipment ?? []).filter(e => e.vehicle);
   const other = (s.equipment ?? []).filter(e => !e.vehicle);

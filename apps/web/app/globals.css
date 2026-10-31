@@ -422,14 +422,26 @@ body:has(.roster-page.full) .appbar { display: none; }
 .ribbon tr.row-area td { vertical-align: top; }
 .ribbon tr.row-area td .rcard + .rcard { margin-top: 4px; }
 
-/* Marker letters on shift cards (David, 30 Oct): F/M gender, V vehicle, E equipment, I items, D duties. */
-.rcard .mks { float: right; display: inline-flex; gap: 2px; margin-left: 4px; }
-.mk { letter-spacing: 0; text-transform: none; display: inline-block; min-width: 13px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px; font-weight: 800; text-align: center; font-style: normal; color: #fff; }
-.mk.mk-g { background: #7b3fa0; }
-.mk.mk-g.soft { background: #e7d9f0; color: #4d2466; }
-.mk.mk-g.warn { background: #c62828; }
-.mk.mk-v { background: #00695c; }
-.mk.mk-e { background: #5d4037; }
-.mk.mk-i { background: #1565c0; }
-.mk.mk-d { background: #455a64; }
-.ribbon-key .mk, .roster-key .mk { margin: 0 2px; }
+/* Letter column down the left of every card (David, 31 Oct): the shift letter, then colour-coded markers
+   F/M gender, V vehicle, E equipment, I items, D duties, so the complexity of a shift shows at a glance. */
+.rcard { flex-direction: row; }
+.rcard .cbody { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.rcard .mkcol { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 2px; background: #f3f5f7; border-right: 1px solid var(--border); }
+.rcard.bar .mkcol { flex-wrap: wrap; max-height: 100%; align-content: flex-start; }
+.mk { display: inline-block; min-width: 15px; padding: 0 2px; border-radius: 3px; font-size: 10px; line-height: 15px; font-weight: 800; text-align: center;
+  font-style: normal; color: #fff; letter-spacing: 0; text-transform: none; box-sizing: border-box; }
+.mk.mk-shift.am { background: #dbeaf7; color: #1d4e79; }
+.mk.mk-shift.pm { background: #fbe9c8; color: #7a4b0c; }
+.mk.mk-shift.nd { background: #2d3a6b; color: #fff; }
+.mk.mk-g.f { background: #ad1457; }
+.mk.mk-g.m { background: #3949ab; }
+.mk.mk-g.soft.f { background: #f8d7e6; color: #8a1046; }
+.mk.mk-g.soft.m { background: #dde1f5; color: #2c3a8c; }
+.mk.mk-g.warn { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #d32f2f; }
+.mk.mk-v { background: #00796b; }
+.mk.mk-e { background: #6d4c41; }
+.mk.mk-i { background: #1976d2; }
+.mk.mk-d { background: #ef6c00; }
+.roster-legend .mk, .ribbon-key .mk { margin: 0 2px; vertical-align: middle; }
+/* Simple look keeps one line: the letters sit side by side at the start instead of stacking. */
+.ribbon.look-simple .rcard .mkcol { flex-direction: row; padding: 2px 3px; }
