@@ -66,6 +66,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
       </div>
 
+      {canEdit && (
+        <div className="card">
+          <h2>Audit log</h2>
+          <p className="muted" style={{ marginTop: 0 }}>Every record added, changed or removed: who, when, and the values before and after. Nobody can change it.</p>
+          <Link href="/settings/audit" className="btn small secondary">Audit log</Link>
+        </div>
+      )}
+
       <div className="card">
         <h2>Dashboards</h2>
         <p className="muted" style={{ marginTop: 0 }}>Which dashboard each person in the office lands on, who sees cost figures, and your business’s own targets.</p>

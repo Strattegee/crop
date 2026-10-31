@@ -335,6 +335,7 @@ export default async function WorkerPage({ params, searchParams }: {
       {tab === 'details' && (<>
       <div className="card">
         <h2>Details</h2>
+        {canVerify && <p className="muted small" style={{ marginTop: 0 }}><Link href={`/settings/audit?worker=${w.id}&name=${encodeURIComponent(`${w.firstName} ${w.lastName}`)}`}>Audit log for {w.preferredName || w.firstName}</Link>: every change to their record, credentials, shifts and leave.</p>}
         <form action={updateWorker.bind(null, w.id)} className="form-row" style={{ marginTop: 12 }}>
           <label>First name<input name="firstName" required defaultValue={w.firstName} maxLength={100} /></label>
           <label>Last name<input name="lastName" required defaultValue={w.lastName} maxLength={100} /></label>
