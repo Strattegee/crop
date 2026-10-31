@@ -8,6 +8,7 @@ import { Notices } from '../notices';
 import { PersonCard } from '../workers/person-card';
 import { RolePicker } from '../workers/role-picker';
 import { addApplicant, moveTo, startOnboarding } from './actions';
+import { BoardDrag } from './board-drag';
 import { STAGES, nextStage, previousStage, daysLine } from '../../../lib/recruitment';
 
 export const dynamic = 'force-dynamic';
@@ -53,9 +54,10 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
         </form>
       </details>
 
-      <div className="rboard">
+      {total > 0 && <p className="muted small" style={{ margin: '0 0 8px' }}>Drag a card to another stage, or use its buttons.</p>}
+      <BoardDrag>
         {b.columns.map(col => (
-          <section key={col.stage} className={`rcol rcol-${col.stage}`}>
+          <section key={col.stage} className={`rcol rcol-${col.stage}`} data-stage={col.stage}>
             <h2>{col.label} <span className="muted">{col.people.length}</span></h2>
             {col.people.length === 0 && <p className="muted small rcol-empty">Nobody here</p>}
             {col.people.map(p => {
@@ -63,6 +65,8 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
               const prev = previousStage(col.stage);
               return (
                 <div key={p.id} className="rperson">
+                  {/* Only the card and its line are draggable, so the reason box below still takes text normally. */}
+                  <div className="rdrag" data-id={p.id} data-stage={col.stage} draggable={STAGES.includes(col.stage) ? true : undefined}>
                   <PersonCard p={p} today={today} />
                   <div className="rmeta">
                     <span>{daysLine(col.stage, p.days)}</span>
@@ -70,6 +74,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
                       <span className={p.progress.ready ? 'ok' : ''}>{p.progress.done} of {p.progress.total} steps done{p.progress.ready ? ' · ready to finish' : ''}</span>
                     )}
                     {col.stage !== 'started' && col.stage !== 'onboarding' && p.mustHavesToDo > 0 && <span className="warn">{p.mustHavesToDo} must-have{p.mustHavesToDo === 1 ? '' : 's'} to collect</span>}
+                  </div>
                   </div>
                   {STAGES.includes(col.stage) && (
                     <div className="ractions">
@@ -108,7 +113,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
             })}
           </section>
         ))}
-      </div>
+      </BoardDrag>
       {b.notProceeding > 0 && (
         <p className="muted small">{b.notProceeding} not proceeding in the last 30 days. <Link href="/recruitment/not-proceeding">See them</Link></p>
       )}

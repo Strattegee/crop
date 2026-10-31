@@ -25,6 +25,8 @@ import { RolePicker } from '../role-picker';
 import { UploadLinkCard, type UploadLinkInfo } from './upload-link-card';
 import { whenIn } from '../../../../lib/business';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
+import { RecruitmentCard } from './recruitment-card';
+import type { RecruitmentEvent } from '../../../../lib/recruitment';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +42,7 @@ type Worker = {
   gender?: 'F' | 'M' | null; status: string; roles: string[]; compliance: string; credentials: Credential[];
   issues: { typeName: string; severity: string; problem: string }[];
   optional?: { credentialTypeId: string; typeName: string; held: boolean }[];
-  notes?: string | null; card?: CardData;
+  notes?: string | null; card?: CardData; recruitmentStage?: string | null;
 };
 type MyShift = {
   id: string; localDate: string; localStart: string; localEnd: string; facilityName: string; areaName: string | null; role: string;
@@ -90,6 +92,8 @@ export default async function WorkerPage({ params, searchParams }: {
   const shifts = tab === 'overview' || tab === 'shifts'
     ? await api<MyShift[]>(`/shifts?from=${addDays(today, tab === 'shifts' ? -28 : 0)}&to=${addDays(today, tab === 'shifts' ? 56 : 28)}&workerId=${id}`).catch(() => [] as MyShift[])
     : [];
+  const recruitment = tab === 'overview' && w.status !== 'agency'
+    ? await api<RecruitmentEvent[]>(`/workers/${id}/recruitment`).catch(() => [] as RecruitmentEvent[]) : [];
   const upcoming = shifts.filter(x => x.localDate >= today && x.status !== 'cancelled');
   const shiftTable = (list: MyShift[]) => list.length === 0 ? <p className="muted" style={{ margin: 0 }}>None.</p> : (
     <table>
@@ -136,6 +140,11 @@ export default async function WorkerPage({ params, searchParams }: {
             ))}
           </ul>
         </div>
+      )}
+
+      {tab === 'overview' && w.status !== 'agency' && (
+        <RecruitmentCard workerId={id} status={w.status} stage={w.recruitmentStage ?? null} events={recruitment}
+          checklists={checklists.filter(c => !c.archived)} when={whenIn(settings.timezone || 'Australia/Melbourne')} />
       )}
 
       {onboarding && (
