@@ -148,6 +148,18 @@ export async function setCovering(shiftId: string, f: FormData) {
   }, () => name ? `Now covering ${name}.` : 'Not covering anyone.');
 }
 
+/** New day, times or break for a shift; refused (with the reason) when the person or equipment on it can't do them. */
+export async function setTimes(shiftId: string, f: FormData) {
+  const brk = str(f, 'breakMinutes');
+  let line = '';
+  await attempt(back(f), async () => {
+    const s = await api<{ localDate: string; localStart: string; localEnd: string }>(`/shifts/${shiftId}/times`, { method: 'PUT', body: {
+      date: str(f, 'date'), startTime: str(f, 'startTime'), endTime: str(f, 'endTime'), breakMinutes: brk === null ? undefined : Number(brk),
+    } });
+    line = `Now ${s.localDate} ${s.localStart}–${s.localEnd}.`;
+  }, () => line);
+}
+
 /** Gender requested for a shift (David, 30 Oct). A different or unrecorded gender on the person is a warning. */
 export async function setGender(shiftId: string, f: FormData) {
   const genderRequested = str(f, 'genderRequested') ?? null;

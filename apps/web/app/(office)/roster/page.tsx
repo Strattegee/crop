@@ -6,7 +6,7 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   agencyFill, agencyFillNext, agencyFillWithdraw, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setTimes, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
@@ -38,7 +38,7 @@ type Shift = {
   /** Gender requested by whoever asked for the shift, and the gender of the person on it (David, 30 Oct). */
   genderRequested?: 'F' | 'M' | null; workerGender?: 'F' | 'M' | null; itemCount?: number;
   offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
-  coveringWorkerId?: string | null; coveringName?: string | null;
+  coveringWorkerId?: string | null; coveringName?: string | null; startsAt?: string; breakMinutes?: number;
   /** The agency the person on it came from (agency fill, migration 0042). */
   agencyName?: string | null;
 };
@@ -1098,6 +1098,23 @@ export default async function RosterPage({ searchParams }: {
                     {agencyState && <AgencyFillSection st={agencyState} shiftId={selected.id} here={here} when={when} tw={tw} />}
                   </>
                 )}
+              </section>
+            )}
+
+            {selected.startsAt && new Date(selected.startsAt).getTime() > Date.now() && (
+              <section>
+                <details>
+                  <summary style={{ cursor: 'pointer' }}><h3 style={{ display: 'inline' }}>Change day or times</h3></summary>
+                  <form action={setTimes.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 8 }}>
+                    <input type="hidden" name="back" value={here} />
+                    <label>Day<input type="date" name="date" defaultValue={selected.localDate} required /></label>
+                    <label>Start<input type="time" name="startTime" defaultValue={selected.localStart} required /></label>
+                    <label>End<input type="time" name="endTime" defaultValue={selected.localEnd} required /></label>
+                    <label>Break (min)<input type="number" name="breakMinutes" min={0} max={240} step={5} defaultValue={selected.breakMinutes ?? 0} style={{ width: 80 }} /></label>
+                    <button className="btn small secondary">Save</button>
+                  </form>
+                  <p className="muted small" style={{ margin: '4px 0 0' }}>An end before the start runs overnight. Whoever and whatever is on the {tw.lower(T.shift)} must still be able to do the new times; {tw.lower(T.agency, true)} holding it are told.</p>
+                </details>
               </section>
             )}
 

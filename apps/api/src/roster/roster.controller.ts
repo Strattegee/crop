@@ -10,6 +10,7 @@ import { bool, date, gender, int, oneOf, text } from '../common/validate.js';
 import { genderReason } from './eligibility.js';
 import { APP_POOL } from '../database/database.module.js';
 import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
+import { equipmentForShift } from './equipment-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
 import { actorOf } from './publishing.js';
 import { END_REASONS, correctionPlan, endPlan, withdrawalPlan, type TermDates } from './employment.js';
@@ -567,6 +568,54 @@ export class ShiftsController {
       const after = await shiftById(db, id);
       const personWarning = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined)?.message ?? null;
       return { ...after, personWarning };
+    });
+  }
+
+  /**
+   * Changes a shift's day, times and break (`{ date?, startTime, endTime, breakMinutes? }`, the site's local time;
+   * an end before the start runs overnight). Logged as `times_changed`, so the after-publishing rule applies, and
+   * agencies' copies follow (migration 0056). Refused for a cancelled shift or one that has started, and when the person
+   * or equipment on it couldn't do the new times (double booked, on leave, a date run out…): nothing changes then.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('shifts/:id/times')
+  setTimes(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const day = date(body ?? {}, 'date');
+    const startTime = time(body ?? {}, 'startTime', 'Start time');
+    const endTime = time(body ?? {}, 'endTime', 'End time');
+    const breakMinutes = int(body ?? {}, 'breakMinutes', 0, 240);
+    if (!startTime || !endTime) throw new BadRequestException('Enter the start and end times');
+    if (startTime === endTime) throw new BadRequestException('Start and end times must be different');
+    return this.tx(t, auth, async db => {
+      const cur = (await db.query<{ status: string; started: boolean; local_date: string; timezone: string; brk: number }>(
+        `select s.status, s.starts_at <= now() as started, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
+                f.timezone, s.break_minutes as brk
+           from shifts s join facilities f on f.id = s.facility_id where s.id = $1 for update of s`, [id])).rows[0];
+      if (!cur) throw new NotFoundException('Shift not found');
+      if (cur.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
+      if (cur.started) throw new ConflictException('This shift has already started, so its times can no longer be changed');
+      const r = (await db.query<{ future: boolean }>(
+        `update shifts set starts_at = ($2::date + $3::time) at time zone $6,
+                           ends_at = ($2::date + $5::int + $4::time) at time zone $6,
+                           break_minutes = $7, updated_at = now()
+          where id = $1 returning starts_at > now() as future`,
+        [id, day ?? cur.local_date, startTime, endTime, endTime < startTime ? 1 : 0, cur.timezone, breakMinutes ?? cur.brk])).rows[0];
+      if (!r.future) throw new BadRequestException('The new start time has already passed');
+      // The person and equipment on it must still be able to do the new times; otherwise nothing changes.
+      const person = (await db.query<{ worker_id: string; status: string }>(
+        `select a.worker_id, w.status from shift_assignments a join workers w on w.id = a.worker_id
+          where a.shift_id = $1 and a.resource_kind = 'worker' and a.status in ('assigned', 'confirmed')`, [id])).rows[0];
+      if (person && person.status !== 'agency') {
+        const [c] = await eligibilityForShift(db, t.tenantId, id, [person.worker_id]);
+        if (c && c.blocks.length) throw new ConflictException(`${c.name} can't work the new times: ${c.blocks.map(b => b.message).join('; ')}. Take them off first, or choose other times.`);
+      }
+      const booked = (await db.query<{ equipment_id: string }>(
+        `select equipment_id from shift_assignments where shift_id = $1 and resource_kind = 'equipment' and status = 'confirmed'`, [id])).rows.map(x => x.equipment_id);
+      if (booked.length) {
+        const stuck = (await equipmentForShift(db, t.tenantId, id, booked)).filter(e => e.blocks.length);
+        if (stuck.length) throw new ConflictException(`${stuck.map(e => `${e.name} can't be used at the new times: ${e.blocks.map(b => b.message).join('; ')}`).join('. ')}. Take it off first, or choose other times.`);
+      }
+      return shiftById(db, id);
     });
   }
 
