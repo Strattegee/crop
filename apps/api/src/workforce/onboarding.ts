@@ -167,7 +167,11 @@ export function askableItems(steps: AskableStep[], progress: StepProgress[]): { 
 }
 
 /** The email (and short text) asking a new person for what's still needed. Plain words; no numbers or health details. */
-export function askMessage(o: { first: string; business: string; items: { label: string; required: boolean }[]; note: string | null; emailed?: boolean }) {
+export function askMessage(o: {
+  first: string; business: string; items: { label: string; required: boolean }[]; note: string | null; emailed?: boolean;
+  /** The upload link's lines (upload-links.ts), when one was made: the person sends things through it. */
+  linkLines?: { email: string; sms: string };
+}) {
   const needed = o.items.filter(x => x.required);
   const optional = o.items.filter(x => !x.required);
   const subject = `${o.business}: what we still need from you before you start`;
@@ -180,8 +184,9 @@ export function askMessage(o: { first: string; business: string; items: { label:
     lines.push(needed.length ? 'It would also help to have:' : `${o.business} would also like to have:`, ...optional.map(x => `- ${x.label}`));
   }
   if (o.note) lines.push('', o.note);
-  lines.push('', `Please send a clear photo or scan of each to ${o.business}, or bring them in. If you have already sent something, thank you: we will check it soon.`);
+  if (o.linkLines) lines.push('', o.linkLines.email, '', `If you have already sent something, thank you: we will check it soon.`);
+  else lines.push('', `Please send a clear photo or scan of each to ${o.business}, or bring them in. If you have already sent something, thank you: we will check it soon.`);
   const shortList = o.items.length <= 2 ? o.items.map(x => x.label.replace(/ \(for example.*\)$/, '')).join(' and ') : `${o.items.length} things`;
-  const sms = `${o.business}: before you start we still need ${shortList} from you. ${o.emailed === false ? `Please send a photo or bring them in.` : 'Details are in your email.'}`;
+  const sms = `${o.business}: before you start we still need ${shortList} from you. ${o.linkLines ? o.linkLines.sms : o.emailed === false ? `Please send a photo or bring them in.` : 'Details are in your email.'}`;
   return { subject, email: lines.join('\n'), sms };
 }

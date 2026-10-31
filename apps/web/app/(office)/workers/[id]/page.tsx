@@ -22,6 +22,8 @@ import type { CardData } from '../../../../lib/person-card';
 import { PersonCard } from '../person-card';
 import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
 import { RolePicker } from '../role-picker';
+import { UploadLinkCard, type UploadLinkInfo } from './upload-link-card';
+import { whenIn } from '../../../../lib/business';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +32,7 @@ type Credential = {
   id: string; credentialTypeId: string; typeName: string; number: string | null; notes?: string | null; issuedBy?: string | null; issueDate: string | null; expiryDate: string | null;
   verification: string; status: string; verificationMethod: string | null; verificationUrl: string | null;
   verifiedAt: string | null; verificationNote: string | null; rejectionReason: string | null; evidence: string;
-  addedInApp?: boolean;
+  addedInApp?: boolean; sentByLink?: boolean;
   documents: { id: string; filename: string; contentType?: string; sizeBytes: number }[];
 };
 type Worker = {
@@ -83,6 +85,8 @@ export default async function WorkerPage({ params, searchParams }: {
   // Tabs (David, 31 Oct): one record, its parts one click away. The tab lives in the URL so links and Back work.
   const tabs = personTabs({ issues: w.issues, rtwIssue: rtw.issue, onboarding: !!onboarding?.current, words: { credentials: tw.many(T.credential), shifts: tw.many(T.shift) } });
   const tab: PersonTab = tabs.some(t => t.id === sp.tab) ? sp.tab as PersonTab : 'overview';
+  const uploadInfo = tab === 'credentials' && w.status !== 'agency'
+    ? await api<UploadLinkInfo>(`/workers/${id}/upload-link`).catch(() => null) : null;
   const shifts = tab === 'overview' || tab === 'shifts'
     ? await api<MyShift[]>(`/shifts?from=${addDays(today, tab === 'shifts' ? -28 : 0)}&to=${addDays(today, tab === 'shifts' ? 56 : 28)}&workerId=${id}`).catch(() => [] as MyShift[])
     : [];
@@ -150,6 +154,8 @@ export default async function WorkerPage({ params, searchParams }: {
         {w.notes && <div className="card"><h2>Notes</h2><p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{w.notes}</p></div>}
       </>)}
       {tab === 'credentials' && (<>
+        {uploadInfo && <UploadLinkCard workerId={id} info={uploadInfo} first={w.preferredName || w.firstName} hasEmail={!!w.email} hasPhone={!!w.phone}
+          when={whenIn(settings.timezone || 'Australia/Melbourne')} word={tw.lower(T.credential)} />}
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>{tw.many(T.credential)}</h2>
         {w.credentials.length === 0 ? <p className="muted">No credentials recorded yet.</p> : (
@@ -192,6 +198,7 @@ export default async function WorkerPage({ params, searchParams }: {
                     {c.verification === 'verified' && c.verifiedAt && <div className="muted" style={{ fontSize: 12 }}>{formatDate(c.verifiedAt)}{c.verificationNote ? ` · ${c.verificationNote}` : ''}</div>}
                     {c.verification === 'rejected' && <div className="muted" style={{ fontSize: 12 }}>{c.rejectionReason}</div>}
                     {c.addedInApp && c.verification === 'unverified' && <div className="muted" style={{ fontSize: 12 }}>Added by them in the app</div>}
+                    {c.sentByLink && c.verification === 'unverified' && <div className="muted" style={{ fontSize: 12 }}>Sent by them through their upload link</div>}
                   </td>
                   {canVerify && (
                     <td style={{ minWidth: 220 }}>

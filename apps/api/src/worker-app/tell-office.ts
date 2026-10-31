@@ -8,7 +8,7 @@ import { queueNotification } from '../notifications/notify.js';
  */
 export async function tellOffice(
   db: PoolClient, tenantId: string,
-  m: { subject: string; body: string; template: string; dedupeKey: string; createdBy: string; exceptEmail?: string | null },
+  m: { subject: string; body: string; template: string; dedupeKey: string; createdBy: string | null; exceptEmail?: string | null },
 ): Promise<number> {
   const except = (m.exceptEmail ?? '').trim().toLowerCase();
   let n = 0;

@@ -14,6 +14,8 @@ import {
 } from './onboarding.js';
 import { loadSettings } from './settings.js';
 import { queueNotification } from '../notifications/notify.js';
+import { createUploadLink } from './upload-links.controller.js';
+import { uploadLinkLines, uploadLinkUrl } from './upload-links.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_STEPS = 40;
@@ -339,7 +341,14 @@ export class WorkerOnboardingController {
       const c = (await db.query<{ first: string; email: string | null; phone: string | null }>(
         'select coalesce(preferred_name, first_name) as first, email, phone from workers where id = $1', [o.worker_id])).rows[0];
       if (!c.email && !(sms && c.phone)) throw new BadRequestException(sms ? 'This person has no email address or mobile number recorded' : 'This person has no email address recorded');
-      const m = askMessage({ first: c.first, business: t.tenantName, items: p.askable, note, emailed: !!c.email });
+      // With CROP's address known, the message carries a one-off upload link (David, 29 Oct): they send things there.
+      const appUrl = process.env.APP_URL ?? '';
+      let linkLines: { email: string; sms: string } | undefined;
+      if (appUrl) {
+        const link = await createUploadLink(db, t.tenantId, o.worker_id, id, auth.userId);
+        linkLines = uploadLinkLines(uploadLinkUrl(appUrl, link.token), link.expiresAt, (await loadSettings(db, t.tenantId)).timezone);
+      }
+      const m = askMessage({ first: c.first, business: t.tenantName, items: p.askable, note, emailed: !!c.email, linkLines });
       const sent: string[] = [];
       if (c.email) {
         await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: ASK_TEMPLATE, subject: m.subject, body: m.email, workerId: o.worker_id, createdBy: auth.userId });
