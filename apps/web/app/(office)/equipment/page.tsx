@@ -38,7 +38,9 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.equipment)}</summary>
           {activeTypes.length === 0 ? <p className="muted">Add an equipment type first (below), or apply an industry template in Settings.</p> : (
             <form action={addEquipment} className="form-row" style={{ marginTop: 12 }}>
-              <label>Type<select name="equipmentTypeId" required>{activeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+              <label>Type<select name="equipmentTypeId" required>{(() => { const g = industryGroups(activeTypes, packs); return needsHeadings(g)
+                ? g.map(x => <optgroup key={x.key} label={x.label}>{x.items.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)
+                : activeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>); })()}</select></label>
               <label>Name<input name="name" required maxLength={80} placeholder="e.g. Excavator 2" /></label>
               <label>Asset number <span className="muted">(optional)</span><input name="assetNumber" maxLength={40} /></label>
               <label>Registration <span className="muted">(optional)</span><input name="registration" maxLength={20} /></label>
