@@ -118,3 +118,37 @@ export function todayIn(zone: string | null | undefined, now = new Date()): stri
     return undefined;
   }
 }
+
+/** A dashboard number from `GET /dashboard` (the same measures as the web's dashboard and the daily email). */
+export interface Kpi {
+  key: string; label: string; unit: 'percent' | 'count' | 'hours' | 'days'; better: 'higher' | 'lower';
+  value: number | null; detail: string | null; target: number | null; standing: 'on_target' | 'off_target' | 'no_target' | 'no_data';
+  weekAgo?: number | null;
+}
+export interface Dashboard { focus: string; label: string; kpis: Kpi[] }
+
+/** "92.5%", "3", "4.5 hours", "1 day", or a dash when there's nothing to measure yet. */
+export function kpiValue(value: number | null, unit: Kpi['unit']): string {
+  if (value === null) return '–';
+  const v = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  if (unit === 'percent') return `${v}%`;
+  if (unit === 'count') return v;
+  return `${v} ${unit === 'hours' ? 'hour' : 'day'}${value === 1 ? '' : 's'}`;
+}
+
+/** The line under a number: off target first, then the change since a week ago, then its detail. */
+export function kpiNote(k: Kpi): { text: string; tone: 'bad' | 'good' | 'plain' } {
+  if (k.standing === 'off_target' && k.target !== null) {
+    return { text: `Off target (${k.better === 'higher' ? 'at least' : 'at most'} ${kpiValue(k.target, k.unit)})`, tone: 'bad' };
+  }
+  if (k.value !== null && k.weekAgo !== null && k.weekAgo !== undefined && k.value !== k.weekAgo) {
+    const up = k.value > k.weekAgo;
+    return { text: `${up ? 'Up' : 'Down'} from ${kpiValue(k.weekAgo, k.unit)} a week ago`, tone: up === (k.better === 'higher') ? 'good' : 'bad' };
+  }
+  return { text: k.detail ?? '', tone: 'plain' };
+}
+
+/** Numbers off target first, otherwise in the dashboard's order. */
+export function kpiOrder(kpis: Kpi[]): Kpi[] {
+  return [...kpis.filter(k => k.standing === 'off_target'), ...kpis.filter(k => k.standing !== 'off_target')];
+}

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { api, ApiError, SignedOut } from './api';
 import {
-  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, KIND_LABEL, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
-  type Attention, type ChangeRequest, type LeaveRequest, type Term,
+  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, KIND_LABEL, kpiNote, kpiOrder, kpiValue, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
+  type Attention, type ChangeRequest, type Dashboard, type LeaveRequest, type Term,
 } from './manager';
 import { currentWeek, firstDay, termWord } from './roster';
 import { RosterTab, type RosterView } from './RosterTab';
@@ -24,6 +24,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
 }) {
   const [tab, setTab] = useState<Tab>('today');
   const [attention, setAttention] = useState<Attention | null>(null);
+  const [dash, setDash] = useState<Dashboard | null>(null);
   const [leave, setLeave] = useState<LeaveRequest[]>([]);
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [terms, setTerms] = useState<Term[] | null>(null);
@@ -38,13 +39,15 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     setBusy(true);
     setError(null);
     try {
-      const [a, l, c, t, s] = await Promise.all([
+      const [a, l, c, t, s, d] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
         api<LeaveRequest[]>('/leave?status=requested', { tenant }),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
         api<Term[]>('/terms', { tenant }).catch(() => null),
         api<{ timezone?: string }>('/settings', { tenant }).catch(() => null),
+        api<Dashboard>('/dashboard', { tenant }).catch(() => null),
       ]);
+      setDash(d);
       setAttention(a);
       setLeave(l);
       setChanges(c);
@@ -126,6 +129,24 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
+
+        {tab === 'today' && dash && dash.kpis.length > 0 && (
+          <>
+            <Text style={[styles.muted, styles.small, { marginTop: 0 }]}>Your {dash.label} numbers</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16, marginBottom: 12 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
+              {kpiOrder(dash.kpis).map(k => {
+                const note = kpiNote(k);
+                return (
+                  <View key={k.key} style={[styles.kpi, k.standing === 'off_target' && styles.kpiOff]} accessible accessibilityLabel={`${k.label}: ${kpiValue(k.value, k.unit)}. ${note.text}`}>
+                    <Text style={[styles.muted, styles.small, { marginTop: 0 }]}>{k.label}</Text>
+                    <Text style={[styles.kpiValue, k.standing === 'off_target' && styles.kpiValueOff]}>{kpiValue(k.value, k.unit)}</Text>
+                    {!!note.text && <Text style={[styles.small, note.tone === 'bad' ? styles.kpiBad : note.tone === 'good' ? styles.kpiGood : styles.muted]} numberOfLines={2}>{note.text}</Text>}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
 
         {tab === 'today' && attention && (
           <>

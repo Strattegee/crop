@@ -3,6 +3,12 @@ import { StyleSheet } from 'react-native';
 export const NAVY = '#1f3a5f';
 export const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#f6f7f9' },
+  kpi: { width: 150, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e1e4e8', borderLeftWidth: 4 },
+  kpiOff: { borderLeftColor: '#b42318', backgroundColor: '#fdecea' },
+  kpiValue: { fontSize: 24, fontWeight: '700', color: NAVY, marginTop: 2 },
+  kpiValueOff: { color: '#b42318' },
+  kpiBad: { color: '#b42318' },
+  kpiGood: { color: '#1a7f37' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   title: { fontSize: 32, fontWeight: '700', color: NAVY },
   heading: { fontSize: 20, fontWeight: '700', color: NAVY },

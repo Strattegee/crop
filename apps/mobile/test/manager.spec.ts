@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { kpiNote, kpiOrder, kpiValue, type Kpi } from '../src/manager';
 import {
   approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, isManager, leaveRequestLine, requestsTab, roleOf, shiftWhere, shiftWord, startMode, todayIn,
 } from '../src/manager';
@@ -51,5 +52,24 @@ describe('manager mode', () => {
     expect(todayIn('Europe/London', now)).toBe('2026-10-30');
     expect(todayIn(null, now)).toBeUndefined();
     expect(todayIn('Not/AZone', now)).toBeUndefined();
+  });
+});
+
+
+describe('dashboard numbers on the phone', () => {
+  const k = (o: Partial<Kpi>): Kpi => ({ key: 'x', label: 'X', unit: 'percent', better: 'higher', value: 90, detail: '2 left', target: null, standing: 'no_target', ...o });
+  it('words values like the web', () => {
+    expect(kpiValue(null, 'count')).toBe('–');
+    expect(kpiValue(92.5, 'percent')).toBe('92.5%');
+    expect(kpiValue(1, 'days')).toBe('1 day');
+  });
+  it('says off target first, then the change, then the detail', () => {
+    expect(kpiNote(k({ standing: 'off_target', target: 95, weekAgo: 80 }))).toEqual({ text: 'Off target (at least 95%)', tone: 'bad' });
+    expect(kpiNote(k({ weekAgo: 80 }))).toEqual({ text: 'Up from 80% a week ago', tone: 'good' });
+    expect(kpiNote(k({ unit: 'hours', better: 'lower', value: 30, weekAgo: 24 }))).toEqual({ text: 'Up from 24 hours a week ago', tone: 'bad' });
+    expect(kpiNote(k({ weekAgo: 90 }))).toEqual({ text: '2 left', tone: 'plain' });
+  });
+  it('puts numbers off target first', () => {
+    expect(kpiOrder([k({ key: 'a' }), k({ key: 'b', standing: 'off_target' })]).map(x => x.key)).toEqual(['b', 'a']);
   });
 });
