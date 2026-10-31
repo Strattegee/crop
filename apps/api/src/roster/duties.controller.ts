@@ -8,6 +8,7 @@ import { bool, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { actorOf } from './publishing.js';
+import { industriesOf } from '../industry/catalogue.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,7 +75,8 @@ export class ShiftDutiesController {
   @Roles(...OFFICE_ROLES)
   @Get('shift-duties')
   list(@Tenant() t: Membership) {
-    return withTenant(this.pool, t.tenantId, async db => (await db.query(`select ${DUTY_COLS} from shift_duties d order by d.active desc, lower(d.name)`)).rows);
+    return withTenant(this.pool, t.tenantId, async db => (await db.query<{ name: string }>(`select ${DUTY_COLS} from shift_duties d order by d.active desc, lower(d.name)`)).rows
+      .map(r => ({ ...r, industries: industriesOf('duty', r.name) })));
   }
 
   @Roles('owner', 'admin')

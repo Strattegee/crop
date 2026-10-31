@@ -9,6 +9,8 @@ import { T, words } from '../../../lib/terms';
 import { businessZone, todayIn } from '../../../lib/business';
 import type { CardData } from '../../../lib/person-card';
 import { PersonCard } from './person-card';
+import { RolePicker } from './role-picker';
+import { industryGroups, type PackInfo } from '../../../lib/industry-groups';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +29,13 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   if (p.compliance) qs.set('compliance', p.compliance);
   if (p.status) qs.set('status', p.status);
   if (p.employment) qs.set('employment', p.employment);
-  const [workers, agency, checklists] = await Promise.all([
+  const [workers, agency, checklists, packs, roleList] = await Promise.all([
     api<Worker[]>(`/workers?${qs}`), currentAgency(),
     api<{ id: string; name: string }[]>('/onboarding-checklists').catch(() => [] as { id: string; name: string }[]),
+    api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
+    api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
   ]);
+  const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
   const today = todayIn(await businessZone());
   // Cards by default (David, 31 Oct: the employee card); the table is still there as a list.
   const asList = p.show === 'list';
@@ -63,7 +68,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
               <option value="M">Male</option>
             </select>
           </label>
-          <label>Roles<input name="roles" placeholder="e.g. RN, EN, AIN" maxLength={200} /></label>
+          <RolePicker groups={roleGroups} label={tw.many(T.role)} />
           {canSetEmployment && <>
             <label>Employment
               <select name="employmentType" defaultValue="">

@@ -4,8 +4,14 @@ import { useState } from 'react';
 
 type CredentialType = { id: string; name: string; hasNumber: boolean; hasExpiry: boolean };
 
-/** Shows only the fields the chosen credential type uses, and marks the required ones. */
-export function AddCredentialForm({ types, action }: { types: CredentialType[]; action: (f: FormData) => void | Promise<void> }) {
+/**
+ * Shows only the fields the chosen credential type uses, and marks the required ones. The choices are grouped by
+ * the business's industries (David, 31 Oct).
+ */
+export function AddCredentialForm({ groups, action }: {
+  groups: { key: string; label: string; items: CredentialType[] }[]; action: (f: FormData) => void | Promise<void>;
+}) {
+  const types = groups.flatMap(g => g.items);
   const [typeId, setTypeId] = useState('');
   const type = types.find(t => t.id === typeId);
   return (
@@ -13,7 +19,9 @@ export function AddCredentialForm({ types, action }: { types: CredentialType[]; 
       <label>Credential
         <select name="credentialTypeId" required value={typeId} onChange={e => setTypeId(e.target.value)}>
           <option value="" disabled>Choose…</option>
-          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {groups.length > 1
+            ? groups.map(g => <optgroup key={g.key} label={g.label}>{g.items.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)
+            : types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
       {(!type || type.hasNumber) && (

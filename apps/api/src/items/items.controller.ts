@@ -8,6 +8,7 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
+import { industriesOf } from '../industry/catalogue.js';
 import {
   ITEM_CATEGORIES, isLow, returnBlock, roundQty, summariseUsage, takeBlock, type MovementKind, type MovementLine,
   transferBlock,
@@ -97,7 +98,8 @@ export class ItemsController {
   list(@Tenant() t: Membership, @Query('all') all?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
       `select ${ITEM_COLS}, (select coalesce(sum(quantity), 0)::float8 from stock_movements m where m.item_id = i.id and i.tracks_stock and m.facility_id is not null) as "onHand"
-         from items i where $1 or i.active order by i.active desc, i.category, i.name`, [all === 'true'])).rows);
+         from items i where $1 or i.active order by i.active desc, i.category, i.name`, [all === 'true'])).rows
+      .map((r: { name: string }) => ({ ...r, industries: industriesOf('item', r.name) })));
   }
 
   @Roles('owner', 'admin')

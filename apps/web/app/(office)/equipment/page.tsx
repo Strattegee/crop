@@ -4,13 +4,14 @@ import { currentAgency } from '../../../lib/current-user';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
 import { addEquipment, addType, setTypeVehicle } from './actions';
+import { industryGroups, needsHeadings, type PackInfo } from '../../../lib/industry-groups';
 import { EQ_STATUS, STATE } from './labels';
 
 export const dynamic = 'force-dynamic';
 
 type Check = { name: string; dueOn: string; state: string };
 type Equip = { id: string; name: string; assetNumber: string | null; registration: string | null; status: string; typeName: string; operatorCredentialName: string | null; homeFacilityName: string | null; checkState: string; checks: Check[] };
-type EType = { id: string; name: string; active: boolean; vehicle?: boolean; operatorCredentialName?: string | null };
+type EType = { id: string; name: string; active: boolean; vehicle?: boolean; operatorCredentialName?: string | null; industries?: string[] };
 type CredType = { id: string; name: string; active: boolean };
 type Facility = { id: string; name: string; active: boolean };
 const d = (s: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${s}T00:00:00Z`));
@@ -23,6 +24,8 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
     api<Equip[]>(`/equipment${sp.all ? '?status=retired' : ''}`), api<EType[]>('/equipment-types'), api<CredType[]>('/credential-types'),
     api<Facility[]>('/facilities'), currentAgency(),
   ]);
+  const packs = await api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]);
+  const typeGroups = industryGroups(types, packs);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   const activeTypes = types.filter(t => t.active);
   return (
@@ -72,7 +75,10 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
       </div>
       <details className="card">
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Equipment types ({types.length})</summary>
-        <ul style={{ margin: '10px 0' }}>{types.map(t => (
+        {typeGroups.map(g => (
+          <div key={g.key}>
+            {needsHeadings(typeGroups) && <h3 className="grp-h">{g.label}</h3>}
+            <ul style={{ margin: '6px 0 10px' }}>{g.items.map(t => (
           <li key={t.id}>
             {t.name}{t.vehicle && <span className="muted"> · vehicle (V on the roster)</span>}{t.operatorCredentialName && <span className="muted"> · operator needs {t.operatorCredentialName}</span>}{!t.active && <span className="muted"> (not in use)</span>}
             {canEdit && (
@@ -82,6 +88,8 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
             )}
           </li>
         ))}</ul>
+          </div>
+        ))}
         {canEdit && (
           <form action={addType} className="form-row">
             <label>New type<input name="name" required maxLength={80} placeholder="e.g. Scissor lift" /></label>

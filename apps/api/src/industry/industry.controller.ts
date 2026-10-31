@@ -7,6 +7,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { PACKS, packById, type IndustryPack } from './packs.js';
+import { industriesOf } from './catalogue.js';
 import { applyPackTerms } from '../terms/terms.controller.js';
 
 const summary = (p: IndustryPack) => ({
@@ -133,8 +134,18 @@ export class IndustryController {
   roles(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
       `select r.id, r.name, r.area, r.description, r.active,
-              (select count(*)::int from workers w where w.status = 'active' and r.name = any(w.roles)) as "workerCount"
-         from business_roles r order by r.active desc, r.area nulls last, r.name`)).rows);
+              (select count(*)::int from workers w where w.status = 'active' and r.name = any(w.roles)) as "workerCount", false as "fromPeople"
+         from business_roles r
+       union all
+       -- Roles people have that aren't on the list yet (typed on a person), so every role in use can be picked.
+       select null, x.role, null, null, true, count(*)::int, true
+         from workers w, unnest(w.roles) as x(role)
+        where w.status = 'active' and w.agency_connection_id is null
+          and not exists (select 1 from business_roles r where lower(r.name) = lower(x.role))
+        group by x.role
+       order by 5 desc, 3 nulls last, 2`)).rows
+      .map((r: { id: string | null; name: string }) => ({ ...r, id: r.id ?? `name:${r.name}` }))
+      .map((r: { name: string }) => ({ ...r, industries: industriesOf('role', r.name) })));
   }
 
   @Roles('owner', 'admin')

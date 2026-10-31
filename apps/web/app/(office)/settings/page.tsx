@@ -3,7 +3,8 @@ import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
 import { CATEGORY_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
-import { addCredentialType, addRule, addStarterSet, removeRule, saveSettings, setTypeActive } from './actions';
+import { addCredentialType, addRole, addRule, removeRule, saveSettings, setTypeActive } from './actions';
+import { industryGroups, needsHeadings } from '../../../lib/industry-groups';
 import { addDemoStaff, applyPack, completeDemo } from './industry-actions';
 import { T, words } from '../../../lib/terms';
 import { saveTerms } from './terms-actions';
@@ -11,7 +12,8 @@ import { COUNTRIES, zoneName } from '../../../lib/places';
 
 export const dynamic = 'force-dynamic';
 
-type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean };
+type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean; industries?: string[] };
+type Role = { id: string; name: string; area: string | null; active: boolean; workerCount: number; industries?: string[] };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 const LEVEL_LABEL: Record<string, string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
@@ -19,10 +21,15 @@ type Settings = { expiringWindowDays: number; timezone: string; country?: string
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [packs, types, rules, settings, agency, sp] = await Promise.all([
+  const [packs, types, rules, settings, agency, sp, roles] = await Promise.all([
     api<PackSummary[]>('/industry-packs'), api<CredentialType[]>('/credential-types'), api<Rule[]>('/credential-requirements'), api<Settings>('/settings'), currentAgency(), searchParams,
+    api<Role[]>('/roles').catch(() => [] as Role[]),
   ]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
+  // Grouped by the industries this business works in (David, 31 Oct).
+  const typeGroups = industryGroups(types, packs);
+  const activeTypeGroups = industryGroups(types.filter(t => t.active), packs);
+  const roleGroups = industryGroups(roles.filter(r => r.active), packs);
 
   return (
     <>
@@ -111,17 +118,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>{tw.one(T.credential)} types</h2>
-        {types.length === 0 && canEdit && (
-          <form action={addStarterSet} style={{ marginBottom: 12 }}>
-            <p className="muted">Start with the suggested list for a nursing agency (AHPRA, police check, WWCC, NDIS screening, CPR, vaccinations and more). You can change or switch off any of them.</p>
-            <button type="submit" className="btn">Add suggested credential types</button>
-          </form>
+        {types.length === 0 && (
+          <p className="muted">None yet. Apply an industry template above to add the {tw.lower(T.credential, true)} for your industries, or add your own below.</p>
         )}
         {types.length > 0 && (
           <table>
             <thead><tr><th>Name</th><th>Category</th><th>Number</th><th>Expiry</th><th>How it's verified</th><th /></tr></thead>
             <tbody>
-              {types.map(t => (
+              {typeGroups.map(g => [
+                needsHeadings(typeGroups) && <tr key={`g-${g.key}`} className="grp-row"><th colSpan={6}>{g.label} <span className="muted">({g.items.length})</span></th></tr>,
+                ...g.items.map(t => (
                 <tr key={t.id} style={{ opacity: t.active ? 1 : 0.5 }}>
                   <td>{t.name}{!t.active && ' (off)'}</td>
                   <td>{CATEGORY_LABEL[t.category] ?? t.category}</td>
@@ -136,7 +142,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     )}
                   </td>
                 </tr>
-              ))}
+                )),
+              ])}
             </tbody>
           </table>
         )}
@@ -156,6 +163,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <button type="submit" className="btn">Add</button>
             </form>
           </details>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>{tw.many(T.role)}</h2>
+        <p className="muted" style={{ marginTop: 0 }}>The {tw.lower(T.role, true)} in this business, grouped by industry. The number is how many active {tw.lower(T.worker, true)} have each one.</p>
+        {roleGroups.length === 0 ? <p className="muted">None yet. Apply an industry template above, or add one below.</p> : roleGroups.map(g => (
+          <div key={g.key} className="chip-group">
+            {needsHeadings(roleGroups) && <h3>{g.label}</h3>}
+            <div className="chips">{g.items.map(r => <span key={r.id} className="chip">{r.name}<span className="muted"> {r.workerCount}</span></span>)}</div>
+          </div>
+        ))}
+        {canEdit && (
+          <form action={addRole} className="form-row" style={{ marginTop: 12 }}>
+            <label>New {tw.lower(T.role)}<input name="name" required maxLength={60} placeholder="e.g. Barista" /></label>
+            <label>{tw.one(T.area)} <span className="muted">(optional)</span><input name="area" maxLength={60} /></label>
+            <button type="submit" className="btn secondary">Add {tw.lower(T.role)}</button>
+          </form>
         )}
       </div>
 
@@ -182,10 +207,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <label>Credential
               <select name="credentialTypeId" required defaultValue="">
                 <option value="" disabled>Choose…</option>
-                {types.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {activeTypeGroups.map(g => (
+                  <optgroup key={g.key} label={g.label}>{g.items.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                ))}
               </select>
             </label>
-            <label>Role (leave blank for all workers)<input name="role" maxLength={40} placeholder="e.g. RN" /></label>
+            <label>Applies to
+              <select name="roleChoice" defaultValue="">
+                <option value="">All {tw.lower(T.worker, true)}</option>
+                {roleGroups.map(g => (
+                  <optgroup key={g.key} label={g.label}>{g.items.map(r => <option key={r.id} value={r.name}>{tw.one(T.role)}: {r.name}</option>)}</optgroup>
+                ))}
+              </select>
+            </label>
+            <label>or another {tw.lower(T.role)} <span className="muted">(optional)</span><input name="role" maxLength={60} placeholder="Type it exactly as on people" /></label>
             <label>Level
               <select name="severity" defaultValue="hard"><option value="hard">Must have</option><option value="warning">Should have (a warning)</option><option value="optional">Optional (listed, never checked)</option></select>
             </label>

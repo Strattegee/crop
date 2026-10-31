@@ -13,6 +13,7 @@ import { loadSettings } from '../workforce/settings.js';
 import { currentChecks, equipmentForShift, rankEquipment } from './equipment-data.js';
 import { checkState, overallCheckState } from './equipment.js';
 import { actorOf } from './publishing.js';
+import { industriesOf } from '../industry/catalogue.js';
 import { shiftById } from './roster.controller.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,7 +50,8 @@ export class EquipmentTypesController {
   @Get()
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db =>
-      (await db.query(`select ${TYPE_COLS} from ${TYPE_FROM} order by et.active desc, et.name`)).rows);
+      (await db.query<{ name: string }>(`select ${TYPE_COLS} from ${TYPE_FROM} order by et.active desc, et.name`)).rows
+        .map(r => ({ ...r, industries: industriesOf('equipmentType', r.name) })));
   }
 
   @Roles('owner', 'admin')

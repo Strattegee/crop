@@ -20,6 +20,8 @@ import { AppAccessCard, type AppAccess } from './app-access-card';
 import { T, words } from '../../../../lib/terms';
 import type { CardData } from '../../../../lib/person-card';
 import { PersonCard } from '../person-card';
+import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
+import { RolePicker } from '../role-picker';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +47,7 @@ type MyShift = {
 const SHIFT_STAGE: Record<string, string> = { assigned: 'Allocated', booked: 'Booked', open: 'Open', cancelled: 'Cancelled' };
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const dayLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
-type CredentialType = { id: string; name: string; active: boolean; hasNumber: boolean; hasExpiry: boolean };
+type CredentialType = { id: string; name: string; active: boolean; hasNumber: boolean; hasExpiry: boolean; industries?: string[] };
 type Rtw = {
   current: null | {
     id: string; status: string; citizenProofType: string | null; documentNumber: string | null; visaType: string | null; visaSubclass: string | null;
@@ -71,6 +73,11 @@ export default async function WorkerPage({ params, searchParams }: {
     api<Parameters<typeof OnboardingCard>[0]['checklists']>('/onboarding-checklists').catch(() => []),
     api<AppAccess>(`/workers/${id}/app-access`).catch(() => null),
   ]);
+  const [packs, roleList] = await Promise.all([
+    api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
+    api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
+  ]);
+  const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
   // "Today" in the business's time zone, never the server's.
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone || 'Australia/Melbourne' }).format(new Date());
   // Tabs (David, 31 Oct): one record, its parts one click away. The tab lives in the URL so links and Back work.
@@ -217,7 +224,7 @@ export default async function WorkerPage({ params, searchParams }: {
         {activeTypes.length === 0 ? (
           <p className="muted">No credential types are set up yet. <Link href="/settings">Add them in Settings</Link>.</p>
         ) : (
-          <AddCredentialForm types={activeTypes} action={addCredential.bind(null, w.id)} />
+          <AddCredentialForm groups={industryGroups(activeTypes, packs)} action={addCredential.bind(null, w.id)} />
         )}
       </div>
 
@@ -324,7 +331,7 @@ export default async function WorkerPage({ params, searchParams }: {
               <option value="M">Male</option>
             </select>
           </label>
-          <label>Roles<input name="roles" defaultValue={w.roles.join(', ')} maxLength={200} /></label>
+          <RolePicker groups={roleGroups} current={w.roles} label={tw.many(T.role)} />
           <label>Status
             <select name="status" defaultValue={w.status}>
               <option value="active">Active</option>
