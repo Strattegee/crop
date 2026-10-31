@@ -553,3 +553,7 @@ tr.grp-row th { background: #f3f5f7; text-align: left; font-size: 12px; text-tra
 .funnel-n { text-align: right; font-weight: 600; }
 @media (max-width: 600px) { .funnel li { grid-template-columns: 80px 1fr 28px; } .funnel-conv { grid-column: 2 / -1; } }
 .team-table select { min-width: 140px; }
+.kpi-week { font-size: 12px; color: var(--muted); }
+.kpi-week.better { color: var(--ok); }
+.kpi-week.worse { color: var(--bad); }
+.kpi-spark { color: var(--accent); margin: 2px 0; }

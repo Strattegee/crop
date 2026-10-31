@@ -128,3 +128,9 @@ export function worded(text: string, w: { one: (c: number) => string; many: (c: 
     .replaceAll('{shift}', w.lower(codes.shift)).replaceAll('{shifts}', w.lower(codes.shift, true)).replaceAll('{Shifts}', w.many(codes.shift))
     .replaceAll('{agency}', w.lower(codes.agency)).replaceAll('{agencies}', w.lower(codes.agency, true)).replaceAll('{Agency}', w.one(codes.agency));
 }
+
+/** The days a trend line shows: the same weekday for the last 13 weeks, oldest first, ending today. */
+export function trendDays(today: string, weeks = 13): string[] {
+  const t = Date.parse(`${today}T00:00:00Z`);
+  return Array.from({ length: weeks }, (_, i) => new Date(t - (weeks - 1 - i) * 7 * 86_400_000).toISOString().slice(0, 10));
+}

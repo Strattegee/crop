@@ -8,9 +8,11 @@ import { bool, oneOf } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { AttentionController } from '../roster/attention.controller.js';
 import { DEFAULT_WORDS, T, wordsFor } from '../terms/words.js';
-import { funnel, MEASURES, targetsOf } from './dashboard-data.js';
+import { funnel, history, MEASURES, saveSnapshot, targetsOf } from './dashboard-data.js';
+import { loadSettings } from '../workforce/settings.js';
+import { todayIn } from '../workforce/compliance.js';
 import {
-  defaultFocus, FOCUS_LABEL, FOCUSES, kpiByKey, KPIS, kpisFor, seesCosts, SETTING_KPIS, standing, targetRefusal, tidy, worded, type Focus,
+  defaultFocus, FOCUS_LABEL, FOCUSES, kpiByKey, KPIS, kpisFor, seesCosts, SETTING_KPIS, standing, targetRefusal, tidy, trendDays, worded, type Focus,
 } from './kpis.js';
 
 type TeamRow = { user_id: string; name: string; email: string; role: string; focus: Focus | null; sees_costs: boolean };
@@ -45,6 +47,8 @@ export class DashboardController {
       const targets = await targetsOf(db);
       const w = await wordsFor(db);
       const say = (x: string) => worded(x, w, T);
+      const today = todayIn((await loadSettings(db, t.tenantId)).timezone);
+      const days = trendDays(today);
       const kpis = [];
       for (const def of kpisFor(focus)) {
         const m = await MEASURES[def.key](db, { tenantId: t.tenantId, targets, blockedShifts: blocked });
@@ -55,12 +59,19 @@ export class DashboardController {
           value, detail: m.detail ?? null, breakdown: m.breakdown ?? [], target, suggested: def.suggested,
           standing: standing(value, target, def.better),
         });
+        await saveSnapshot(db, t.tenantId, today, def.key, value);
       }
+      // Each number with its value a week ago and its 13-week trend (today's value last).
+      const past = await history(db, kpis.map(k => k.key), days);
+      const withHistory = kpis.map(k => {
+        const trend = past.get(k.key)!;
+        return { ...k, weekAgo: trend[trend.length - 2] ?? null, trend };
+      });
       return {
         focus, label: FOCUS_LABEL[focus], assigned, assignedByOwner: !!mine?.focus,
         seesCosts: seesCosts(t.role, mine?.sees_costs ?? false),
         focuses: FOCUSES.map(f => ({ focus: f, label: FOCUS_LABEL[f] })),
-        kpis,
+        kpis: withHistory,
         funnel: focus === 'recruitment' ? await funnel(db) : null,
       };
     });

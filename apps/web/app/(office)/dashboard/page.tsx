@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
-import { barWidth, showValue, standingClass, standingWords, targetLine, type Dashboard as Dash, type Focus, type Kpi } from '../../../lib/dashboard';
+import { barWidth, showValue, sparkPoints, standingClass, standingWords, targetLine, weekLine, type Dashboard as Dash, type Focus, type Kpi } from '../../../lib/dashboard';
 import { T, words } from '../../../lib/terms';
 import { mondayOf } from '../roster/view';
 import { AgencyAttentionList, type AgencyAttention } from '../allocations/agency-attention';
@@ -123,6 +123,15 @@ function KpiRow({ kpis }: { kpis: Kpi[] }) {
           {k.breakdown.length > 0 && (
             <span className="kpi-detail">{k.breakdown.slice(0, 3).map(b => `${b.label} ${b.value}`).join(' · ')}</span>
           )}
+          {(() => { const wl = weekLine(k); return wl && <span className={`kpi-week ${wl.tone}`}>{wl.text}</span>; })()}
+          {(() => {
+            const pts = sparkPoints(k.trend);
+            return pts && (
+              <svg className="kpi-spark" viewBox="0 0 120 24" width="120" height="24" role="img" aria-label={`${k.label}: the last 13 weeks`}>
+                <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+              </svg>
+            );
+          })()}
           <span className="kpi-target">{targetLine(k)}</span>
         </Link>
       ))}
