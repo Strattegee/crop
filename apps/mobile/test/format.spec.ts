@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+  addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
 describe('worker app formatting', () => {
@@ -74,6 +74,11 @@ describe('availability and leave in the app', () => {
     expect(filesLine({ files: ['a.pdf'], needsEvidence: true, check: 'to_check' })).toBe('1 file added');
     expect(filesLine({ files: [], needsEvidence: true, check: 'to_check' })).toBe('Add a photo or file so the office can check it');
     expect(filesLine({ files: [], needsEvidence: true, check: 'checked' })).toBeNull();
+    const r = { state: 'to_check' as const, line: '', statusLabel: 'Visa holder', visaExpiry: '2026-12-01', files: ['a.pdf', 'b.png'], canAddFiles: true };
+    expect(rtwDetail(r)).toBe(`Visa holder · visa runs out ${longDate('2026-12-01')} · 2 files sent`);
+    expect(rtwDetail({ ...r, visaExpiry: null, files: ['a.pdf'], statusLabel: 'Australian citizen' })).toBe('Australian citizen · 1 file sent');
+    expect(rtwDetail({ ...r, state: 'none', statusLabel: null, visaExpiry: null, files: [] })).toBeNull();
+    expect(RTW_BADGE.none).toBe('Not recorded yet');
     expect(dateFromParts('', '', '')).toBe('');
     expect(dateFromParts('3', '11', '2027')).toBe('2027-11-03');
     expect(dateFromParts('31', '2', '2027')).toBeNull();

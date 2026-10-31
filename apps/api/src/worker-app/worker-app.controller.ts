@@ -11,10 +11,11 @@ import { APP_POOL } from '../database/database.module.js';
 import { acceptOffer, declineOffer } from '../roster/offer-replies.js';
 import { shiftLabel } from '../roster/bank-fill.js';
 import { T, wordsFor } from '../terms/words.js';
-import { addDays, todayIn } from '../workforce/compliance.js';
+import { addDays, rightToWorkIssue, todayIn } from '../workforce/compliance.js';
+import { rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { loadSettings } from '../workforce/settings.js';
 import { onboardingProgress } from '../workforce/onboarding.controller.js';
-import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
+import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myRightToWork, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
@@ -150,13 +151,27 @@ export async function myOnboarding(db: PoolClient, tenantId: string, workerId: s
     'select id from worker_onboardings where worker_id = $1 and finished_at is null', [workerId])).rows[0];
   if (!live) return null;
   const p = await onboardingProgress(db, tenantId, live.id);
-  const steps = p.steps.map(s => myStep(s, credentialsWord));
+  const rtw = p.steps.some(s => s.kind === 'right_to_work') ? await loadMyRightToWork(db, tenantId, workerId) : null;
+  const steps = p.steps.map(s => myStep(s, credentialsWord, rtw));
   return {
     checklistName: p.checklistName, startedAt: p.startedAt,
     done: p.summary.done, total: p.summary.total, ready: p.summary.ready,
     line: myOnboardingLine(p.summary.done, p.summary.total),
     steps,
   };
+}
+
+/** The person's own right to work as the app shows it (`myRightToWork`): never numbers, the office's notes or reasons. */
+export async function loadMyRightToWork(db: PoolClient, tenantId: string, workerId: string) {
+  const rec = (await db.query<{ status: string; verification: string; visaExpiry: string | null; files: string[] }>(
+    `select r.status, r.verification, to_char(r.visa_expiry, 'YYYY-MM-DD') as "visaExpiry",
+            coalesce((select json_agg(d.filename order by d.uploaded_at) from credential_documents d
+                       where d.right_to_work_id = r.id and d.removed_at is null), '[]'::json) as files
+       from right_to_work_records r where r.worker_id = $1 and r.superseded_at is null`, [workerId])).rows[0] ?? null;
+  const settings = await loadSettings(db, tenantId);
+  const facts = (await rightToWorkByWorker(db, [workerId])).get(workerId) ?? null;
+  const issue = rightToWorkIssue(facts, todayIn(settings.timezone), settings.expiringWindowDays);
+  return myRightToWork(rec, issue?.problem ?? null);
 }
 
 /** The worker app's own view (any signed-in member linked to a person here): their shifts and offers. */
