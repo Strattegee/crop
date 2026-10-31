@@ -461,3 +461,10 @@ Newest first. One entry per working session or scheduled run.
 - Shipped: onboarding checklists chosen by role. In Settings › Onboarding checklists, each checklist can say which roles it is for (blank means anyone), and that can be changed later. Wherever onboarding starts (the person's page, the recruitment board and their Recruitment card) the checklist for the person's roles is already picked, and each choice shows its roles; adding a person has "The checklist for their roles". The checklist written for most of their roles wins, otherwise one for anyone; if no checklist fits, the office has to choose one. Role names in that form are now kept exactly as typed (they were being upper-cased, which stopped them matching).
 - Next: the agency seeing which of its people meet an employer's requirements ahead of time, then other follow-ups.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 morning, 9:15am Melbourne (scheduled run)
+
+- Shipped: an agency can now see which of its people meet an employer's requirements before any shift arrives (David's answer 1 on agency links). On the agency's "Match requirements" page for a link (now called "Matches and who is ready" in Settings › Agencies), a new part lists, for each of the employer's roles and each duty, how many of the agency's people are ready today ("3 of 12 ready"), and for everyone else what's missing (not recorded, not checked yet, expired, right to work) or worth checking (should-haves, expiring soon). While a must-have isn't matched it says "Nobody yet: match RSA first". It uses only the agency's own records; nothing goes to the employer.
+- Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
+- Next: other agency follow-ups (limiting a link to some roles or sites; sharing documents by agreement) and the remaining onboarding pieces.
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.

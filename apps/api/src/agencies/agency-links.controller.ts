@@ -7,6 +7,9 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { actorOf } from '../roster/publishing.js';
+import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
+import { EMPLOYED_ON } from '../roster/eligibility-data.js';
+import { groupSummary, personReadiness, rankReadiness, readinessGroups, type RequirementLevel } from './readiness.js';
 import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, matchesProblem, newInviteLink, orderProblem, type LinkStatus } from './links.js';
 
 const NOT_VALID = "This link isn't valid. Check you've used the whole link.";
@@ -223,6 +226,50 @@ export class AgencyLinksController {
       const reqs = await requirementsFor(db, connectionId);
       const unmatched = (await db.query<{ n: number }>('select app_agency_unmatched($1) as n', [connectionId])).rows[0].n;
       return { link: { ...link, unmatched, statusWords: linkStatusWords(link.status, link.side, link.otherName, unmatched) }, requirements: reqs };
+    });
+  }
+
+  /**
+   * Agency side: which of this business's people meet the employer's requirements today, before any shift arrives
+   * (David's answer 1). One group per employer role (role rules plus rules for everyone; "Any role" when it has no
+   * role rules) and one per duty, each with this business's active people checked through its current matches:
+   * ready (every must-have met and right to work in order), what's missing, and what to check. Uses only this
+   * business's records; nothing crosses to the employer.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('agency-links/:connectionId/people')
+  people(@Tenant() t: Membership, @Param('connectionId', ParseUUIDPipe) connectionId: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const link = await linkById(db, connectionId);
+      if (link.side !== 'agency') throw new BadRequestException('Only the agency checks its people against an employer’s requirements');
+      if (link.status === 'ended') throw new BadRequestException('This link has ended');
+      const levels = (await db.query<{ requirement_id: string; kind: RequirementLevel['kind']; label: string; severity: RequirementLevel['severity'] }>(
+        'select * from app_agency_requirement_levels($1)', [connectionId])).rows
+        .map(r => ({ requirementId: r.requirement_id, kind: r.kind, label: r.label, severity: r.severity }));
+      const employerNames = new Map((await requirementsFor(db, connectionId)).map(r => [r.requirementId, r.name]));
+      const live = new Map((await db.query<{ employer_credential_type_id: string; credential_type_id: string }>(
+        'select employer_credential_type_id, credential_type_id from agency_credential_maps where connection_id = $1', [connectionId])).rows
+        .map(m => [m.employer_credential_type_id, m.credential_type_id]));
+      const own = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
+      const groups = readinessGroups(levels, live, own, employerNames);
+
+      const ctx = await complianceContext(db, t.tenantId);
+      const workers = (await db.query<{ id: string; name: string; roles: string[] }>(
+        `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles
+           from workers w where w.status = 'active' and ${EMPLOYED_ON('$1')} order by w.last_name, w.first_name`, [ctx.today])).rows;
+      const ids = workers.map(w => w.id);
+      const creds = ids.length ? await credentialFactsByWorker(db, ids) : new Map();
+      const rtw = ids.length ? await rightToWorkByWorker(db, ids) : new Map();
+      return {
+        link: { connectionId, otherName: link.otherName, status: link.status },
+        onDate: ctx.today,
+        peopleCount: workers.length,
+        groups: groups.map(g => {
+          const people = rankReadiness(workers.map(w => personReadiness(g, { workerId: w.id, name: w.name, roles: w.roles },
+            creds.get(w.id) ?? [], rtw.get(w.id) ?? null, ctx.today, ctx.settings.expiringWindowDays)));
+          return { kind: g.kind, label: g.label, unmatched: g.unmatched, ready: people.filter(p => p.ready).length, summary: groupSummary(g, people), people };
+        }),
+      };
     });
   }
 
