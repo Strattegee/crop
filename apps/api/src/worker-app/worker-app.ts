@@ -175,3 +175,54 @@ export function appCredentialEmail(
     ].join('\n'),
   };
 }
+
+// ---- Getting started (onboarding in the worker app, backlog item 11 "staff completing their own steps") ----
+
+/** What the person sees about one onboarding step: done, sent and waiting for the office, or still to do. */
+export type MyStepState = 'done' | 'waiting' | 'to_do';
+export interface MyStep {
+  id: string;
+  title: string;
+  kind: 'task' | 'credential' | 'right_to_work' | 'employment';
+  required: boolean;
+  state: MyStepState;
+  /** Plain words for the person, e.g. "Add it in Credentials". */
+  line: string;
+  /** The person can do this step in the app (add a credential). */
+  yours: boolean;
+  credentialTypeId: string | null;
+  /** For a credential step still to do: what is wrong (as in myNeedLine's problems). */
+  need?: 'missing' | 'expired' | 'rejected';
+}
+
+/**
+ * One onboarding step worded for the person themselves (the office's wording says who ticked it; this never does).
+ * Tasks and employment terms are the office's; right to work is recorded by the office, so the person is told to
+ * contact them; credentials they add in the app (`credentialsWord` is the business's word, e.g. "Credentials").
+ * The office's tick notes and step help aren't shown: they are written for the office.
+ */
+export function myStep(
+  s: { id: string; title: string; kind: MyStep['kind']; required: boolean; credentialTypeId: string | null; state: MyStepState; detail: string },
+  credentialsWord = 'Credentials',
+): MyStep {
+  const base = { id: s.id, title: s.title, kind: s.kind, required: s.required, state: s.state, credentialTypeId: s.credentialTypeId, yours: false };
+  if (s.state === 'done') return { ...base, line: s.kind === 'credential' || s.kind === 'right_to_work' ? 'Checked' : 'Done' };
+  switch (s.kind) {
+    case 'task': return { ...base, line: 'The office will tick this off' };
+    case 'employment': return { ...base, line: 'The office will set up your employment' };
+    case 'right_to_work':
+      return { ...base, line: s.state === 'waiting' ? 'Sent: the office is checking it' : 'Please contact the office about your right to work' };
+    case 'credential': {
+      if (s.state === 'waiting') return { ...base, line: 'Sent: waiting for the office to check it' };
+      const need = s.detail.startsWith('Has run out') ? 'expired' : s.detail.startsWith('Rejected') ? 'rejected' : 'missing';
+      const why = need === 'expired' ? 'Yours has run out: add the new one' : need === 'rejected' ? 'Not accepted: add it again' : 'Add it';
+      return { ...base, yours: true, need, line: `${why} in ${credentialsWord}` };
+    }
+  }
+}
+
+/** The heading line for the person's checklist, e.g. "3 of 5 done" or "All done: the office will let you know when you can start". */
+export function myOnboardingLine(done: number, total: number): string {
+  if (total === 0 || done >= total) return 'All done: the office will let you know when you can start';
+  return `${done} of ${total} done`;
+}
