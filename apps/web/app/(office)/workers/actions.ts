@@ -4,7 +4,11 @@ import { redirect } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { attempt, failTo, str } from '../../../lib/actions';
 
-const roles = (f: FormData) => (str(f, 'roles') ?? '').split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
+/** Roles ticked from the business's list plus any typed in, exactly as written (rules match roles exactly). */
+const roles = (f: FormData) => [...new Set([
+  ...f.getAll('roleNames').map(String),
+  ...(str(f, 'roles') ?? '').split(',').map(r => r.trim()),
+].filter(Boolean))];
 
 export async function addWorker(f: FormData) {
   let id: string | undefined;

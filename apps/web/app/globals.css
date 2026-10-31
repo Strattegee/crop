@@ -484,3 +484,14 @@ body:has(.roster-page.full) .appbar { display: none; }
 .view-switch a[aria-current="true"] { background: var(--brand); color: #fff; }
 @media (max-width: 600px) { .pcard-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .pcard.full .pcard-light { font-size: 0; padding: 4px; gap: 0; } .pcard.full .pcard-name { font-size: 19px; } }
+
+/* Grouped by industry (David, 31 Oct). */
+tr.grp-row th { background: #f3f5f7; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding-top: 10px; }
+.chip-group h3 { font-size: 13px; margin: 12px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: #eef2f7; border: 1px solid #dde3ea; }
+.grp-h { font-size: 12px; margin: 12px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.role-picker { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px 10px; flex-basis: 100%; min-width: 0; }
+.role-picker legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
+.role-picker .role-group { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-bottom: 6px; }
+.role-picker .role-group .grp-h { flex-basis: 100%; margin: 6px 0 0; }

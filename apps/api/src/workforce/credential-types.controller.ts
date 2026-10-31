@@ -5,6 +5,7 @@ import type { Pool } from 'pg';
 import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, oneOf, text } from '../common/validate.js';
+import { industriesOf } from '../industry/catalogue.js';
 import { APP_POOL } from '../database/database.module.js';
 
 // Right to work has its own section (right-to-work.controller.ts), so it isn't offered as a credential category.
@@ -41,7 +42,10 @@ export class CredentialTypesController {
   @Roles(...OFFICE_ROLES)
   @Get()
   list(@Tenant() t: Membership) {
-    return withTenant(this.pool, t.tenantId, async db => (await db.query(`select ${TYPE_COLUMNS} from credential_types order by active desc, name`)).rows);
+    // `industries`: the industry templates each type comes from ([] = the business's own), for grouping (David, 31 Oct).
+    return withTenant(this.pool, t.tenantId, async db => (await db.query<{ name: string; catalogueCode: string | null }>(
+      `select ${TYPE_COLUMNS} from credential_types order by active desc, name`)).rows
+      .map(r => ({ ...r, industries: industriesOf('credential', r.name, r.catalogueCode) })));
   }
 
   @Roles('owner', 'admin')
