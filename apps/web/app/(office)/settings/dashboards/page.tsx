@@ -11,7 +11,7 @@ type Member = { userId: string; name: string; email: string; role: string; focus
 type Target = { key: string; focus: string; label: string; how: string; unit: Unit; better: 'higher' | 'lower'; suggested: number; target: number | null; setting: boolean };
 
 const ROLE: Record<string, string> = { owner: 'Owner', admin: 'Administrator', allocator: 'Allocator' };
-const GROUP: Record<string, string> = { allocator: 'Allocator dashboard', compliance: 'Compliance dashboard', recruitment: 'Recruitment dashboard' };
+const GROUP: Record<string, string> = { allocator: 'Allocator dashboard', compliance: 'Compliance dashboard', recruitment: 'Recruitment dashboard', agency: 'Agency dashboard' };
 const UNIT_WORD: Record<Unit, string> = { percent: '%', count: '', hours: 'hours', days: 'days' };
 
 /**
@@ -24,7 +24,9 @@ export default async function DashboardSettings({ searchParams }: { searchParams
   const isOwner = agency?.role === 'owner';
   const canTarget = isOwner || agency?.role === 'admin';
   const team = isOwner ? await api<Member[]>('/team').catch(() => [] as Member[]) : [];
-  const groups = ['allocator', 'compliance', 'recruitment'].map(g => ({ g, list: targets.filter(t => t.focus === g) }));
+  const supplier = ((await api<{ agencyLinks: number }>('/allocations/summary').catch(() => null))?.agencyLinks ?? 0) > 0;
+  const choices = FOCUS_CHOICES.filter(c => c.value !== 'agency' || supplier);
+  const groups = ['allocator', 'compliance', 'recruitment', ...(supplier ? ['agency'] : [])].map(g => ({ g, list: targets.filter(t => t.focus === g) }));
 
   return (
     <>
@@ -58,7 +60,7 @@ export default async function DashboardSettings({ searchParams }: { searchParams
                       <form action={setMember.bind(null, m.userId)} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                         <select name="focus" defaultValue={m.focus ?? ''} aria-label={`Dashboard for ${m.name}`}>
                           <option value="">Usual for their access ({FOCUS_CHOICES.find(c => c.value === (m.role === 'allocator' ? 'allocator' : 'overview'))!.label})</option>
-                          {FOCUS_CHOICES.map(c => <option key={c.value} value={c.value} title={c.hint}>{c.label}</option>)}
+                          {choices.map(c => <option key={c.value} value={c.value} title={c.hint}>{c.label}</option>)}
                         </select>
                         {m.role === 'owner'
                           ? <span className="muted small">Always</span>
@@ -71,7 +73,7 @@ export default async function DashboardSettings({ searchParams }: { searchParams
               </tbody>
             </table>
             <ul className="muted small">
-              {FOCUS_CHOICES.map(c => <li key={c.value}><strong>{c.label}:</strong> {c.hint}</li>)}
+              {choices.map(c => <li key={c.value}><strong>{c.label}:</strong> {c.hint}</li>)}
             </ul>
           </>
         )}

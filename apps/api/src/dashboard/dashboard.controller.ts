@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
@@ -8,7 +8,7 @@ import { bool, oneOf } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { AttentionController } from '../roster/attention.controller.js';
 import { DEFAULT_WORDS, T, wordsFor } from '../terms/words.js';
-import { funnel, history, MEASURES, saveSnapshot, targetsOf } from './dashboard-data.js';
+import { funnel, history, MEASURES, saveSnapshot, suppliesEmployers, targetsOf } from './dashboard-data.js';
 import { loadSettings } from '../workforce/settings.js';
 import { todayIn } from '../workforce/compliance.js';
 import {
@@ -42,7 +42,9 @@ export class DashboardController {
     return withTenant(this.pool, t.tenantId, async db => {
       const mine = (await db.query<{ focus: Focus | null; sees_costs: boolean }>(
         'select focus, sees_costs from member_focus where user_id = $1', [auth.userId])).rows[0];
-      const assigned = mine?.focus ?? defaultFocus(t.role);
+      const supplier = await suppliesEmployers(db);
+      if (wanted === 'agency' && !supplier) throw new BadRequestException('Choose a dashboard');
+      const assigned = mine?.focus === 'agency' && !supplier ? defaultFocus(t.role) : mine?.focus ?? defaultFocus(t.role);
       const focus = (wanted as Focus | undefined) ?? assigned;
       const targets = await targetsOf(db);
       const w = await wordsFor(db);
@@ -70,7 +72,7 @@ export class DashboardController {
       return {
         focus, label: FOCUS_LABEL[focus], assigned, assignedByOwner: !!mine?.focus,
         seesCosts: seesCosts(t.role, mine?.sees_costs ?? false),
-        focuses: FOCUSES.map(f => ({ focus: f, label: FOCUS_LABEL[f] })),
+        focuses: FOCUSES.filter(f => f !== 'agency' || supplier).map(f => ({ focus: f, label: FOCUS_LABEL[f] })),
         kpis: withHistory,
         funnel: focus === 'recruitment' ? await funnel(db) : null,
       };
@@ -141,6 +143,7 @@ export class DashboardController {
     return withTenant(this.pool, t.tenantId, async db => {
       const member = (await db.query<TeamRow>('select * from app_office_team() where user_id = $1', [userId])).rows[0];
       if (!member) throw new NotFoundException('Person not found in your office');
+      if (focus === 'agency' && !(await suppliesEmployers(db))) throw new ConflictException('The Agency dashboard is for businesses that supply employers through CROP');
       const current = (await db.query<{ focus: Focus | null; sees_costs: boolean }>('select focus, sees_costs from member_focus where user_id = $1', [userId])).rows[0];
       const nextFocus = body.focus === undefined ? current?.focus ?? null : focus;
       const nextCosts = costs ?? current?.sees_costs ?? false;
