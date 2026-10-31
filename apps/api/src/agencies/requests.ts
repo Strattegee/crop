@@ -162,6 +162,8 @@ export function agencyRules(
 }
 
 export type Placement = 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled';
+/** What an agency is told about: a change of placement, or the employer changing the shift itself (migration 0056). */
+export type Notice = Exclude<Placement, 'waiting'> | 'changed';
 
 /** How a placement reads, from either side ("Booked", "Waiting for Bayside Hospital to approve"). */
 export function placementWords(p: Placement, employerName?: string): string {
@@ -210,7 +212,7 @@ export function putForwardEmail(p: {
  */
 export function placementChangedEmail(p: {
   employerName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
-  siteTimezone: string; placement: Exclude<Placement, 'waiting'>;
+  siteTimezone: string; placement: Notice;
 }, appUrl: string | null, w: Words = DEFAULT_WORDS) {
   const where = [p.areaName, p.siteName].filter(Boolean).join(', ');
   const shift = w.lower(T.shift);
@@ -221,6 +223,7 @@ export function placementChangedEmail(p: {
     removed: { subject: `${p.employerName} took ${p.personName} off ${w.a(T.shift)}`, line: `${p.employerName} has taken ${p.personName} off this ${shift}. They are free at that time again.` },
     pulled_out: { subject: `${p.employerName} recorded ${p.personName} as pulled out`, line: `${p.employerName} has recorded that ${p.personName} pulled out of this ${shift}. They are free at that time again.` },
     cancelled: { subject: `${p.employerName} cancelled ${w.a(T.shift)} for ${p.personName}`, line: `${p.employerName} has cancelled this ${shift}, so ${p.personName} isn't needed. They are free at that time again.` },
+    changed: { subject: `${p.employerName} changed ${p.personName}'s ${shift}`, line: `${p.employerName} has changed this ${shift}. The details are now as below: please check ${p.personName} can still work it, and pull them out in CROP if they can't.` },
   };
   const lines = [
     what[p.placement].line,
