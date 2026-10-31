@@ -163,4 +163,52 @@ describe('agencies not on CROP: API', () => {
     expect(st.problem).toMatch(/already started/);
     await http().post(`/shifts/${started}/outside-agencies`).set(as('alloc')).send({ agencyIds: [ids.north] }).expect(400);
   });
+  it('puts the person an agency named on the shift, booked and marked unchecked (David’s option 1)', async () => {
+    const shift = await newShift(50);
+    const st = (await http().get(`/shifts/${shift}/outside-agencies`).set(as('alloc')).expect(200)).body;
+    expect(st.canAdd).toBe(true);
+    const add = (who: string, body: Record<string, unknown>, s = shift) => http().post(`/shifts/${s}/outside-agency-person`).set(as(who)).send(body);
+    await add('alloc', { agencyId: ids.north, firstName: 'Robin' }).expect(400);
+    await add('alloc', { agencyId: ids.east, firstName: 'Robin', lastName: 'Example' }).expect(409); // switched off
+    await add('nosy', { agencyId: ids.north, firstName: 'Robin', lastName: 'Example' }).expect(404);
+    const booked = (await add('alloc', { agencyId: ids.north, firstName: 'Robin', lastName: 'Example' }).expect(200)).body;
+    expect(booked).toMatchObject({ status: 'booked', workerName: 'Robin Example', agencyName: 'Northside Staffing', agencyUnchecked: true, assignmentStatus: 'confirmed' });
+    // Filled now, so a second person is refused.
+    await add('alloc', { agencyId: ids.north, firstName: 'Sam', lastName: 'Example' }).expect(409);
+    // The same name from the same agency is the same person: an overlapping shift is refused, a later one reuses the row.
+    const overlap = await newShift(52);
+    await add('alloc', { agencyId: ids.north, firstName: 'robin', lastName: 'EXAMPLE' }, overlap).expect(409);
+    const later = await newShift(80);
+    const again = (await add('alloc', { agencyId: ids.north, firstName: 'Robin', lastName: 'Example' }, later).expect(200)).body;
+    expect(again.workerId).toBe(booked.workerId);
+    // Never on the business's own people list, only as an agency row on the roster.
+    const people = (await http().get('/workers').set(as('alloc')).expect(200)).body;
+    expect(JSON.stringify(people)).not.toContain('Robin');
+    const from = new Date(Date.now()).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+    const roster = (await http().get(`/roster?from=${from}&to=${to}`).set(as('alloc')).expect(200)).body;
+    expect(roster.agencyPeople).toEqual([expect.objectContaining({ name: 'Robin Example', agencyName: 'Northside Staffing', unchecked: true, rosteredHours: 16 })]);
+    // Logged as the office's change, and in the audit log.
+    const log = (await owner.query(`select kind, actor_name from shift_changes where shift_id = $1`, [shift])).rows;
+    expect(log.find((r: { kind: string }) => r.kind === 'booked')).toMatchObject({ actor_name: 'alloc@x.com' });
+    expect((await owner.query(`select count(*)::int as n from audit_log where table_name = 'workers' and action = 'insert'`)).rows[0].n).toBe(1);
+    // The API can't make or edit these people directly.
+    const app_ = new Client({ connectionString: db.appUrl });
+    await app_.connect();
+    try {
+      await app_.query(`select set_config('app.tenant_id', $1, false)`, [ids.bayside]);
+      await expect(app_.query(`update workers set first_name = 'X' where id = $1`, [booked.workerId])).rejects.toThrow(/agency/);
+      await expect(app_.query(`select app_outside_agency_person($1, 'A', 'B')`, [ids.north])).rejects.toThrow(/Only the office/);
+    } finally { await app_.end(); }
+    // Taking them off opens the shift again, as for anyone.
+    await http().post(`/shifts/${later}/unassign`).set(as('alloc')).send({}).expect(200);
+    expect((await owner.query(`select status from shifts where id = $1`, [later])).rows[0].status).toBe('open');
+  });
+
+  it('won’t add someone to a shift that has started', async () => {
+    const started = await newShift(-2);
+    const st = (await http().get(`/shifts/${started}/outside-agencies`).set(as('alloc')).expect(200)).body;
+    expect(st.canAdd).toBe(false);
+    await http().post(`/shifts/${started}/outside-agency-person`).set(as('alloc')).send({ agencyId: ids.north, firstName: 'Robin', lastName: 'Example' }).expect(409);
+  });
 });
