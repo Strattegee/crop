@@ -81,4 +81,20 @@ describe('changing a shift\'s times', () => {
     await http().post(`/shifts/${second}/cancel`).set(as('alloc')).send({ reason: 'Not needed' }).expect((r) => { if (r.status >= 300) throw new Error(String(r.status)); });
     await http().put(`/shifts/${second}/times`).set(as('alloc')).send({ startTime: '08:00', endTime: '10:00' }).expect(400);
   });
+
+  it('changes the role and area, refusing a role the person on it can\'t work', async () => {
+    const r = await http().put(`/shifts/${first}/role`).set(as('alloc')).send({ role: 'Cook' }).expect(409);
+    expect(r.body.message).toMatch(/^Ana Example can't work it as Cook: /);
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    const area = (await owner.query<{ id: string }>(`insert into areas(tenant_id, facility_id, name) select tenant_id, id, 'Ward 3' from facilities where id = $1 returning id`, [site])).rows[0].id;
+    await owner.end();
+    const s = (await http().put(`/shifts/${first}/role`).set(as('alloc')).send({ areaId: area }).expect(200)).body;
+    expect(s).toMatchObject({ role: 'Carer', areaName: 'Ward 3' });
+    const h = (await http().get(`/shifts/${first}/history`).set(as('alloc')).expect(200)).body as Array<{ kind: string; summary: string }>;
+    expect(h.some(x => x.kind === 'area_changed' && x.summary === 'Area changed to Ward 3')).toBe(true);
+    expect(h.some(x => x.kind === 'role_changed')).toBe(false); // the refused change left nothing behind
+    await http().put(`/shifts/${first}/role`).set(as('alloc')).send({}).expect(400);
+    await http().put(`/shifts/${first}/role`).set(as('other')).send({ role: 'Cook' }).expect(404);
+  });
 });

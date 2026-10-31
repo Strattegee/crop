@@ -619,6 +619,41 @@ export class ShiftsController {
     });
   }
 
+  /**
+   * Changes a shift's role and area (`{ role?, areaId? }`; `areaId: null` = no area). Logged (`role_changed`,
+   * `area_changed`), under the after-publishing rule; agencies' copies follow. Refused for an equipment-only, cancelled
+   * or started shift, and when the person on it couldn't work the new role (nothing changes then).
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('shifts/:id/role')
+  setRole(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const role = text(body ?? {}, 'role', { max: 60 });
+    const areaGiven = body && Object.prototype.hasOwnProperty.call(body, 'areaId');
+    const areaId = areaGiven ? uuidField(body, 'areaId', 'area') : undefined;
+    if (!role && !areaGiven) throw new BadRequestException('Choose a role or an area');
+    return this.tx(t, auth, async db => {
+      const cur = (await db.query<{ status: string; started: boolean; needs_person: boolean; facility_id: string }>(
+        `select status, starts_at <= now() as started, needs_person, facility_id from shifts where id = $1 for update`, [id])).rows[0];
+      if (!cur) throw new NotFoundException('Shift not found');
+      if (cur.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
+      if (cur.started) throw new ConflictException('This shift has already started, so it can no longer be changed');
+      if (role && !cur.needs_person) throw new BadRequestException('Nobody works an equipment-only shift');
+      if (areaId && !(await db.query('select 1 from areas where id = $1 and facility_id = $2', [areaId, cur.facility_id])).rowCount) {
+        throw new BadRequestException('Choose an area at this site');
+      }
+      await db.query(`update shifts set role = coalesce($2, role), area_id = case when $3 then $4::uuid else area_id end, updated_at = now() where id = $1`,
+        [id, role, !!areaGiven, areaId ?? null]);
+      const person = (await db.query<{ worker_id: string; status: string }>(
+        `select a.worker_id, w.status from shift_assignments a join workers w on w.id = a.worker_id
+          where a.shift_id = $1 and a.resource_kind = 'worker' and a.status in ('assigned', 'confirmed')`, [id])).rows[0];
+      if (role && person && person.status !== 'agency') {
+        const [c] = await eligibilityForShift(db, t.tenantId, id, [person.worker_id]);
+        if (c && c.blocks.length) throw new ConflictException(`${c.name} can't work it as ${role}: ${c.blocks.map(b => b.message).join('; ')}. Take them off first, or choose another role.`);
+      }
+      return shiftById(db, id);
+    });
+  }
+
   /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3). */
   @Roles(...OFFICE_ROLES)
   @Get('shifts/:id/candidates')
