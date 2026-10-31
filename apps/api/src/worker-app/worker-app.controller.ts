@@ -13,7 +13,7 @@ import { shiftLabel } from '../roster/bank-fill.js';
 import { T, wordsFor } from '../terms/words.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
-import { appAccessRefusal, appAccessState, MAX_MY_DAYS, myShiftState, notLinkedMessage } from './worker-app.js';
+import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myShiftState, notLinkedMessage } from './worker-app.js';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
@@ -72,7 +72,8 @@ export class AppAccessController {
     const userId = w.user_id ?? (await db.query<{ u: string }>(
       `select accepted_user_id as u from invitations where worker_id = $1 and accepted_user_id is not null order by accepted_at desc limit 1`,
       [workerId])).rows[0]?.u ?? null;
-    const member = !!userId && !!(await db.query('select 1 from memberships where user_id = $1', [userId])).rowCount;
+    const memberRole = userId ? (await db.query<{ role: string }>('select role from memberships where user_id = $1', [userId])).rows[0]?.role ?? null : null;
+    const member = !!memberRole;
     const pending = (await db.query<{ email: string; created_at: Date }>(
       `select email, created_at from invitations where worker_id = $1 and accepted_at is null order by created_at desc limit 1`, [workerId])).rows[0];
     return {
@@ -80,13 +81,19 @@ export class AppAccessController {
       email: pending?.email ?? w.email,
       invitedAt: pending?.created_at ?? null,
       refusal: member || pending ? null : appAccessRefusal(w),
+      userId, memberRole, name: w.name,
     };
+  }
+
+  private async view(db: PoolClient, workerId: string) {
+    const { userId: _u, memberRole: _r, name: _n, ...shown } = await this.state(db, workerId);
+    return shown;
   }
 
   @Roles(...OFFICE_ROLES)
   @Get()
   get(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string) {
-    return withTenant(this.pool, t.tenantId, db => this.state(db, workerId));
+    return withTenant(this.pool, t.tenantId, db => this.view(db, workerId));
   }
 
   @Roles('owner', 'admin')
@@ -106,7 +113,29 @@ export class AppAccessController {
       if (waiting && waiting.worker_id && waiting.worker_id !== workerId) throw new ConflictException('Someone else is already invited with this email');
       if (waiting) await db.query('update invitations set worker_id = $2 where id = $1', [waiting.id, workerId]);
       else await db.query(`insert into invitations(tenant_id, email, role, worker_id) values ($1, $2, 'worker', $3)`, [t.tenantId, w.email, workerId]);
-      return this.state(db, workerId);
+      return this.view(db, workerId);
+    });
+  }
+
+  /**
+   * Takes the app away (owners and admins, David 31 Oct): ends their worker sign-in to this business, or cancels the
+   * invitation still waiting. Their record, shifts and history stay; the audit log records who did it; the app stops
+   * working for them at their next request. They can be given the app again (with the same or a new email).
+   */
+  @Roles('owner', 'admin')
+  @Post('remove')
+  @HttpCode(200)
+  remove(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+      const now = await this.state(db, workerId);
+      const refusal = removeAccessRefusal(now);
+      if (refusal) throw new ConflictException(refusal);
+      if (now.userId) await db.query(`delete from memberships where user_id = $1 and role = 'worker'`, [now.userId]);
+      await db.query('delete from invitations where worker_id = $1 and accepted_at is null', [workerId]);
+      // Unlinked, so giving the app again (perhaps to a new email) links whoever accepts that invitation.
+      await db.query('update workers set user_id = null, updated_at = now() where id = $1 and user_id is not null', [workerId]);
+      return this.view(db, workerId);
     });
   }
 }

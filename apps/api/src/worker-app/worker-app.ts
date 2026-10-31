@@ -32,6 +32,16 @@ export function appAccessRefusal(w: { status: string; email: string | null; name
   return null;
 }
 
+/**
+ * Taking away someone's app access (David, 31 Oct: owners and admins can do it themselves). Refused when there is
+ * nothing to take away, or when their sign-in is an office one here (that is changed in Platform, not here).
+ */
+export function removeAccessRefusal(a: { state: AppAccessState; memberRole: string | null; name: string }): string | null {
+  if (a.state === 'none') return `${a.name} doesn't have the app`;
+  if (a.memberRole && a.memberRole !== 'worker') return `${a.name} signs in to the office with this account, so their access is changed by CROP support, not here`;
+  return null;
+}
+
 /** The range of days the app asks for, checked: at most 62 days, end not before start. */
 export const MAX_MY_DAYS = 62;
 

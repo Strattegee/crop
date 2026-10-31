@@ -10,7 +10,7 @@ import { configureApp } from '../src/configure.js';
 import { changeSummary } from '../src/roster/publishing.js';
 import { makeWords } from '../src/terms/words.js';
 import {
-  appAccessRefusal, appAccessState, appCredentialEmail, appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
+  appAccessRefusal, appAccessState, appCredentialEmail, removeAccessRefusal, appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
 } from '../src/worker-app/worker-app.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -24,6 +24,10 @@ describe('worker app: pure rules', () => {
     expect(appAccessRefusal({ status: 'active', email: null, name: 'Ana Example' })).toBe('Add an email address for Ana Example first: they sign in with it');
     expect(appAccessRefusal({ status: 'agency', email: 'a@example.com', name: 'Ana Example' })).toMatch(/agency/);
     expect(appAccessRefusal({ status: 'active', email: 'a@example.com', name: 'Ana Example' })).toBeNull();
+    expect(removeAccessRefusal({ state: 'none', memberRole: null, name: 'Ana Example' })).toBe("Ana Example doesn't have the app");
+    expect(removeAccessRefusal({ state: 'active', memberRole: 'allocator', name: 'Ana Example' })).toMatch(/signs in to the office/);
+    expect(removeAccessRefusal({ state: 'active', memberRole: 'worker', name: 'Ana Example' })).toBeNull();
+    expect(removeAccessRefusal({ state: 'invited', memberRole: null, name: 'Ana Example' })).toBeNull();
     expect(notLinkedMessage('Demo Cafe')).toBe("Your sign-in isn't linked to anyone at Demo Cafe yet. Ask the office to give you access to the app.");
     expect(changeSummary({ kind: 'booked', workerName: 'Ana Example', equipmentName: null, detail: null, via: 'app' }))
       .toBe('Ana Example accepted the offer in the app and is booked');
@@ -305,5 +309,28 @@ describe('worker app: access, my shifts and offers', () => {
     expect((await http().get('/my/availability').set(as('ana')).expect(200)).body.leave.map((l: { status: string }) => l.status)).toEqual(['approved']);
     // Another business's worker account can't reach it.
     await http().post(`/my/leave/${next.body.id}/cancel`).set(as('other')).expect(404);
+  });
+
+  it('lets owners and admins take the app away and give it back', async () => {
+    await http().get('/my').set(as('ben')).expect(200);
+    await http().post(`/workers/${ben}/app-access/remove`).set(as('alloc')).expect(403);
+    await http().post(`/workers/${ben}/app-access/remove`).set(as('other')).expect(404);
+    const r = await http().post(`/workers/${ben}/app-access/remove`).set(as('admin')).expect(200);
+    expect(r.body).toMatchObject({ state: 'none', email: 'ben@example.com', refusal: null });
+    expect(r.body).not.toHaveProperty('userId');
+    // The app stops working for them straight away; their record stays.
+    await http().get('/my').set(as('ben')).expect(403);
+    expect((await owner.query('select user_id, status from workers where id = $1', [ben])).rows[0]).toEqual({ user_id: null, status: 'active' });
+    expect((await owner.query(`select action, via from audit_log where table_name = 'memberships' and action = 'delete'`)).rows).toEqual([{ action: 'delete', via: 'office' }]);
+    expect((await http().post(`/workers/${ben}/app-access/remove`).set(as('admin')).expect(409)).body.message).toBe("Ben Example doesn't have the app");
+    // An invitation still waiting can be cancelled the same way.
+    expect((await http().post(`/workers/${ben}/app-access`).set(as('admin')).expect(201)).body.state).toBe('invited');
+    expect((await http().post(`/workers/${ben}/app-access/remove`).set(as('admin')).expect(200)).body.state).toBe('none');
+    expect((await owner.query(`select count(*)::int as n from invitations where worker_id = $1 and accepted_at is null`, [ben])).rows[0].n).toBe(0);
+    await http().get('/my').set(as('ben')).expect(403);
+    // Given again, they get back in and see their own record.
+    await http().post(`/workers/${ben}/app-access`).set(as('admin')).expect(201);
+    expect((await http().get('/my').set(as('ben')).expect(200)).body).toMatchObject({ name: 'Ben Example' });
+    expect((await http().get(`/workers/${ben}/app-access`).set(as('alloc')).expect(200)).body.state).toBe('active');
   });
 });

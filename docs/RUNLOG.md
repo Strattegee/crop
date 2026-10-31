@@ -427,3 +427,4 @@ Newest first. One entry per working session or scheduled run.
 - (31 Oct) Roster templates and copying now use the business's own words in their summaries and errors ("2 jobs added", "There are no jobs at … to copy").
 - (31 Oct) The daily email run stops early once everyone in a business has had today's email, so the hourly check costs nothing for the rest of the day.
 - (31 Oct) Money (item costs and charges) now shows in the currency of the business's country: dollars for Australia, New Zealand and the US, pounds for the UK.
+- (31 Oct, with David) Owners and admins can now take away a person's app access themselves, from the Worker app card on the person's page (or cancel an invitation still waiting). The app stops working for them at once; their record, shifts and history stay, the audit log shows who did it, and the app can be given again later.
