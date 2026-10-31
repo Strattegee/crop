@@ -6,6 +6,7 @@ import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
 import { fillOpenShifts } from '../demo-tools';
 import { T, words } from '../../../lib/terms';
+import { addedMessage } from '../../../lib/outside-agency';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen } from './view';
@@ -106,6 +107,15 @@ export async function outsideAgencyEmail(shiftId: string, f: FormData) {
   const agencyIds = f.getAll('agencyIds').filter((v): v is string => typeof v === 'string' && v !== '');
   await attempt(back(f), () => api(`/shifts/${shiftId}/outside-agencies`, { method: 'POST', body: { agencyIds, note: str(f, 'note') } }),
     `Emailed. They reply to you; add the person to the ${tw.lower(T.shift)} when they do.`);
+}
+
+/** An agency not on CROP replied with someone: put them on by name, booked and marked unchecked (migration 0060). */
+export async function outsideAgencyPerson(shiftId: string, f: FormData) {
+  const tw = await words();
+  const firstName = str(f, 'firstName') ?? '';
+  const lastName = str(f, 'lastName') ?? '';
+  await attempt(back(f), () => api(`/shifts/${shiftId}/outside-agency-person`, { method: 'POST', body: { agencyId: str(f, 'agencyId'), firstName, lastName } }),
+    addedMessage(firstName, lastName, tw.lower(T.shift)));
 }
 
 export async function recordReply(offerId: string, reply: 'accept' | 'decline', f: FormData) {

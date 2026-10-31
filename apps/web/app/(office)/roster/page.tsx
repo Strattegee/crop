@@ -6,9 +6,10 @@ import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  agencyFill, agencyFillNext, agencyFillWithdraw, outsideAgencyEmail, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  agencyFill, agencyFillNext, agencyFillWithdraw, outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
 } from './actions';
+import { UNCHECKED, uncheckedNote } from '../../../lib/outside-agency';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
 import { minutesWords, requestStepChoices } from '../../../lib/agency-timing';
@@ -42,13 +43,15 @@ type Shift = {
   coveringWorkerId?: string | null; coveringName?: string | null; startsAt?: string; breakMinutes?: number;
   /** The agency the person on it came from (agency fill, migration 0042). */
   agencyName?: string | null;
+  /** Named by an agency not on CROP and put on by the office (migration 0060): CROP hasn't checked them. */
+  agencyUnchecked?: boolean;
 };
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
 type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' | 'optional' }[] };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
-type AgencyPerson = { id: string; name: string; agencyName: string; rosteredHours: number };
+type AgencyPerson = { id: string; name: string; agencyName: string; unchecked?: boolean; rosteredHours: number };
 type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; agencyPeople?: AgencyPerson[]; equipment?: Equip[]; leave?: Leave[] };
 type Facility = { id: string; name: string; active: boolean };
 type FacilityDetail = Facility & { areas: { id: string; name: string; active: boolean }[] };
@@ -69,8 +72,8 @@ type OutsideReq = { name: string; levelWords: string; forWhat: string | null };
 type OutsideState = {
   agencies: { id: string; name: string; email: string; lastSentAt: string | null }[];
   requirements: { standard: OutsideReq[]; special: OutsideReq[] };
-  sent: { id: string; agencyName: string; toAddress: string; note: string | null; sentByName: string | null; sentAt: string; delivery: string | null }[];
-  canSend: boolean; problem: string | null;
+  sent: { id: string; agencyId: string; agencyName: string; toAddress: string; note: string | null; sentByName: string | null; sentAt: string; delivery: string | null }[];
+  canSend: boolean; problem: string | null; canAdd?: boolean;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
@@ -247,7 +250,7 @@ export default async function RosterPage({ searchParams }: {
     }
   } else {
     groups.push({ key: 'people', title: tw.many(T.worker), rows: [...roster.people.map(p => personRow(p, shifts)),
-      ...(roster.agencyPeople ?? []).map((p): Row => ({ key: p.id, label: p.name, kind: 'person', sub: `${tw.one(T.agency)} · ${p.agencyName}`,
+      ...(roster.agencyPeople ?? []).map((p): Row => ({ key: p.id, label: p.name, kind: 'person', sub: `${tw.one(T.agency)} · ${p.agencyName}${p.unchecked ? ` · ${UNCHECKED}` : ''}`,
         cells: cellsFor(s => s.workerId === p.id, shifts), balance: { text: `${fmtHours(p.rosteredHours)} h`, cls: '' } })),
       openRow('all', shifts),
       ...(cancelled.length ? [{ key: 'x-all', label: 'Cancelled', kind: 'cancelled' as const, sub: `${cancelled.length} this ${periodWord}`, cells: cellsFor(() => true, cancelled) }] : [])] });
@@ -326,7 +329,7 @@ export default async function RosterPage({ searchParams }: {
     href: url({ shift: s.id }), 'data-shift': s.id,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
-    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
   // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
   // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
@@ -984,7 +987,7 @@ export default async function RosterPage({ searchParams }: {
               <section><h3>Cancelled</h3><p style={{ margin: 0 }}>{selected.cancelledReason || 'No reason recorded.'}</p></section>
             ) : panelRefusal ? (<>
               <section>
-                {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></p>}
+                {selected.workerName && <p style={{ margin: '0 0 8px' }}><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ${selected.agencyUnchecked ? `${UNCHECKED} · ` : ''}` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></p>}
                 {(selected.equipment ?? []).length > 0 && <p className="muted" style={{ margin: '0 0 8px' }}>{tw.one(T.equipment)}: {(selected.equipment ?? []).map(e => e.name).join(', ')}</p>}
                 <p className="notice" style={{ margin: '0 0 8px' }}>{panelRefusal}</p>
                 {pendingForShift ? (
@@ -1024,7 +1027,7 @@ export default async function RosterPage({ searchParams }: {
                 <h3>Person</h3>
                 {selected.workerId ? (<>
                   <div className="panel-row">
-                    <span><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></span>
+                    <span><strong>{selected.workerName}</strong> <span className="muted">· {selected.agencyName ? `from ${selected.agencyName} · ${selected.agencyUnchecked ? `${UNCHECKED} · ` : ''}` : ''}{selected.status === 'booked' ? 'booked' : selected.agencyName ? 'waiting for your approval' : 'waiting to confirm'}</span></span>
                     <span style={{ display: 'flex', gap: 6 }}>
                       {selected.status === 'assigned' && (
                         <form action={confirm.bind(null, selected.id)}><input type="hidden" name="back" value={here} /><button className="btn small">{selected.agencyName ? 'Approve' : 'Confirm'}</button></form>
@@ -1037,6 +1040,9 @@ export default async function RosterPage({ searchParams }: {
                       </>)}
                     </span>
                   </div>
+                  {selected.agencyUnchecked && (
+                    <p className="notice small" style={{ margin: '4px 0 0' }}>{uncheckedNote(selected.agencyName ?? tw.one(T.agency))}</p>
+                  )}
                   {selected.agencyName && agencyState?.placement && agencyState.placement.workerName === selected.workerName && (
                     <p className="muted small" style={{ margin: '4px 0 0' }}>
                       Put forward by {agencyState.placement.agencyName}{agencyState.placement.putForwardByName ? ` (${agencyState.placement.putForwardByName})` : ''} {when(agencyState.placement.createdAt)}, checked by them against your requirements.
@@ -1310,6 +1316,24 @@ function OutsideAgencySection({ st, shiftId, role, here, when, tw }: { st: Outsi
           </div>
         </form>
       ) : st.problem && st.sent.length === 0 ? <p className="muted small" style={{ margin: 0 }}>{st.problem}</p> : null}
+      {st.canAdd && st.agencies.length > 0 && (
+        <form action={outsideAgencyPerson.bind(null, shiftId)} style={{ marginTop: 10 }}>
+          <input type="hidden" name="back" value={here} />
+          <p className="small" style={{ margin: '0 0 4px' }}><strong>They replied with someone?</strong> <span className="muted">Put them on by name. CROP can&apos;t check their credentials, so they show as {UNCHECKED}.</span></p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="sr-only" htmlFor="outsideAgency">{tw.one(T.agency)}</label>
+            <select id="outsideAgency" name="agencyId" required defaultValue={st.sent[0]?.agencyId ?? (st.agencies.length === 1 ? st.agencies[0].id : '')}>
+              {st.agencies.length > 1 && <option value="">{tw.one(T.agency)}…</option>}
+              {st.agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <label className="sr-only" htmlFor="outsideFirst">First name</label>
+            <input id="outsideFirst" name="firstName" required maxLength={80} placeholder="First name" style={{ flex: '1 1 100px' }} />
+            <label className="sr-only" htmlFor="outsideLast">Last name</label>
+            <input id="outsideLast" name="lastName" required maxLength={80} placeholder="Last name" style={{ flex: '1 1 100px' }} />
+            <button className="btn small">Put on the {tw.lower(T.shift)}</button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

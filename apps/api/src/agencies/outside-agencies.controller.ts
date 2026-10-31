@@ -9,9 +9,9 @@ import { bool, email, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { queueNotification } from '../notifications/notify.js';
 import { actorOf } from '../roster/publishing.js';
-import { rosterChangeRefusal } from '../roster/offers-data.js';
+import { closePendingOffers, rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
-import { wordsFor } from '../terms/words.js';
+import { T, wordsFor } from '../terms/words.js';
 import { RESEND_MINUTES, outsideAgencyEmail, outsideProblem, outsideRequirements, type RuleRow } from './outside.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,6 +53,8 @@ async function outsideState(db: PoolClient, shiftId: string, now = new Date()) {
     sent,
     canSend: problem === null,
     problem,
+    // The person an agency named can be put on whenever it could be emailed (David's option 1).
+    canAdd: problem === null,
   };
 }
 
@@ -176,5 +178,43 @@ export class OutsideAgenciesController {
       }
       return outsideState(db, id);
     }, actor);
+  }
+
+  /**
+   * The agency replied with someone (David's answer 4, option 1): put them on the open shift by name
+   * (`{ agencyId, firstName, lastName }`), booked straight away and marked as an unchecked agency worker. CROP doesn't
+   * check their credentials or right to work; it does refuse the same person on an overlapping shift. Logged as a
+   * change by the person who added them, so the after-publishing rule applies. Returns the shift.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('shifts/:id/outside-agency-person')
+  @HttpCode(200)
+  addPerson(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const b = body ?? {};
+    const agencyId = typeof b.agencyId === 'string' && UUID.test(b.agencyId) ? b.agencyId : null;
+    if (!agencyId) throw new BadRequestException('Choose the agency');
+    const firstName = text(b, 'firstName', { required: true, max: 80 })!;
+    const lastName = text(b, 'lastName', { required: true, max: 80 })!;
+    return withTenant(this.pool, t.tenantId, async db => {
+      const shift = (await db.query<{ status: string; needs_person: boolean; starts_at: Date; ends_at: Date }>(
+        'select status, needs_person, starts_at, ends_at from shifts where id = $1 for update', [id])).rows[0];
+      if (!shift) throw new NotFoundException('Shift not found');
+      const w = await wordsFor(db);
+      const problem = outsideProblem({ status: shift.status, equipmentOnly: !shift.needs_person, startsAt: shift.starts_at }, 1, new Date(), w);
+      if (problem) throw new ConflictException(problem);
+      const person = (await db.query<{ id: string }>('select app_outside_agency_person($1, $2, $3) as id', [agencyId, firstName, lastName])).rows[0].id;
+      // Lock the person so two shifts can't be given to them at once, then refuse an overlap (the one check CROP can make).
+      await db.query('select 1 from workers where id = $1 for update', [person]);
+      const clash = (await db.query(
+        `select 1 from shift_assignments a join shifts s on s.id = a.shift_id
+          where a.worker_id = $1 and a.resource_kind = 'worker' and a.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
+            and s.starts_at < $3 and s.ends_at > $2 limit 1`, [person, shift.starts_at, shift.ends_at])).rowCount;
+      if (clash) throw new ConflictException(`${firstName} ${lastName} is already on another ${w.lower(T.shift)} at this time`);
+      await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, status, assigned_by) values ($1,$2,$3,'confirmed',$4)`,
+        [t.tenantId, id, person, auth.userId]);
+      await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [id]);
+      await closePendingOffers(db, id, 'filled', auth.userId);
+      return shiftById(db, id);
+    }, actorOf(auth));
   }
 }
