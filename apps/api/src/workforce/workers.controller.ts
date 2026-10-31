@@ -4,18 +4,19 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { date, email, gender, oneOf, text, textList } from '../common/validate.js';
+import { bool, date, email, gender, oneOf, text, textList } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { credentialStatus, optionalFor, todayIn } from './compliance.js';
 import { loadSettings } from './settings.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { beginOnboarding } from './onboarding.controller.js';
 import { cardsFor } from './person-card.js';
+import { recruitmentEvent } from './recruitment.controller.js';
 
-const STATUSES = ['active', 'onboarding', 'inactive', 'offboarded'] as const;
+const STATUSES = ['active', 'onboarding', 'applicant', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
-  w.email, w.phone, w.status, w.roles, w.notes, w.gender, w.created_at as "createdAt"`;
+  w.email, w.phone, w.status, w.roles, w.notes, w.gender, w.recruitment_stage as "recruitmentStage", w.created_at as "createdAt"`;
 const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name as "typeName", t.category,
   t.verification_method as "verificationMethod", t.verification_url as "verificationUrl",
   c.number, c.issued_by as "issuedBy", to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
@@ -77,6 +78,8 @@ export class WorkersController {
   @Post()
   create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const checklistId = text(body, 'onboardingChecklistId', { max: 40 });
+    const applicant = bool(body, 'applicant') ?? false;
+    if (applicant && checklistId) throw new BadRequestException('Add them as an applicant, or start their onboarding, not both');
     if (checklistId && !/^[0-9a-f-]{36}$/i.test(checklistId)) throw new BadRequestException('Choose a checklist');
     const values = [
       t.tenantId,
@@ -92,9 +95,12 @@ export class WorkersController {
     return withTenant(this.pool, t.tenantId, async db => {
       try {
         const row = (await db.query<{ id: string }>(
-          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${WORKER_COLUMNS}`, values,
+          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender, status, recruitment_stage, stage_changed_at)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9, case when $10 then 'applicant'::worker_status else 'active'::worker_status end,
+                   case when $10 then 'applied' end, case when $10 then now() end) returning ${WORKER_COLUMNS}`, [...values, applicant],
         )).rows[0];
+        // An applicant starts on the recruitment board (David, 31 Oct).
+        if (applicant) await recruitmentEvent(db, t.tenantId, row.id, auth, 'applied', null);
         if (!checklistId) return row;
         await beginOnboarding(db, t.tenantId, auth, row.id, checklistId, true);
         return (await db.query(`select ${WORKER_COLUMNS} from workers w where w.id = $1`, [row.id])).rows[0];

@@ -15,6 +15,7 @@ export function PersonCard({ p, today, size = 'compact', link = true }: { p: Car
   const badges = badgeList(c?.held ?? [], size === 'full' ? 50 : 4);
   const name = displayName(p);
   const letter = c?.employmentType ? EMPLOYMENT_LETTER[c.employmentType] : null;
+  const working = p.status !== 'applicant' && p.status !== 'onboarding';
   return (
     <div className={`pcard ${size}`}>
       <div className="pcard-top">
@@ -32,7 +33,13 @@ export function PersonCard({ p, today, size = 'compact', link = true }: { p: Car
       </div>
 
       <div className="pcard-facts">
-        <span>
+        {/* Not working yet: employment, hours and shifts mean nothing, so the card shows what they still need. */}
+        {!working && <>
+          {expiry && <span className={expiry.soon ? 'pcard-soon' : ''}>{expiry.text}</span>}
+          {!!c?.toCheck && <span className="pcard-check">{c.toCheck} to check</span>}
+          {p.email && size === 'compact' && <span className="muted">{p.email}</span>}
+        </>}
+        {working && <><span>
           {letter && <b className="pcard-emp" title={EMPLOYMENT_LABEL[c!.employmentType!]}>{letter}</b>}
           {c?.employmentType ? EMPLOYMENT_LABEL[c.employmentType] : <span className="muted">Employment not set</span>}
         </span>
@@ -40,6 +47,7 @@ export function PersonCard({ p, today, size = 'compact', link = true }: { p: Car
         {c?.nextShift ? <span>Next: {c.nextShift.label}</span> : <span className="muted">No shifts coming up</span>}
         {expiry && <span className={expiry.soon ? 'pcard-soon' : ''}>{expiry.text}</span>}
         {!!c?.toCheck && <span className="pcard-check">{c.toCheck} to check</span>}
+        </>}
       </div>
 
       {(badges.shown.length > 0 || size === 'full') && (
