@@ -11,7 +11,7 @@ import { actorOf } from '../roster/publishing.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { shiftById } from '../roster/roster.controller.js';
 import { T, wordsFor } from '../terms/words.js';
-import { BAND_WORDS, DEFAULT_AGENCY_TIMING, agencyFillProblem, agencyRules, escalationMinutes, minutesWords, timingBand, type AgencyTiming, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Placement, type SnapshotRequirement } from './requests.js';
+import { BAND_WORDS, DEFAULT_AGENCY_TIMING, agencyFillProblem, agencyRules, escalationMinutes, minutesWords, timingBand, type AgencyTiming, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Notice, type Placement, type SnapshotRequirement } from './requests.js';
 import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
@@ -105,8 +105,9 @@ export async function tellPlacementChanges(pool: Pool, limit = 50): Promise<numb
   let told = 0;
   for (const n of pending) {
     await withTenant(pool, n.agency_tenant_id, async db => {
-      const notice = (await db.query<{ notice: Placement | null }>('select app_agency_take_notice($1) as notice', [n.inbox_id])).rows[0]?.notice;
+      const notice = (await db.query<{ notice: Notice | 'waiting' | null }>('select app_agency_take_notice($1) as notice', [n.inbox_id])).rows[0]?.notice;
       if (!notice || notice === 'waiting') return;
+      const taken = Date.now();
       const row = (await db.query<InboxRow>(`select ${INBOX_COLS} from agency_inbox where id = $1`, [n.inbox_id])).rows[0];
       if (!row?.placedName) return;
       const w = await wordsFor(db);
@@ -114,7 +115,8 @@ export async function tellPlacementChanges(pool: Pool, limit = 50): Promise<numb
       const emails = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
       for (const e of emails) {
         await queueNotification(db, n.agency_tenant_id, { channel: 'email', to: e.email, template: 'agency_placement_changed', subject, body,
-          dedupeKey: `agency-placement:${n.inbox_id}:${notice}:${e.email.toLowerCase()}` });
+          // A shift can change more than once; each change's notice is taken once, so each gets its own email.
+          dedupeKey: `agency-placement:${n.inbox_id}:${notice === 'changed' ? `changed:${taken}` : notice}:${e.email.toLowerCase()}` });
       }
       told++;
     });

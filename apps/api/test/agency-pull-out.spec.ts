@@ -250,4 +250,34 @@ describe('agency pull out and placement emails: API', () => {
     await timer.runOnce();
     expect((await owner.query(`select notice from agency_inbox where id = $1`, [inboxId])).rows[0].notice).toBeNull();
   });
+
+  it("agencies' copies follow the employer's changes to the shift (migration 0056)", async () => {
+    // An open request: a new duty (with its own must-have) reaches the copy, with its requirement.
+    const s = await newShift(70);
+    const inboxId = await sendToAgency(s);
+    const cert = (await owner.query<{ id: string }>(`insert into credential_types(tenant_id, name, category) values ($1, 'Medication competency', 'training') returning id`, [ids.bayside])).rows[0].id;
+    const duty = (await http().post('/shift-duties').set(as('emp')).send({ name: 'Gives medication', requirements: [{ credentialTypeId: cert, severity: 'hard' }] }).expect(201)).body.id;
+    await http().put(`/shifts/${s}/duties`).set(as('emp')).send({ dutyIds: [duty] }).expect(200);
+    let copy = (await owner.query(`select duties, requirements, notice from agency_inbox where id = $1`, [inboxId])).rows[0];
+    expect(copy.duties).toEqual(['Gives medication']);
+    expect(copy.requirements.map((r: { name: string; forDuty: string | null }) => `${r.name}:${r.forDuty}`)).toContain('Medication competency:Gives medication');
+    expect(copy.notice).toBeNull(); // nobody put forward yet: nothing to tell
+    // New times on a shift with Ana booked: the copy follows and the agency is told.
+    const s2 = await newShift(90);
+    const placedId = await placed(s2);
+    await timer.runOnce(); // earlier tests' notices go first
+    const before = (await mail('agency_placement_changed')).length;
+    await owner.query(`update shifts set starts_at = starts_at + interval '1 hour', ends_at = ends_at + interval '1 hour' where id = $1`, [s2]);
+    copy = (await owner.query(`select i.starts_at, s.starts_at as shift_start, i.notice from agency_inbox i, shifts s where i.id = $1 and s.id = $2`, [placedId, s2])).rows[0];
+    expect(copy.starts_at.getTime()).toBe(copy.shift_start.getTime());
+    expect(copy.notice).toBe('changed');
+    await timer.runOnce();
+    const told = (await mail('agency_placement_changed')).slice(before);
+    expect(told.length).toBe(1);
+    expect(told[0].tenant_id).toBe(ids.cfy);
+    expect(told[0].subject).toMatch(/^Bayside Hospital changed Ana Example's shift: Nurse on /);
+    expect(told[0].body).toContain('please check Ana Example can still work it');
+    // A third business's copies are untouched (it never had this shift).
+    expect((await owner.query(`select count(*)::int as n from agency_inbox where tenant_id = $1`, [ids.nosy])).rows[0].n).toBe(0);
+  });
 });
