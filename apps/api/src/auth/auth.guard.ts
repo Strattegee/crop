@@ -2,6 +2,7 @@ import {
   BadRequestException, CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { auditStore } from '@crop/db';
 import type { Pool } from 'pg';
 import { APP_POOL } from '../database/database.module.js';
 import type { AuthedRequest, MemberRole, Membership } from './auth.types.js';
@@ -25,7 +26,12 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const targets = [ctx.getHandler(), ctx.getClass()];
-    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) {
+      // Public routes are the one-off links (offers, uploads): the audit log says so.
+      const store = auditStore.getStore();
+      if (store) store.actor = { via: 'link' };
+      return true;
+    }
 
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
     const header = req.headers.authorization;
@@ -66,6 +72,9 @@ export class AuthGuard implements CanActivate {
     }
 
     req.auth = { userId: user!.id, email: user!.email, displayName: user!.display_name, memberships, tenant };
+    // Who this request is for, for the audit log (the person in the worker app shows as "app").
+    const store = auditStore.getStore();
+    if (store) store.actor = { id: user!.id, name: user!.display_name || user!.email, via: tenant?.role === 'worker' ? 'app' : 'office' };
     return true;
   }
 

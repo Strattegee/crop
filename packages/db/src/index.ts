@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool, PoolClient } from 'pg';
 
 export { migrate, setAppRolePassword } from './migrate';
@@ -23,6 +24,13 @@ export interface Actor {
 }
 
 /**
+ * Who the current request is for, for the audit log (migration 0055). The API starts a store per request and the
+ * sign-in guard fills `actor`; withTenant then tells the database (`app.audit_*`) without changing the rules that
+ * read `app.actor_*` (only an explicit `actor` sets those). Background jobs have no store: the log says "system".
+ */
+export const auditStore = new AsyncLocalStorage<{ actor?: Actor }>();
+
+/**
  * Runs fn inside a transaction scoped to one tenant. Row-level security
  * policies read app.tenant_id, so queries only see and write that tenant's rows.
  * All tenant data access in the API goes through this. Pass `actor` on changes that are logged.
@@ -33,6 +41,11 @@ export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolC
   try {
     await client.query('begin');
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+    const who = actor ?? auditStore.getStore()?.actor;
+    if (who) {
+      await client.query(`select set_config('app.audit_id', $1, true), set_config('app.audit_name', $2, true), set_config('app.audit_via', $3, true)`,
+        [who.id && UUID.test(who.id) ? who.id : '', (who.name ?? '').slice(0, 120), who.via ?? 'office']);
+    }
     if (actor) {
       await client.query(
         `select set_config('app.actor_id', $1, true), set_config('app.actor_name', $2, true), set_config('app.actor_via', $3, true),

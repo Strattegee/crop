@@ -22,5 +22,6 @@ export const FUNCTIONS = [
   { code: 9130, path: '/settings/onboarding', label: 'Onboarding checklists', subPage: true },
   { code: 9140, path: '/settings/agencies', term: 1090, subPage: true },
   { code: 9150, path: '/settings/dashboards', label: 'Dashboards', subPage: true },
+  { code: 9160, path: '/settings/audit', label: 'Audit log', subPage: true },
   { code: 9900, path: '/platform', label: 'Platform', platformOnly: true },
 ] as const;

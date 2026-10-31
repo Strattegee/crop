@@ -32,6 +32,7 @@ import { CoverRulesController } from './roster/cover-rules.controller.js';
 import { WorkersController } from './workforce/workers.controller.js';
 import { RecruitmentController } from './workforce/recruitment.controller.js';
 import { DashboardController } from './dashboard/dashboard.controller.js';
+import { AuditController } from './audit/audit.controller.js';
 import { AppAccessController, MyController } from './worker-app/worker-app.controller.js';
 import { MyAvailabilityController } from './worker-app/my-availability.controller.js';
 import { OnboardingChecklistsController, WorkerOnboardingController } from './workforce/onboarding.controller.js';
@@ -39,7 +40,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController, RecruitmentController, DashboardController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
