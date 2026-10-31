@@ -176,6 +176,25 @@ export function expiryLine(c: { expiryDate: string | null; status: 'valid' | 'ex
   return `${c.status === 'expiring' ? 'Runs out soon: ' : 'Runs out '}${longDate(c.expiryDate)}`;
 }
 
+/** The person's own right to work (GET /my/right-to-work, also `rightToWork` on GET /my/credentials). */
+export type RtwState = 'none' | 'to_check' | 'checked' | 'not_accepted';
+export interface MyRightToWork {
+  state: RtwState; line: string; statusLabel: string | null; visaExpiry: string | null; files: string[]; canAddFiles: boolean;
+}
+export const RTW_BADGE: Record<RtwState, string> = {
+  none: 'Not recorded yet', to_check: 'Waiting for the office to check', checked: 'Checked', not_accepted: 'Not accepted',
+};
+
+/** The line under "Right to work": what the office recorded and how many files have gone, e.g. "Visa holder · visa runs out 1 December 2026 · 2 files sent". */
+export function rtwDetail(r: MyRightToWork): string | null {
+  const parts = [
+    r.statusLabel,
+    r.visaExpiry ? `visa runs out ${longDate(r.visaExpiry)}` : null,
+    r.files.length ? `${r.files.length} file${r.files.length === 1 ? '' : 's'} sent` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
 /** What to say under a credential about its files. */
 export function filesLine(c: { files: string[]; needsEvidence: boolean; check: CheckState }): string | null {
   if (c.files.length) return `${c.files.length} file${c.files.length === 1 ? '' : 's'} added`;

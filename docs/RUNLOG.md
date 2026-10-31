@@ -448,3 +448,10 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: right to work details from the app (or by the upload link only), then the other agency and onboarding follow-ups.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 early morning, 3:15am Melbourne (scheduled run)
+
+- Shipped: right to work in the worker app. The Credentials tab now has a Right to work card: what the office has recorded (for example "Australian citizen", or a visa holder's visa end date), whether it's checked, and what to do. Once the office has recorded someone's details, they can take a photo or choose a file of their proof in the app; it goes onto their record for an owner or admin to check (the office is emailed, never with any numbers). The onboarding checklist's right to work step now points them to the app instead of saying "contact the office". The details themselves (status, visa, VEVO check) are still only recorded by the office.
+- Not yet tried on a phone (needs the development build).
+- Next: the other agency and onboarding follow-ups (a checklist chosen automatically by role; the agency seeing which of its people meet an employer's requirements ahead of time).
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.

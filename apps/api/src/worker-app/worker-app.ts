@@ -204,6 +204,7 @@ export interface MyStep {
 export function myStep(
   s: { id: string; title: string; kind: MyStep['kind']; required: boolean; credentialTypeId: string | null; state: MyStepState; detail: string },
   credentialsWord = 'Credentials',
+  rtw: MyRightToWork | null = null,
 ): MyStep {
   const base = { id: s.id, title: s.title, kind: s.kind, required: s.required, state: s.state, credentialTypeId: s.credentialTypeId, yours: false };
   if (s.state === 'done') return { ...base, line: s.kind === 'credential' || s.kind === 'right_to_work' ? 'Checked' : 'Done' };
@@ -211,6 +212,9 @@ export function myStep(
     case 'task': return { ...base, line: 'The office will tick this off' };
     case 'employment': return { ...base, line: 'The office will set up your employment' };
     case 'right_to_work':
+      // Once the office has recorded their details, the person can send their proof from the app.
+      if (rtw?.canAddFiles && rtw.files.length === 0) return { ...base, yours: true, line: `Send a photo or file of your proof in ${credentialsWord}` };
+      if (rtw?.canAddFiles && rtw.state === 'not_accepted') return { ...base, yours: true, line: `Not accepted: send your proof again in ${credentialsWord}` };
       return { ...base, line: s.state === 'waiting' ? 'Sent: the office is checking it' : 'Please contact the office about your right to work' };
     case 'credential': {
       if (s.state === 'waiting') return { ...base, line: 'Sent: waiting for the office to check it' };
@@ -225,4 +229,81 @@ export function myStep(
 export function myOnboardingLine(done: number, total: number): string {
   if (total === 0 || done >= total) return 'All done: the office will let you know when you can start';
   return `${done} of ${total} done`;
+}
+
+// ---- Right to work in the app (backlog item 11: "giving right to work details from the app") ----
+
+/**
+ * What the person sees about their own right to work. The office records the details (status, visa, VEVO check), so
+ * the app never changes them; once a record exists and isn't checked yet, the person can send photos or files of
+ * their proof onto it (the same rule as the upload link). No document or grant numbers are shown.
+ */
+export type MyRightToWorkState = 'none' | 'to_check' | 'checked' | 'not_accepted';
+export interface MyRightToWork {
+  state: MyRightToWorkState;
+  /** Plain words: what it is and what to do. */
+  line: string;
+  /** e.g. "Australian citizen"; null before the office records anything. */
+  statusLabel: string | null;
+  visaExpiry: string | null;
+  files: string[];
+  canAddFiles: boolean;
+}
+
+export const RTW_STATUS_LABEL: Record<string, string> = {
+  citizen: 'Australian citizen', nz_citizen: 'New Zealand citizen', permanent_resident: 'Permanent resident', visa_holder: 'Visa holder',
+};
+
+/** Most files someone can send for their right to work (as through the upload link). */
+export const MY_RTW_MAX_FILES = 10;
+
+export function myRightToWork(
+  rec: { status: string; verification: string; visaExpiry: string | null; files: string[] } | null,
+  problem: string | null,
+): MyRightToWork {
+  if (!rec) {
+    return { state: 'none', statusLabel: null, visaExpiry: null, files: [], canAddFiles: false,
+      line: 'The office records your right to work. Please contact them so they can add your details, then you can send your proof here.' };
+  }
+  const base = { statusLabel: RTW_STATUS_LABEL[rec.status] ?? null, visaExpiry: rec.status === 'visa_holder' ? rec.visaExpiry : null, files: rec.files };
+  const room = rec.files.length < MY_RTW_MAX_FILES;
+  if (rec.verification === 'verified') {
+    const line = problem === null ? 'Checked by the office'
+      : problem === 'expiring' ? 'Checked. Your visa runs out soon: contact the office when you have your new one.'
+      : problem === 'expired' ? 'Your visa has run out: please contact the office'
+      : 'Please contact the office about your right to work';
+    return { ...base, state: 'checked', line, canAddFiles: false };
+  }
+  if (rec.verification === 'rejected') {
+    return { ...base, state: 'not_accepted', canAddFiles: room, line: 'Not accepted: send a photo or file of your proof again, or contact the office' };
+  }
+  if (problem === 'expired') return { ...base, state: 'to_check', canAddFiles: room, line: 'Your visa has run out: please contact the office' };
+  return {
+    ...base, state: 'to_check', canAddFiles: room,
+    line: rec.files.length === 0
+      ? 'Send a photo or file of your proof, for example your passport, citizenship certificate or visa grant'
+      : 'Sent: the office is checking it',
+  };
+}
+
+/** Why the person can't send a file for their right to work, or null when they can. */
+export function myRightToWorkFileRefusal(rec: { verification: string; files: number } | null): string | null {
+  if (!rec) return 'The office needs to record your right to work details first. Please contact them.';
+  if (rec.verification === 'verified') return 'The office has already checked your right to work. Contact them if something has changed.';
+  if (rec.files >= MY_RTW_MAX_FILES) return `You can send up to ${MY_RTW_MAX_FILES} files for your right to work`;
+  return null;
+}
+
+export function appRightToWorkEmail(p: { name: string; workerId: string }, appUrl: string) {
+  const link = officeLink(appUrl, `/workers/${p.workerId}?tab=rtw`);
+  return {
+    subject: `${p.name} sent proof of their right to work in the app`,
+    body: [
+      `${p.name} has sent a photo or file of their right to work proof in the CROP app. It doesn't count until an owner or admin checks it.`,
+      ``,
+      link ? `To check it, open their page: ${link}` : `To check it, open their page in CROP.`,
+      ``,
+      `CROP Workforce Management`,
+    ].join('\n'),
+  };
 }

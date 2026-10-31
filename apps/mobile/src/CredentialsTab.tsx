@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { api, ApiError, SignedOut, upload } from './api';
 import {
-  CHECK_LABEL, dateFromParts, expiryLine, filesLine, LEVEL_LABEL, uploadName,
-  type CredentialType, type MyCredential, type MyNeed,
+  CHECK_LABEL, dateFromParts, expiryLine, filesLine, LEVEL_LABEL, RTW_BADGE, rtwDetail, uploadName,
+  type CredentialType, type MyCredential, type MyNeed, type MyRightToWork,
 } from './format';
 import { styles } from './styles';
 
-type Data = { today: string; credentials: MyCredential[]; needs: MyNeed[]; types: CredentialType[] };
+type Data = { today: string; credentials: MyCredential[]; needs: MyNeed[]; types: CredentialType[]; rightToWork: MyRightToWork };
+/** Where a photo or file goes: one of their credentials, or their right to work record. */
+type Target = { path: string; done: string };
 type Parts = { d: string; m: string; y: string };
 const NO_DATE: Parts = { d: '', m: '', y: '' };
 
@@ -93,33 +95,49 @@ export function CredentialsTab({ tenant, word, onSignedOut, footer }: {
     await load();
   };
 
-  const send = async (c: MyCredential, file: { uri: string; name: string; type: string }) => {
+  const forCredential = (c: MyCredential): Target => ({ path: `/my/credentials/${c.id}/documents`, done: 'The office will check it.' });
+  const forRightToWork: Target = { path: '/my/right-to-work/documents', done: 'The office will check your right to work.' };
+
+  const send = async (to: Target, file: { uri: string; name: string; type: string }) => {
     setBusy(true);
     try {
-      await upload(`/my/credentials/${c.id}/documents`, file, { tenant });
-      Alert.alert('File added', 'The office will check it.');
+      await upload(to.path, file, { tenant });
+      Alert.alert('File sent', to.done);
     } catch (e) {
-      fail('Not added', e);
+      fail('Not sent', e);
     }
     await load();
   };
 
-  const takePhoto = async (c: MyCredential) => {
+  const takePhoto = async (to: Target) => {
     const allowed = await ImagePicker.requestCameraPermissionsAsync();
     if (!allowed.granted) return Alert.alert('Camera not allowed', 'Allow CROP to use the camera in your phone settings, or choose a file instead.');
     const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 });
     if (r.canceled || !r.assets[0]) return;
     const a = r.assets[0];
-    await send(c, { uri: a.uri, name: uploadName(a.fileName, a.mimeType ?? 'image/jpeg'), type: a.mimeType ?? 'image/jpeg' });
+    await send(to, { uri: a.uri, name: uploadName(a.fileName, a.mimeType ?? 'image/jpeg'), type: a.mimeType ?? 'image/jpeg' });
   };
 
-  const chooseFile = async (c: MyCredential) => {
+  const chooseFile = async (to: Target) => {
     const r = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png', 'image/heic'], copyToCacheDirectory: true });
     if (r.canceled || !r.assets[0]) return;
     const a = r.assets[0];
     if (a.size && a.size > 10 * 1024 * 1024) return Alert.alert('That file is too big', 'Files can be up to 10 MB.');
-    await send(c, { uri: a.uri, name: uploadName(a.name, a.mimeType), type: a.mimeType ?? 'application/octet-stream' });
+    await send(to, { uri: a.uri, name: uploadName(a.name, a.mimeType), type: a.mimeType ?? 'application/octet-stream' });
   };
+
+  const fileButtons = (to: Target) => (
+    <View style={styles.row}>
+      <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} disabled={busy} onPress={() => takePhoto(to)}>
+        <Text style={[styles.buttonText, styles.secondaryText]}>Take a photo</Text>
+      </Pressable>
+      <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} disabled={busy} onPress={() => chooseFile(to)}>
+        <Text style={[styles.buttonText, styles.secondaryText]}>Choose a file</Text>
+      </Pressable>
+    </View>
+  );
+
+  const rtw = data?.rightToWork ?? null;
 
   return (
     <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
@@ -149,18 +167,19 @@ export function CredentialsTab({ tenant, word, onSignedOut, footer }: {
               <Text style={c.status === 'valid' ? styles.muted : styles.error}>{expiryLine(c)}</Text>
               {filesLine(c) && <Text style={[styles.muted, styles.small]}>{filesLine(c)}</Text>}
               <Text style={[styles.badge, c.check === 'checked' ? styles.badgeBooked : styles.badgeWaiting]}>{CHECK_LABEL[c.check]}</Text>
-              {c.canAddFiles && (
-                <View style={styles.row}>
-                  <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} disabled={busy} onPress={() => takePhoto(c)}>
-                    <Text style={[styles.buttonText, styles.secondaryText]}>Take a photo</Text>
-                  </Pressable>
-                  <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} disabled={busy} onPress={() => chooseFile(c)}>
-                    <Text style={[styles.buttonText, styles.secondaryText]}>Choose a file</Text>
-                  </Pressable>
-                </View>
-              )}
+              {c.canAddFiles && fileButtons(forCredential(c))}
             </View>
           ))}
+
+          {rtw && (<>
+            <Text style={styles.section}>Right to work</Text>
+            <View style={styles.card}>
+              <Text style={{ fontWeight: '600' }}>{rtw.line}</Text>
+              {rtwDetail(rtw) && <Text style={[styles.muted, styles.small]}>{rtwDetail(rtw)}</Text>}
+              <Text style={[styles.badge, rtw.state === 'checked' ? styles.badgeBooked : styles.badgeWaiting]}>{RTW_BADGE[rtw.state]}</Text>
+              {rtw.canAddFiles && fileButtons(forRightToWork)}
+            </View>
+          </>)}
 
           {adding ? (
             <View style={styles.card}>

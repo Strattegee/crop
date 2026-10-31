@@ -15,11 +15,11 @@ import { checkAndStore } from '../documents/file-checks.js';
 import { appliesTo, credentialStatus } from '../workforce/compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { T, wordsFor } from '../terms/words.js';
-import { myOnboarding, requireLinked } from './worker-app.controller.js';
+import { loadMyRightToWork, myOnboarding, requireLinked } from './worker-app.controller.js';
 import { tellOffice } from './tell-office.js';
 import {
-  appCredentialEmail,
-  myAddRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine,
+  appCredentialEmail, appRightToWorkEmail,
+  myAddRefusal, myRightToWorkFileRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine,
 } from './worker-app.js';
 
 const LEVEL_ORDER = { hard: 0, warning: 1, optional: 2 } as const;
@@ -60,9 +60,10 @@ export class MyCredentialsController {
 
       const facts = (await credentialFactsByWorker(db, [w.id])).get(w.id) ?? [];
       const rtw = (await rightToWorkByWorker(db, [w.id])).get(w.id) ?? null;
+      const rightToWork = await loadMyRightToWork(db, t.tenantId, w.id);
       const needs = ctx.evaluate(roles, facts, rtw).issues.map(i => ({
         credentialTypeId: i.credentialTypeId, typeName: i.typeName, must: i.severity === 'hard', problem: i.problem,
-        line: myNeedLine(i), canAdd: myNeedAddable(i),
+        line: i.credentialTypeId === 'right-to-work' ? `Right to work: ${lowerFirst(rightToWork.line)}` : myNeedLine(i), canAdd: myNeedAddable(i),
       }));
 
       // Credentials their onboarding checklist still needs (the office may ask for more than their role's rules).
@@ -90,7 +91,7 @@ export class MyCredentialsController {
           line: myNeedLine({ typeName: name, problem, credentialTypeId: s.credentialTypeId! }), canAdd: true });
       }
 
-      return { today: ctx.today, credentials, needs, types };
+      return { today: ctx.today, credentials, needs, types, rightToWork };
     });
   }
 
@@ -167,6 +168,59 @@ export class MyCredentialsController {
     if (!c) throw new NotFoundException('Credential not found');
     const refusal = myEvidenceRefusal(c.verification, c.files, (await wordsFor(db)).lower(T.credential));
     if (refusal) throw new ConflictException(refusal);
+  }
+}
+
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+/**
+ * Right to work proof from the worker app (backlog item 11). The office records the details; once it has and hasn't
+ * checked them yet, the person sends photos or files of their proof onto that record, as through the upload link.
+ * Owners and admins are emailed; nothing here changes the record or its check.
+ */
+@ApiBearerAuth()
+@ApiSecurity('tenant')
+@Controller('my/right-to-work')
+export class MyRightToWorkController {
+  constructor(@Inject(APP_POOL) private readonly pool: Pool, @Inject(DOCUMENT_STORE) private readonly store: DocumentStore) {}
+
+  @Get()
+  get(@Tenant() t: Membership, @Auth() auth: AuthContext) {
+    return withTenant(this.pool, t.tenantId, async db => loadMyRightToWork(db, t.tenantId, (await requireLinked(db, auth)).id));
+  }
+
+  /** Sends a photo or file (PDF, JPEG, PNG or HEIC, up to 10 MB) of their right to work proof. */
+  @Post('documents')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_BYTES, files: 1 } }))
+  async upload(@Tenant() t: Membership, @Auth() auth: AuthContext, @UploadedFile() file: Express.Multer.File | undefined) {
+    // Check they may send one before storing anything, then again with the record locked.
+    await withTenant(this.pool, t.tenantId, db => this.plan(db, auth, false));
+    const stored = await checkAndStore(this.store, t.tenantId, file, 'right-to-work');
+    return withTenant(this.pool, t.tenantId, async db => {
+      const p = await this.plan(db, auth, true);
+      const doc = (await db.query<{ id: string; filename: string }>(
+        `insert into credential_documents(tenant_id, right_to_work_id, storage_key, filename, content_type, size_bytes, sha256, uploaded_by)
+         values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, filename`,
+        [t.tenantId, p.recordId, stored.key, stored.filename, stored.contentType, stored.size, stored.sha256, auth.userId])).rows[0];
+      await db.query(`insert into right_to_work_events(tenant_id, record_id, actor_user_id, action, details) values ($1,$2,$3,'evidence_added',$4)`,
+        [t.tenantId, p.recordId, auth.userId, JSON.stringify({ documentId: doc.id, filename: doc.filename, via: 'app' })]);
+      const m = appRightToWorkEmail({ name: p.name, workerId: p.workerId }, process.env.APP_URL ?? '');
+      await tellOffice(db, t.tenantId, { ...m, template: 'app_right_to_work_added', dedupeKey: `app-rtw:${doc.id}`, createdBy: auth.userId, exceptEmail: auth.email });
+      return { id: doc.id, filename: doc.filename, rightToWork: await loadMyRightToWork(db, t.tenantId, p.workerId) };
+    });
+  }
+
+  private async plan(db: PoolClient, auth: AuthContext, lock: boolean) {
+    const w = await requireLinked(db, auth);
+    const r = (await db.query<{ id: string; verification: string; files: number }>(
+      `select r.id, r.verification,
+              (select count(*)::int from credential_documents d where d.right_to_work_id = r.id and d.removed_at is null) as files
+         from right_to_work_records r where r.worker_id = $1 and r.superseded_at is null ${lock ? 'for update' : ''}`, [w.id])).rows[0] ?? null;
+    const refusal = myRightToWorkFileRefusal(r);
+    if (refusal) throw new ConflictException(refusal);
+    return { recordId: r!.id, workerId: w.id, name: w.name };
   }
 }
 
