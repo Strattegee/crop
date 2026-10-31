@@ -103,6 +103,12 @@ export async function queueDailyEmails(
 ): Promise<{ queued: number; datesSent: boolean }> {
   const team = (await db.query<Member>('select user_id, name, email, role, focus from app_office_team()')).rows;
   if (!team.length) return { queued: 0, datesSent: false };
+  // The run is hourly: once everyone has had today's email and today's numbers are kept, there is nothing left to do.
+  const done = (await db.query<{ n: number; kept: boolean }>(
+    `select (select count(*)::int from notifications where dedupe_key = any($1)) as n,
+            exists (select 1 from dashboard_snapshots where day = $2) as kept`,
+    [team.map(m => `daily:${today}:${m.user_id}`), today])).rows[0];
+  if (done.n >= team.length && done.kept) return { queued: 0, datesSent: false };
   const focusOf = (m: Member) => m.focus ?? defaultFocus(m.role);
   // The dates go to the Compliance and Overview people; when nobody has those, to owners and admins as before.
   const dateTakers = new Set(team.filter(m => ['compliance', 'overview'].includes(focusOf(m))).map(m => m.user_id));
