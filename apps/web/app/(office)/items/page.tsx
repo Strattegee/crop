@@ -1,4 +1,6 @@
 import { api } from '../../../lib/api';
+import { businessSettings } from '../../../lib/business';
+import { moneyFor } from '../../../lib/money';
 import { currentAgency } from '../../../lib/current-user';
 import { industryGroups, needsHeadings, type PackInfo } from '../../../lib/industry-groups';
 import { T, words } from '../../../lib/terms';
@@ -12,7 +14,6 @@ type Stock = { itemId: string; facilityId: string; facilityName: string; onHand:
 type Facility = { id: string; name: string; active: boolean };
 type Worker = { id: string; firstName: string; lastName: string; preferredName?: string | null; status: string };
 const CAT: Record<string, string> = { ppe: 'PPE', fuel: 'Fuel', sundries: 'Sundries', tools: 'Tools', other: 'Other' };
-const money = (c: number | null) => c == null ? '—' : new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(c / 100);
 const q = (n: number) => (Math.round(n * 1000) / 1000).toString();
 
 /** Items and consumables (backlog item 5): what's on hand at each site, receiving, issuing and stocktakes. */
@@ -24,6 +25,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   ]);
   const itemGroups = industryGroups(items, packs);
   const canAdmin = agency?.role === 'owner' || agency?.role === 'admin';
+  const money = moneyFor((await businessSettings()).country);
   const activeSites = sites.filter(s => s.active);
   const people = workers.filter(w => w.status === 'active');
   const siteSelect = <select name="facilityId" required>{activeSites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>;

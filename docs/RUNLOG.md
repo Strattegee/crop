@@ -424,3 +424,4 @@ Newest first. One entry per working session or scheduled run.
 - (31 Oct) Needs attention on the employer's side now shows agency escalations: an open shift that's with agencies says how many have been asked, that nobody is put forward yet, and when the next agency is asked.
 - (31 Oct) Agencies are now told up front when equipment on a shift needs a licensed operator: the licence is a must-have in their copy of the request (so only people who hold it can be put forward), and it updates when equipment is booked or taken off while they hold the shift.
 - (31 Oct) A shift's role and area can now be changed from the same place in the shift panel; refused when the person on it can't work the new role, logged, and followed by agencies holding it.
+- (31 Oct) Money (item costs and charges) now shows in the currency of the business's country: dollars for Australia, New Zealand and the US, pounds for the UK.
