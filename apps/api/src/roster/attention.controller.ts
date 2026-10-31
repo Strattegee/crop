@@ -23,6 +23,7 @@ interface Row {
   equipment: Array<{ id: string; name: string; typeName: string }>;
   facilityId: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string;
   shiftLetter: string | null; status: string;
+  agencyFill: { asked: number; nextAt: string | null } | null;
 }
 
 /** Needs attention (backlog item 12): shifts starting soon that the office should look at. */
@@ -50,7 +51,11 @@ export class AttentionController {
       const rows = (await db.query<Row>(
         `select ${SHIFT_COLS},
                 (select count(*)::int from shift_offers o where o.shift_id = s.id and o.status = 'pending'
-                    and o.expires_at is not null and o.expires_at <= now()) as "offersExpired"
+                    and o.expires_at is not null and o.expires_at <= now()) as "offersExpired",
+                (select json_build_object('asked', count(*) filter (where r.sent_at is not null),
+                                          'nextAt', min(r.due_at) filter (where r.sent_at is null and r.skipped_at is null))
+                   from agency_requests q join agency_request_rounds r on r.request_id = q.id
+                  where q.shift_id = s.id and q.status = 'open' having count(*) > 0) as "agencyFill"
            from ${SHIFT_FROM}
           where s.status <> 'cancelled' and s.starts_at > now() and s.starts_at < now() + make_interval(days => $1)
             and ($2::uuid is null or s.facility_id = $2)
@@ -75,6 +80,7 @@ export class AttentionController {
           id: r.id, startsAt: r.startsAt, equipmentOnly: r.equipmentOnly, workerName: r.workerName, agencyName: r.agencyName, assignmentStatus: r.assignmentStatus,
           offersPending: r.offersPending, offersExpired: r.offersExpired, pulledOutName: r.pulledOutName,
           personBlocks, equipmentBlocks, equipmentMissing: r.equipmentOnly && !r.equipment.length,
+          agency: r.agencyFill ? { asked: r.agencyFill.asked, nextAt: r.agencyFill.nextAt ? new Date(r.agencyFill.nextAt) : null } : null,
         });
       }
       // Gaps in cover rules (migration 0030) over the same window, including one already under way.
