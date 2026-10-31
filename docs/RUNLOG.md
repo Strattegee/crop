@@ -426,3 +426,4 @@ Newest first. One entry per working session or scheduled run.
 - (31 Oct) A shift's role and area can now be changed from the same place in the shift panel; refused when the person on it can't work the new role, logged, and followed by agencies holding it.
 - (31 Oct) Roster templates and copying now use the business's own words in their summaries and errors ("2 jobs added", "There are no jobs at … to copy").
 - (31 Oct) The daily email run stops early once everyone in a business has had today's email, so the hourly check costs nothing for the rest of the day.
+- (31 Oct) Money (item costs and charges) now shows in the currency of the business's country: dollars for Australia, New Zealand and the US, pounds for the UK.

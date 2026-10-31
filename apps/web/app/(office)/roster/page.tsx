@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { moneyFor } from '../../../lib/money';
 import { cookies } from 'next/headers';
 import { api } from '../../../lib/api';
 import { Notices } from '../notices';
@@ -75,7 +76,6 @@ const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.via === 'ap
 type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
 /** What a shift used, one line per item and holder (`GET /shifts/:id/items?byPerson=true`). */
 type ShiftItems = { lines: { itemId: string; name: string; unit: string; quantity: number; costCents: number; chargeCents: number | null; workerId: string | null; workerName: string | null }[]; totalCostCents: number; totalChargeCents: number };
-const money = (c: number) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(c / 100);
 type EquipCandidate = { equipmentId: string; name: string; typeName: string; eligible: boolean; blocks: Reason[]; warnings: Reason[] };
 
 const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', bank: 'Bank' };
@@ -114,6 +114,7 @@ const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 export default async function RosterPage({ searchParams }: {
   searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; error?: string; done?: string }>;
 }) {
+  const money = moneyFor((await businessSettings()).country);
   const tw = await words();
   const sp = await searchParams;
   // Today and times on screen are in the business's time zone (Settings), never the server's.
