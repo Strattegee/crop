@@ -10,6 +10,7 @@ import { credentialStatus, optionalFor, todayIn } from './compliance.js';
 import { loadSettings } from './settings.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { beginOnboarding } from './onboarding.controller.js';
+import { cardsFor } from './person-card.js';
 
 const STATUSES = ['active', 'onboarding', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
@@ -61,9 +62,10 @@ export class WorkersController {
       const ctx = await complianceContext(db, t.tenantId);
       const facts = await credentialFactsByWorker(db, workers.map(w => w.id));
       const rtw = await rightToWorkByWorker(db, workers.map(w => w.id));
+      const cards = await cardsFor(db, workers.map(w => w.id), today);
       const withCompliance = workers.map(w => {
         const c = ctx.evaluate(w.roles, facts.get(w.id) ?? [], rtw.get(w.id) ?? null);
-        return { ...w, compliance: c.status, issueCount: c.issues.filter(i => i.severity === 'hard' && i.problem !== 'expiring').length };
+        return { ...w, compliance: c.status, issueCount: c.issues.filter(i => i.severity === 'hard' && i.problem !== 'expiring').length, card: cards.get(w.id) };
       });
       return q.compliance ? withCompliance.filter(w => w.compliance === q.compliance) : withCompliance;
     });
@@ -124,7 +126,8 @@ export class WorkersController {
       const facts = (await credentialFactsByWorker(db, [id])).get(id) ?? [];
       const compliance = ctx.evaluate(worker.roles, facts, (await rightToWorkByWorker(db, [id])).get(id) ?? null);
       const optional = optionalFor(worker.roles, ctx.rules, facts, ctx.today);
-      return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, optional, today: ctx.today };
+      const card = (await cardsFor(db, [id], ctx.today)).get(id);
+      return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, optional, today: ctx.today, card };
     });
   }
 

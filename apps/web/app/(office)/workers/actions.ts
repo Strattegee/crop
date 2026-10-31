@@ -43,7 +43,7 @@ export async function updateWorker(id: string, f: FormData) {
     body: {
       firstName: str(f, 'firstName'), lastName: str(f, 'lastName'), preferredName: str(f, 'preferredName') ?? null,
       email: str(f, 'email') ?? null, phone: str(f, 'phone') ?? null, roles: roles(f), status: str(f, 'status'),
-      gender: str(f, 'gender') ?? null,
+      gender: str(f, 'gender') ?? null, notes: str(f, 'notes') ?? null,
     },
   }), 'Details saved.');
 }

@@ -445,3 +445,42 @@ body:has(.roster-page.full) .appbar { display: none; }
 .roster-legend .mk, .ribbon-key .mk { margin: 0 2px; vertical-align: middle; }
 /* Simple look keeps one line: the letters sit side by side at the start instead of stacking. */
 .ribbon.look-simple .rcard .mkcol { flex-direction: row; padding: 2px 3px; }
+
+/* Employee card (David, 31 Oct): the same compact summary of a person everywhere it appears. */
+.pcard { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pcard.full { padding: 16px 18px; margin-bottom: 16px; }
+.pcard-top { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.pcard-avatar { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 15px; display: grid; place-items: center; }
+.pcard.full .pcard-avatar { width: 56px; height: 56px; font-size: 20px; }
+.pcard-who { flex: 1 1 auto; min-width: 0; }
+.pcard-name { font-weight: 700; font-size: 15px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pcard.full .pcard-name { font-size: 22px; }
+.pcard-name a { color: var(--text); text-decoration: none; }
+.pcard-name a:hover { text-decoration: underline; }
+.pcard-roles { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-light { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.pcard-light i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.pcard-light.ok { color: var(--ok); background: var(--ok-bg); } .pcard-light.ok i { background: #2e9d57; }
+.pcard-light.warn { color: var(--warn); background: var(--warn-bg); } .pcard-light.warn i { background: #e0a100; }
+.pcard-light.bad { color: var(--bad); background: var(--bad-bg); } .pcard-light.bad i { background: #d32f2f; }
+.pcard.compact .pcard-light { font-size: 0; padding: 4px; gap: 0; } /* the dot only in lists; the word is in the title */
+.pcard-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.pcard-emp { display: inline-block; min-width: 16px; text-align: center; margin-right: 4px; padding: 0 3px; border-radius: 3px; background: #eef0f3; font-size: 11px; }
+.pcard-soon { color: var(--warn); font-weight: 600; }
+.pcard-check { color: #1d5f8a; font-weight: 600; }
+.pcard-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.pcard-badge { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: #e8f3ec; color: #1f6b3d; border: 1px solid #c8e3d2; }
+.pcard-badge.more { background: #eef0f3; color: var(--muted); border-color: #e0e4e8; }
+.pcard-contact { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.pcard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 16px; }
+
+/* The person's page: tabs under the card. */
+.ptabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; }
+.ptabs a { padding: 8px 14px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.ptabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--brand); }
+.ptabs a .n { display: inline-block; margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; background: var(--bad-bg); color: var(--bad); text-align: center; }
+.view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.view-switch a { padding: 4px 12px; font-size: 13px; text-decoration: none; color: var(--muted); }
+.view-switch a[aria-current="true"] { background: var(--brand); color: #fff; }
+@media (max-width: 600px) { .pcard-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .pcard.full .pcard-light { font-size: 0; padding: 4px; gap: 0; } .pcard.full .pcard-name { font-size: 19px; } }

@@ -446,12 +446,15 @@ export class ShiftsController {
     const { from, to } = range(q);
     const facilityId = q.facilityId && UUID.test(q.facilityId) ? q.facilityId : null;
     const status = q.status ? oneOf({ status: q.status }, 'status', ['open', 'assigned', 'booked', 'cancelled'] as const) : null;
+    // `workerId`: one person's shifts (the Shifts tab on their page).
+    const workerId = q.workerId && UUID.test(q.workerId) ? q.workerId : null;
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
       `select ${SHIFT_COLS} from ${SHIFT_FROM}
         where (s.starts_at at time zone f.timezone)::date between $1 and $2
           and ($3::uuid is null or s.facility_id = $3) and ($4::shift_status is null or s.status = $4)
+          and ($5::uuid is null or sa.worker_id = $5)
         order by s.starts_at, f.name, a.name nulls first, s.role, s.created_at`,
-      [from, to, facilityId, status],
+      [from, to, facilityId, status, workerId],
     )).rows);
   }
 
