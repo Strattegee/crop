@@ -4,7 +4,7 @@
  */
 export type Unit = 'percent' | 'count' | 'hours' | 'days';
 export type Standing = 'on_target' | 'off_target' | 'no_target' | 'no_data';
-export type Focus = 'allocator' | 'compliance' | 'recruitment' | 'overview';
+export type Focus = 'allocator' | 'compliance' | 'recruitment' | 'overview' | 'agency';
 
 export interface Kpi {
   key: string; label: string; question: string; how: string; unit: Unit; better: 'higher' | 'lower'; href: string;
@@ -60,6 +60,7 @@ export const FOCUS_CHOICES: { value: Focus; label: string; hint: string }[] = [
   { value: 'compliance', label: 'Compliance', hint: 'Who is ready to work, what is waiting to be checked or running out' },
   { value: 'recruitment', label: 'Recruitment', hint: 'Applicants, onboarding and who is ready to start' },
   { value: 'overview', label: 'Overview', hint: 'A bit of everything, for owners and managers' },
+  { value: 'agency', label: 'Agency', hint: 'Requests from the employers you supply: what to fill, what you won, who is waiting' },
 ];
 
 /** "Up from 85% a week ago", with whether that's better or worse; null when there's nothing to compare. */

@@ -29,7 +29,7 @@ type Words = Awaited<ReturnType<typeof words>>;
 const SHOWN = 5;
 const longDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const FOCUSES: Focus[] = ['allocator', 'compliance', 'recruitment', 'overview'];
+const FOCUSES: Focus[] = ['allocator', 'compliance', 'recruitment', 'overview', 'agency'];
 
 /**
  * The office's first screen (David, 31 Oct): each person's dashboard is chosen by the owner for their job focus
@@ -51,7 +51,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   ]);
   const focus: Focus = dash?.focus ?? 'overview';
   // A business that supplies employers (agency side links) also gets Allocations' Needs attention.
-  const agencyAttention = allocations && allocations.agencyLinks > 0 && (focus === 'allocator' || focus === 'overview')
+  const agencyAttention = allocations && allocations.agencyLinks > 0 && (focus === 'allocator' || focus === 'overview' || focus === 'agency')
     ? await api<AgencyAttention>('/allocations/attention').catch(() => null) : null;
 
   const sections = {
@@ -74,6 +74,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     compliance: ['checking', 'people', 'attention'],
     recruitment: ['funnel', 'onboarding'],
     overview: ['attention', 'agency', 'decisions', 'people'],
+    agency: ['agency', 'people'],
   };
 
   return (

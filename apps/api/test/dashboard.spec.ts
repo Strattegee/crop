@@ -218,4 +218,29 @@ describe('dashboards end to end', () => {
     const d = (await http().get('/dashboard?focus=recruitment').set(as('other')).expect(200)).body;
     expect(d.kpis.find((x: { key: string }) => x.key === 'stuck').value).toBe(0);
   });
+
+  it('gives a business that supplies employers the Agency dashboard', async () => {
+    await http().get('/dashboard?focus=agency').set(as('alloc')).expect(400);
+    await http().put(`/team/${ids.admin}`).set(as('owner')).send({ focus: 'agency' }).expect(409);
+    expect((await http().get('/dashboard').set(as('alloc')).expect(200)).body.focuses.map((f: { focus: string }) => f.focus)).not.toContain('agency');
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    const [care, other] = (await owner.query<{ id: string }>(`select id from tenants where slug in ('care','other') order by slug`)).rows.map(r => r.id);
+    await owner.query(`insert into agency_connections(tenant_id, connection_id, side, other_tenant_id, other_name, status) values ($1, gen_random_uuid(), 'agency', $2, 'Other', 'active')`, [care, other]);
+    const conn = (await owner.query<{ connection_id: string }>(`select connection_id from agency_connections where tenant_id = $1`, [care])).rows[0].connection_id;
+    for (const [hours, received] of [[30, '1 hour'], [400, '3 days']] as const) {
+      await owner.query(`insert into agency_inbox(tenant_id, connection_id, request_ref, round_ref, employer_name, site_name, site_timezone, role, starts_at, ends_at, received_at)
+        values ($1,$2,gen_random_uuid(),gen_random_uuid(),'Other','Ward 3','Australia/Melbourne','Carer', now() + make_interval(hours => $3), now() + make_interval(hours => $3 + 8), now() - $4::interval)`,
+        [care, conn, hours, received]);
+    }
+    await owner.end();
+    await http().put(`/team/${ids.admin}`).set(as('owner')).send({ focus: 'agency' }).expect(200);
+    const d = (await http().get('/dashboard').set(as('admin')).expect(200)).body;
+    expect(d).toMatchObject({ focus: 'agency', label: 'Agency' });
+    expect(d.focuses.map((f: { focus: string }) => f.focus)).toContain('agency');
+    const k = Object.fromEntries(d.kpis.map((x: { key: string; value: number | null }) => [x.key, x.value]));
+    expect(k).toMatchObject({ agency_open: 1, agency_filled: 0, agency_response: null, agency_pulled_out: 0, agency_waiting: 0 });
+    // The business it supplies sees no Agency dashboard of its own.
+    await http().get('/dashboard?focus=agency').set(as('other')).expect(400);
+  });
 });

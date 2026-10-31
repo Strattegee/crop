@@ -165,7 +165,46 @@ export const MEASURES: Record<string, (db: PoolClient, x: { tenantId: string; ta
     const total = rows.reduce((s, r) => s + r.n, 0);
     return { value: total, detail: total ? `Most: ${rows[0].role}` : 'None in 4 weeks', breakdown: rows.slice(0, 5).map(r => ({ label: r.role, value: r.n })) };
   },
+
+  // The agency's side (its own copies of employers' requests, `agency_inbox`).
+  async agency_open(db) {
+    const r = (await db.query<{ n: number; soon: number }>(
+      `select count(*)::int as n, count(*) filter (where starts_at < now() + interval '24 hours')::int as soon from agency_inbox
+        where status = 'open' and placed_worker_id is null and starts_at > now() and starts_at < now() + interval '7 days'`)).rows[0];
+    return { value: r.n, detail: r.n ? (r.soon ? `${r.soon} within a day` : 'None within a day') : 'Nothing waiting on us' };
+  },
+
+  async agency_filled(db) {
+    const r = (await db.query<{ won: number; total: number }>(
+      `select count(*) filter (where placed_at is not null)::int as won, count(*)::int as total from agency_inbox
+        where received_at > now() - interval '28 days'`)).rows[0];
+    return { value: percent(r.won, r.total), detail: r.total ? `${r.won} of ${plural(r.total, 'request', 'requests')} in 4 weeks` : 'No requests in 4 weeks' };
+  },
+
+  async agency_response(db) {
+    const rows = (await db.query<{ hours: number }>(
+      `select extract(epoch from (placed_at - received_at)) / 3600 as hours from agency_inbox
+        where placed_at is not null and placed_at > now() - interval '28 days'`)).rows;
+    return { value: median(rows.map(r => Number(r.hours))), detail: rows.length ? `From ${plural(rows.length, 'request', 'requests')} in 4 weeks` : 'Nobody put forward in 4 weeks' };
+  },
+
+  async agency_pulled_out(db) {
+    const r = (await db.query<{ n: number }>(
+      `select count(*)::int as n from agency_inbox where placement = 'pulled_out' and placement_at > now() - interval '28 days'`)).rows[0];
+    return { value: n(r), detail: 'Last 4 weeks' };
+  },
+
+  async agency_waiting(db) {
+    const r = (await db.query<{ n: number }>(
+      `select count(*)::int as n from agency_inbox where placement = 'waiting' and status <> 'withdrawn' and starts_at > now()`)).rows[0];
+    return { value: n(r), detail: r.n ? 'Employers still to approve' : 'Nobody waiting' };
+  },
 };
+
+/** Whether the business supplies employers through CROP (so it may have the Agency dashboard). */
+export async function suppliesEmployers(db: PoolClient): Promise<boolean> {
+  return !!(await db.query(`select 1 from agency_connections where side = 'agency' and status <> 'ended' limit 1`)).rowCount;
+}
 
 /** Recruitment funnel: people who reached each stage in the last 90 days and how many went further. */
 export async function funnel(db: PoolClient) {

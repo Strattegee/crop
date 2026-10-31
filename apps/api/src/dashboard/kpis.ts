@@ -3,11 +3,11 @@
  * the catalogue, how a value compares with the business's target, and small statistics. The numbers themselves
  * come from `dashboard-data.ts`.
  */
-export const FOCUSES = ['allocator', 'compliance', 'recruitment', 'overview'] as const;
+export const FOCUSES = ['allocator', 'compliance', 'recruitment', 'overview', 'agency'] as const;
 export type Focus = typeof FOCUSES[number];
 
 export const FOCUS_LABEL: Record<Focus, string> = {
-  allocator: 'Allocator', compliance: 'Compliance', recruitment: 'Recruitment', overview: 'Overview',
+  allocator: 'Allocator', compliance: 'Compliance', recruitment: 'Recruitment', overview: 'Overview', agency: 'Agency',
 };
 
 /** The dashboard someone sees when the owner hasn't chosen one: allocators get the Allocator one, others Overview. */
@@ -72,6 +72,17 @@ export const KPIS: readonly KpiDef[] = [
     how: 'People being onboarded with every required step done' },
   { key: 'started_unfilled', focus: 'recruitment', label: '{Shifts} that started empty', question: 'Which roles should I hire for?', unit: 'count', better: 'lower', suggested: 0, href: '/recruitment',
     how: '{Shifts} needing a person that started with nobody on them, last 4 weeks, by role' },
+
+  { key: 'agency_open', focus: 'agency', label: 'Requests to fill, 7 days', question: 'What do employers still need from us?', unit: 'count', better: 'lower', suggested: 0, href: '/allocations',
+    how: 'Open requests from employers starting in the next 7 days that nobody has been put forward for' },
+  { key: 'agency_filled', focus: 'agency', label: 'Requests we filled', question: 'How many requests do we win?', unit: 'percent', better: 'higher', suggested: 60, href: '/allocations',
+    how: 'Requests received in the last 4 weeks that we put someone forward for, out of all received' },
+  { key: 'agency_response', focus: 'agency', label: 'Time to put forward', question: 'How quickly do we answer?', unit: 'hours', better: 'lower', suggested: 2, href: '/allocations',
+    how: 'Middle value of the hours from a request arriving to us putting someone forward, last 4 weeks' },
+  { key: 'agency_pulled_out', focus: 'agency', label: 'Pulled out', question: 'How often do we let employers down?', unit: 'count', better: 'lower', suggested: 0, href: '/allocations',
+    how: 'People we put forward and then pulled out, last 4 weeks' },
+  { key: 'agency_waiting', focus: 'agency', label: 'Waiting for the employer', question: 'Who is waiting on an employer\'s answer?', unit: 'count', better: 'lower', suggested: 0, href: '/allocations',
+    how: 'People we put forward that the employer hasn\'t approved yet' },
 ] as const;
 
 /** Measures that are settings for another measure, so they aren't shown as tiles. */
