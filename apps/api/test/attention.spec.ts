@@ -31,6 +31,14 @@ describe('needs attention: rules', () => {
     expect(offerNote({ offersPending: 1, offersExpired: 2, pulledOutName: null })).toBe('Offered to 1 person, no reply yet');
     expect(offerNote({ offersPending: 0, offersExpired: 2, pulledOutName: null })).toBe('Offer to 2 people ran out with no reply');
     expect(offerNote({ offersPending: 3, offersExpired: 0, pulledOutName: 'Ana Example' })).toBe('Ana Example pulled out; offered to 3 people, no reply yet');
+    // With agencies (employer-side escalation): who has been asked and when the next one is.
+    const now = new Date('2026-11-02T09:00:00Z');
+    expect(offerNote({ offersPending: 0, offersExpired: 0, pulledOutName: null, agency: { asked: 1, nextAt: new Date('2026-11-02T09:20:00Z') } }, now))
+      .toBe('With agencies: 1 agency asked, nobody put forward yet; the next is asked in 20 min');
+    expect(offerNote({ offersPending: 2, offersExpired: 0, pulledOutName: null, agency: { asked: 3, nextAt: null } }, now))
+      .toBe('Offered to 2 people, no reply yet; with agencies: 3 agencies asked, nobody put forward yet; every agency has been asked');
+    expect(offerNote({ offersPending: 0, offersExpired: 0, pulledOutName: null, agency: { asked: 0, nextAt: new Date('2026-11-02T11:00:00Z') } }, now))
+      .toBe('With agencies, none asked yet; the next is asked in 2 hours');
   });
 
   it('puts urgent items first, then blocked, open and unconfirmed, then by start', () => {

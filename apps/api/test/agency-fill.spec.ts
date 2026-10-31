@@ -170,6 +170,9 @@ describe('agency fill: API', () => {
     expect(st.canRequest).toBe(false);
     expect(st.problem).toMatch(/already been sent/);
     await http().post(`/shifts/${first}/agency-fill`).set(as('empalloc')).send({}).expect(400);
+    // Needs attention says it's with agencies (the employer's escalation view).
+    const att = (await http().get('/roster/attention?days=3').set(as('empalloc')).expect(200)).body.items as Array<{ shiftId: string; detail: string }>;
+    expect(att.find(i => i.shiftId === first)!.detail).toMatch(/^With agencies: 1 agency asked, nobody put forward yet; the next is asked in (2 hours|1\d\d min)$/);
 
     // Caring For You sees it (with its own matched credential); Metro and Nosy see nothing yet.
     const got = await inbox('ag');

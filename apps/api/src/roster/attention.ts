@@ -37,6 +37,8 @@ export interface AttentionShift {
   equipmentBlocks: Array<{ name: string; reasons: string[] }>;
   /** Equipment-only shift with nothing booked on it. */
   equipmentMissing?: boolean;
+  /** With agencies (an open agency fill request): how many have been asked, and when the next one is due (null: no more). */
+  agency?: { asked: number; nextAt: Date | null } | null;
 }
 
 export interface AttentionItem {
@@ -64,13 +66,26 @@ export function startsIn(startsAt: Date, now: Date): string {
 
 const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
 
-/** What the office has done about an open shift so far, in a few words. */
-export function offerNote(s: Pick<AttentionShift, 'offersPending' | 'offersExpired' | 'pulledOutName'>): string {
+/** Minutes or hours until a time, for "next agency asked in 20 min". */
+function inShort(at: Date, now: Date): string {
+  const mins = Math.max(1, Math.round((at.getTime() - now.getTime()) / 60_000));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.round(mins / 60);
+  return `${h} hour${h === 1 ? '' : 's'}`;
+}
+
+/** What the office has done about an open shift so far, in a few words (offers, and agencies when it's with them). */
+export function offerNote(s: Pick<AttentionShift, 'offersPending' | 'offersExpired' | 'pulledOutName' | 'agency'>, now = new Date()): string {
   const parts: string[] = [];
   if (s.pulledOutName) parts.push(`${s.pulledOutName} pulled out`);
   if (s.offersPending) parts.push(`offered to ${people(s.offersPending)}, no reply yet`);
   else if (s.offersExpired) parts.push(`offer to ${people(s.offersExpired)} ran out with no reply`);
-  else parts.push('not offered to anyone yet');
+  else if (!s.agency) parts.push('not offered to anyone yet');
+  if (s.agency) {
+    const asked = s.agency.asked === 0 ? 'with agencies, none asked yet' : `with agencies: ${s.agency.asked === 1 ? '1 agency' : `${s.agency.asked} agencies`} asked, nobody put forward yet`;
+    const next = s.agency.nextAt ? `; the next is asked in ${inShort(s.agency.nextAt, now)}` : s.agency.asked ? '; every agency has been asked' : '';
+    parts.push(asked + next);
+  }
   const text = parts.join('; ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -109,7 +124,7 @@ export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours 
       continue;
     }
     if (!s.workerName) {
-      out.push({ ...base, kind: 'open', title: 'Nobody on this shift', detail: offerNote(s) });
+      out.push({ ...base, kind: 'open', title: 'Nobody on this shift', detail: offerNote(s, now) });
     } else if (s.assignmentStatus === 'assigned' && !s.personBlocks.length) {
       out.push(s.agencyName
         ? { ...base, kind: 'unconfirmed', title: `Approve ${s.workerName} from ${s.agencyName}?`, detail: `${s.agencyName} put them forward; approve or decline on the shift` }
