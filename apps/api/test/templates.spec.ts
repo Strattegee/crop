@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { applySummary, copyWeeksSummary, planWeek, weekPairs, type Slot } from '../src/roster/templates.js';
+import { makeWords, T } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
 const slot = (over: Partial<Slot>): Slot => ({
@@ -39,6 +40,11 @@ describe('roster templates: rules', () => {
 });
 
 describe('copying several weeks: rules', () => {
+  it("uses the business's words", () => {
+    const w = makeWords([{ code: T.shift, singular: 'Job', plural: 'Jobs' }, { code: T.equipment, singular: 'Plant', plural: 'Plant' }]);
+    expect(applySummary({ created: 2, assigned: 0, leftOpen: [], equipmentBooked: 1, equipmentLeftOff: [] }, w)).toBe('2 jobs added. 1 plant booking made.');
+    expect(applySummary({ created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] }, w)).toBe('There were no jobs to add.');
+  });
   it('pairs each week with the one it goes into, and refuses overlaps', () => {
     expect(weekPairs('2026-11-02', 2, '2026-11-30')).toEqual({ pairs: [{ from: '2026-11-02', to: '2026-11-30' }, { from: '2026-11-09', to: '2026-12-07' }] });
     expect(weekPairs('2026-11-02', 4, '2026-11-23')).toHaveProperty('error');

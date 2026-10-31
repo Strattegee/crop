@@ -1,4 +1,5 @@
 import { addDays } from '../workforce/compliance.js';
+import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 
 /**
  * Roster templates and copying a week (backlog item 2, Steve's "ideal week"; migration 0023).
@@ -47,16 +48,16 @@ export interface ApplyResult { created: number; assigned: number; leftOpen: Left
 const list = (reasons: string[]) => reasons.slice(0, 5).join('; ') + (reasons.length > 5 ? `; and ${reasons.length - 5} more` : '');
 
 /** The office's confirmation after applying a template or copying a week. */
-export function applySummary(r: ApplyResult): string {
-  if (!r.created) return 'There were no shifts to add.';
-  const shifts = `${r.created} ${r.created === 1 ? 'shift' : 'shifts'} added`;
+export function applySummary(r: ApplyResult, w: Words = DEFAULT_WORDS): string {
+  if (!r.created) return `There were no ${w.lower(T.shift, true)} to add.`;
+  const shifts = `${w.count(r.created, T.shift)} added`;
   const people = r.assigned ? `, ${r.assigned} with their usual person (waiting for them to confirm)` : '';
   const open = r.leftOpen.length
     ? `. ${r.leftOpen.length} left open because the usual person can't work ${r.leftOpen.length === 1 ? 'it' : 'them'}: ${list(r.leftOpen.map(o => o.reason))}`
     : '';
-  const booked = r.equipmentBooked ? `. ${r.equipmentBooked} equipment ${r.equipmentBooked === 1 ? 'booking' : 'bookings'} made` : '';
+  const booked = r.equipmentBooked ? `. ${r.equipmentBooked} ${w.lower(T.equipment)} ${r.equipmentBooked === 1 ? 'booking' : 'bookings'} made` : '';
   const off = r.equipmentLeftOff.length
-    ? `. ${r.equipmentLeftOff.length} equipment ${r.equipmentLeftOff.length === 1 ? 'booking' : 'bookings'} left off: ${list(r.equipmentLeftOff.map(o => o.reason))}`
+    ? `. ${r.equipmentLeftOff.length} ${w.lower(T.equipment)} ${r.equipmentLeftOff.length === 1 ? 'booking' : 'bookings'} left off: ${list(r.equipmentLeftOff.map(o => o.reason))}`
     : '';
   return `${shifts}${people}${open}${booked}${off}.`;
 }
@@ -94,12 +95,12 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const dm = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
 
 /** The office's confirmation after copying several weeks: the totals, then the same detail as a single week. */
-export function copyWeeksSummary(r: ApplyResult & { weeks: Array<{ from: string; to: string; created: number }>; emptyWeeks: string[] }): string {
-  const copied = r.weeks.filter(w => w.created > 0);
-  if (!copied.length) return 'There were no shifts to add.';
+export function copyWeeksSummary(r: ApplyResult & { weeks: Array<{ from: string; to: string; created: number }>; emptyWeeks: string[] }, w: Words = DEFAULT_WORDS): string {
+  const copied = r.weeks.filter(x => x.created > 0);
+  if (!copied.length) return `There were no ${w.lower(T.shift, true)} to add.`;
   const span = copied.length === 1 ? `the week of ${dm(copied[0].to)}` : `${copied.length} weeks, from the week of ${dm(copied[0].to)} to the week of ${dm(copied[copied.length - 1].to)}`;
   const empty = r.emptyWeeks.length
-    ? ` ${r.emptyWeeks.length === 1 ? 'The week of' : 'The weeks of'} ${r.emptyWeeks.map(dm).join(', ')} had no shifts, so nothing was copied from ${r.emptyWeeks.length === 1 ? 'it' : 'them'}.`
+    ? ` ${r.emptyWeeks.length === 1 ? 'The week of' : 'The weeks of'} ${r.emptyWeeks.map(dm).join(', ')} had no ${w.lower(T.shift, true)}, so nothing was copied from ${r.emptyWeeks.length === 1 ? 'it' : 'them'}.`
     : '';
-  return `Copied into ${span}. ${applySummary(r)}${empty}`;
+  return `Copied into ${span}. ${applySummary(r, w)}${empty}`;
 }

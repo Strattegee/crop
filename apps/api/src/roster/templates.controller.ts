@@ -1,6 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
+import { T, wordsFor } from '../terms/words.js';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
@@ -56,14 +57,15 @@ async function slotsFromWeek(db: PoolClient, facilityId: string, weekStart: stri
 
 /** Refuses a week that is over, and (unless asked) a week that already has shifts, so nothing is doubled by mistake. */
 async function checkTarget(db: PoolClient, f: { id: string; name: string; timezone: string }, weekStart: string, addToExisting: boolean) {
-  if (weekState(weekStart, false, todayIn(f.timezone)) === 'history') throw new ConflictException('That week is over, so shifts can no longer be added to it');
+  const w = await wordsFor(db);
+  if (weekState(weekStart, false, todayIn(f.timezone)) === 'history') throw new ConflictException(`That week is over, so ${w.lower(T.shift, true)} can no longer be added to it`);
   if (addToExisting) return;
   const n = (await db.query<{ n: number }>(
     `select count(*)::int as n from shifts s join facilities f on f.id = s.facility_id
       where s.facility_id = $1 and s.status <> 'cancelled' and (s.starts_at at time zone f.timezone)::date between $2 and $2::date + 6`,
     [f.id, weekStart])).rows[0].n;
   if (n > 0) {
-    throw new ConflictException(`The week of ${weekStart} already has ${n} ${n === 1 ? 'shift' : 'shifts'} at ${f.name}. Choose "Add to the shifts already there" to add these as well.`);
+    throw new ConflictException(`The week of ${weekStart} already has ${w.count(n, T.shift)} at ${f.name}. Choose "Add to the ${w.lower(T.shift, true)} already there" to add these as well.`);
   }
 }
 
@@ -76,7 +78,7 @@ async function checkTarget(db: PoolClient, f: { id: string; name: string; timezo
 async function createFromSlots(
   db: PoolClient, tenantId: string, auth: AuthContext, f: { id: string; timezone: string }, weekStart: string, slots: Slot[], people: boolean, equipment: boolean,
 ): Promise<ApplyResult> {
-  if (slots.length > MAX_SHIFTS) throw new BadRequestException(`That would add more than ${MAX_SHIFTS} shifts`);
+  if (slots.length > MAX_SHIFTS) throw new BadRequestException(`That would add more than ${(await wordsFor(db)).count(MAX_SHIFTS, T.shift)}`);
   const result: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
   for (const p of planWeek(slots, weekStart)) {
     const id = (await db.query<{ id: string }>(
@@ -189,8 +191,9 @@ export class RosterTemplatesController {
     return withTenant(this.pool, t.tenantId, async db => {
       await site(db, facilityId);
       const slots = await slotsFromWeek(db, facilityId, weekStart);
-      if (!slots.length) throw new BadRequestException('There are no shifts at this site that week to save');
-      if (slots.length > MAX_SHIFTS) throw new BadRequestException(`A template can hold up to ${MAX_SHIFTS} shifts`);
+      const w = await wordsFor(db);
+      if (!slots.length) throw new BadRequestException(`There are no ${w.lower(T.shift, true)} at this ${w.lower(T.site)} that week to save`);
+      if (slots.length > MAX_SHIFTS) throw new BadRequestException(`A template can hold up to ${w.count(MAX_SHIFTS, T.shift)}`);
       let id: string;
       try {
         id = (await db.query<{ id: string }>(
@@ -264,7 +267,7 @@ export class RosterTemplatesController {
                 coalesce((select json_agg(td.duty_id) from roster_template_duties td where td.template_shift_id = ts.id), '[]'::json) as "dutyIds"
            from roster_template_shifts ts where template_id = $1`, [id])).rows;
       const r = await createFromSlots(db, t.tenantId, auth, f, weekStart, slots, people, equipment);
-      return { ...r, weekStart, facilityId: f.id, summary: applySummary(r) };
+      return { ...r, weekStart, facilityId: f.id, summary: applySummary(r, await wordsFor(db)) };
     });
   }
 
@@ -284,9 +287,9 @@ export class RosterTemplatesController {
       const f = await site(db, facilityId);
       await checkTarget(db, f, toWeek, addToExisting);
       const slots = await slotsFromWeek(db, facilityId, fromWeek);
-      if (!slots.length) throw new BadRequestException(`There are no shifts at ${f.name} in the week of ${fromWeek} to copy`);
+      if (!slots.length) throw new BadRequestException(`There are no ${(await wordsFor(db)).lower(T.shift, true)} at ${f.name} in the week of ${fromWeek} to copy`);
       const r = await createFromSlots(db, t.tenantId, auth, f, toWeek, slots, people, equipment);
-      return { ...r, fromWeek, weekStart: toWeek, facilityId: f.id, summary: applySummary(r) };
+      return { ...r, fromWeek, weekStart: toWeek, facilityId: f.id, summary: applySummary(r, await wordsFor(db)) };
     });
   }
 
@@ -316,8 +319,9 @@ export class RosterTemplatesController {
       const sources = [];
       for (const p of plan.pairs) sources.push({ ...p, slots: await slotsFromWeek(db, facilityId, p.from) });
       const total = sources.reduce((n, s) => n + s.slots.length, 0);
-      if (!total) throw new BadRequestException(`There are no shifts at ${f.name} in those weeks to copy`);
-      if (total > MAX_COPY_SHIFTS) throw new BadRequestException(`That would add more than ${MAX_COPY_SHIFTS} shifts. Copy fewer weeks at a time.`);
+      const w = await wordsFor(db);
+      if (!total) throw new BadRequestException(`There are no ${w.lower(T.shift, true)} at ${f.name} in those weeks to copy`);
+      if (total > MAX_COPY_SHIFTS) throw new BadRequestException(`That would add more than ${w.count(MAX_COPY_SHIFTS, T.shift)}. Copy fewer weeks at a time.`);
       const r: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
       const done: Array<{ from: string; to: string; created: number; assigned: number }> = [];
       for (const s of sources) {
@@ -328,7 +332,7 @@ export class RosterTemplatesController {
         done.push({ from: s.from, to: s.to, created: w.created, assigned: w.assigned });
       }
       const emptyWeeks = done.filter(w => !w.created).map(w => w.from);
-      return { ...r, fromWeek, toWeek, facilityId: f.id, weeks: done, emptyWeeks, summary: copyWeeksSummary({ ...r, weeks: done, emptyWeeks }) };
+      return { ...r, fromWeek, toWeek, facilityId: f.id, weeks: done, emptyWeeks, summary: copyWeeksSummary({ ...r, weeks: done, emptyWeeks }, w) };
     });
   }
 }
