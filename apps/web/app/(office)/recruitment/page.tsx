@@ -39,7 +39,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
   return (
     <>
       <h1>Recruitment</h1>
-      <p className="muted">Everyone from application to their first weeks, each as their card. Applicants and people being onboarded are kept off the {tw.lower(T.roster)} until they start.</p>
+      <p className="muted">Everyone from the day they apply to their first weeks at work, each shown on their employee card. Applicants and people being onboarded are kept off the {tw.lower(T.roster)} until they start.</p>
       <Notices error={sp.error} done={sp.done} />
 
       <details className="card" open={total === 0}>
