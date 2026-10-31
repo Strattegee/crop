@@ -6,7 +6,7 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   agencyFill, agencyFillNext, agencyFillWithdraw, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setTimes, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
@@ -1104,7 +1104,7 @@ export default async function RosterPage({ searchParams }: {
             {selected.startsAt && new Date(selected.startsAt).getTime() > Date.now() && (
               <section>
                 <details>
-                  <summary style={{ cursor: 'pointer' }}><h3 style={{ display: 'inline' }}>Change day or times</h3></summary>
+                  <summary style={{ cursor: 'pointer' }}><h3 style={{ display: 'inline' }}>Change day, times, {tw.lower(T.role)} or {tw.lower(T.area)}</h3></summary>
                   <form action={setTimes.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 8 }}>
                     <input type="hidden" name="back" value={here} />
                     <label>Day<input type="date" name="date" defaultValue={selected.localDate} required /></label>
@@ -1114,6 +1114,19 @@ export default async function RosterPage({ searchParams }: {
                     <button className="btn small secondary">Save</button>
                   </form>
                   <p className="muted small" style={{ margin: '4px 0 0' }}>An end before the start runs overnight. Whoever and whatever is on the {tw.lower(T.shift)} must still be able to do the new times; {tw.lower(T.agency, true)} holding it are told.</p>
+                  {!selected.equipmentOnly && (
+                    <form action={setRole.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10 }}>
+                      <input type="hidden" name="back" value={here} />
+                      <label>{tw.one(T.role)}<input name="role" defaultValue={selected.role} maxLength={60} list="known-roles" required /></label>
+                      <label>{tw.one(T.area)}
+                        <select name="areaId" defaultValue={selected.areaId ?? ''}>
+                          <option value="">No {tw.lower(T.area)}</option>
+                          {(details.find(d => d.id === selected.facilityId)?.areas ?? []).filter(a => a.active || a.id === selected.areaId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                      </label>
+                      <button className="btn small secondary">Save</button>
+                    </form>
+                  )}
                 </details>
               </section>
             )}

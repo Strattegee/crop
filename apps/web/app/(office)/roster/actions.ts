@@ -160,6 +160,15 @@ export async function setTimes(shiftId: string, f: FormData) {
   }, () => line);
 }
 
+/** New role or area for a shift; refused (with the reason) when the person on it can't work the new role. */
+export async function setRole(shiftId: string, f: FormData) {
+  let line = '';
+  await attempt(back(f), async () => {
+    const s = await api<{ role: string; areaName: string | null }>(`/shifts/${shiftId}/role`, { method: 'PUT', body: { role: str(f, 'role'), areaId: str(f, 'areaId') ?? null } });
+    line = `Now ${s.role}${s.areaName ? ` in ${s.areaName}` : ''}.`;
+  }, () => line);
+}
+
 /** Gender requested for a shift (David, 30 Oct). A different or unrecorded gender on the person is a warning. */
 export async function setGender(shiftId: string, f: FormData) {
   const genderRequested = str(f, 'genderRequested') ?? null;
