@@ -11,7 +11,10 @@ import { CredentialsTab } from './src/CredentialsTab';
 import { ManagerHome } from './src/ManagerHome';
 import { roleOf, startMode, type Mode } from './src/manager';
 import { styles } from './src/styles';
-import { businessesOf, byDay, dayLabel, offerCloses, roleLine, STATE_LABEL, timeRange, type MyOffer, type MyShift } from './src/format';
+import {
+  businessesOf, byDay, dayLabel, hasStepsForMe, noShiftsLine, offerCloses, roleLine, STATE_LABEL, STEP_MARK, timeRange,
+  type MyOffer, type MyOnboarding, type MyShift,
+} from './src/format';
 
 // Closes the sign-in browser window when it returns to the app.
 WebBrowser.maybeCompleteAuthSession();
@@ -144,6 +147,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
   const [my, setMy] = useState<My | null>(null);
   const [shifts, setShifts] = useState<MyShift[]>([]);
   const [offers, setOffers] = useState<MyOffer[]>([]);
+  const [onboarding, setOnboarding] = useState<MyOnboarding | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -151,14 +155,20 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
     setBusy(true);
     setError(null);
     try {
-      const [m, s, o] = await Promise.all([
+      const [m, s, o, g] = await Promise.all([
         api<My>('/my', { tenant }),
         api<{ shifts: MyShift[] }>('/my/shifts', { tenant }),
         api<{ offers: MyOffer[] }>('/my/offers', { tenant }),
+        // Getting started is extra: if it can't be read, the rest still shows.
+        api<{ onboarding: MyOnboarding | null }>('/my/onboarding', { tenant }).catch(e => {
+          if (e instanceof SignedOut) throw e;
+          return { onboarding: null };
+        }),
       ]);
       setMy(m);
       setShifts(s.shifts);
       setOffers(o.offers);
+      setOnboarding(g.onboarding);
     } catch (e) {
       if (e instanceof SignedOut) onSignedOut();
       else setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -212,8 +222,29 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
+        {tab === 'shifts' && !error && onboarding && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Getting started</Text>
+            <Text style={styles.muted}>{onboarding.line}</Text>
+            {onboarding.steps.map(st => (
+              <View key={st.id} style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}
+                accessible accessibilityLabel={`${st.title}: ${st.line}`}>
+                <Text style={[styles.stepMark, st.state === 'done' && styles.stepMarkDone]}>{STEP_MARK[st.state]}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '600' }}>{st.title}{st.required ? '' : ' (not needed to start)'}</Text>
+                  <Text style={[styles.muted, styles.small]}>{st.line}</Text>
+                </View>
+              </View>
+            ))}
+            {hasStepsForMe(onboarding) && (
+              <Pressable style={styles.button} onPress={() => setTab('credentials')}>
+                <Text style={styles.buttonText}>Go to {my?.credentialWord?.many ?? 'Credentials'}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         {tab === 'shifts' && !error && (shifts.length === 0
-          ? <Text style={styles.muted}>No {word.lowerMany} in the next four weeks yet. New ones show here once the roster is published.</Text>
+          ? <Text style={styles.muted}>{noShiftsLine(word, onboarding)}</Text>
           : byDay(shifts).map(d => (
             <View key={d.date}>
               <Text style={styles.day}>{dayLabel(d.date, my?.today)}</Text>

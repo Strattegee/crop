@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, businessesOf, byDay, dateFromParts, expiryLine, filesLine, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+  addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
 describe('worker app formatting', () => {
@@ -82,5 +82,21 @@ describe('availability and leave in the app', () => {
     expect(uploadName('Licence.pdf', 'application/pdf')).toBe('Licence.pdf');
     expect(uploadName(null, 'image/jpeg')).toBe('photo.jpg');
     expect(uploadName('', 'image/png')).toBe('photo.png');
+  });
+});
+
+describe('getting started', () => {
+  const step = (state: 'done' | 'waiting' | 'to_do', yours = false) => ({ id: state, title: 'X', kind: 'credential', required: true, state, line: '', yours });
+  const o = (steps: ReturnType<typeof step>[]) => ({ checklistName: 'New staff', done: 0, total: steps.length, ready: false, line: '', steps });
+  it('offers the credentials tab only when a step is theirs to do', () => {
+    expect(hasStepsForMe(null)).toBe(false);
+    expect(hasStepsForMe(o([step('done'), step('waiting')]))).toBe(false);
+    expect(hasStepsForMe(o([step('to_do', true)]))).toBe(true);
+    expect(STEP_MARK.done).toBe('✓');
+  });
+  it('tells someone being onboarded why there are no shifts yet', () => {
+    const word = { lowerMany: 'jobs' };
+    expect(noShiftsLine(word, o([]))).toBe('Your jobs show here once the office has finished getting you started.');
+    expect(noShiftsLine(word, null)).toBe('No jobs in the next four weeks yet. New ones show here once the roster is published.');
   });
 });

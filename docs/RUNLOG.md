@@ -441,3 +441,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in set up in this run); the page builds and the API is tested.
 - Next: a reply link for outside agencies (option 2) is for later; the next open backlog items are the agency and onboarding follow-ups.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 small hours, 12:10am Melbourne (scheduled run)
+
+- Shipped: Getting started in the worker app. Someone being onboarded now sees their checklist at the top of My shifts ("2 of 5 done"), each step in plain words for them: add it in Credentials, sent and waiting for the office to check it, the office will tick this off, or contact the office about right to work. Nothing written for the office (who ticked what, notes) reaches the app. Credentials the checklist asks for now show in the Credentials tab even when their role doesn't need them, and an empty My shifts tells them their shifts come once the office has finished getting them started.
+- Not yet tried on a phone (needs the development build).
+- Next: right to work details from the app (or by the upload link only), then the other agency and onboarding follow-ups.
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.

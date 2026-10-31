@@ -13,7 +13,8 @@ import { shiftLabel } from '../roster/bank-fill.js';
 import { T, wordsFor } from '../terms/words.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
-import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myShiftState, notLinkedMessage } from './worker-app.js';
+import { onboardingProgress } from '../workforce/onboarding.controller.js';
+import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
@@ -140,6 +141,24 @@ export class AppAccessController {
   }
 }
 
+/**
+ * The person's own onboarding, worded for them (null when they aren't being onboarded). Shared by GET /my/onboarding
+ * and GET /my/credentials (credential steps still to do are things they can add).
+ */
+export async function myOnboarding(db: PoolClient, tenantId: string, workerId: string, credentialsWord = 'Credentials') {
+  const live = (await db.query<{ id: string }>(
+    'select id from worker_onboardings where worker_id = $1 and finished_at is null', [workerId])).rows[0];
+  if (!live) return null;
+  const p = await onboardingProgress(db, tenantId, live.id);
+  const steps = p.steps.map(s => myStep(s, credentialsWord));
+  return {
+    checklistName: p.checklistName, startedAt: p.startedAt,
+    done: p.summary.done, total: p.summary.total, ready: p.summary.ready,
+    line: myOnboardingLine(p.summary.done, p.summary.total),
+    steps,
+  };
+}
+
 /** The worker app's own view (any signed-in member linked to a person here): their shifts and offers. */
 @ApiBearerAuth()
 @ApiSecurity('tenant')
@@ -187,6 +206,19 @@ export class MyController {
         from, to,
         shifts: rows.map(({ assignmentStatus, ...r }) => ({ ...r, label: label(r), state: myShiftState(assignmentStatus) })),
       };
+    });
+  }
+
+  /**
+   * Getting started: the person's onboarding checklist while they are being onboarded, worded for them (what they can
+   * add in the app, what is waiting for the office). `onboarding` is null otherwise.
+   */
+  @Get('onboarding')
+  onboarding(@Tenant() t: Membership, @Auth() auth: AuthContext) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const w = await requireLinked(db, auth);
+      const words = await wordsFor(db);
+      return { onboarding: await myOnboarding(db, t.tenantId, w.id, words.many(T.credential)) };
     });
   }
 

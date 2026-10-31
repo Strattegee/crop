@@ -202,3 +202,22 @@ export function uploadName(name: string | null | undefined, mimeType: string | n
   const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : mimeType === 'image/heic' ? 'heic' : 'jpg';
   return `photo.${ext}`;
 }
+
+// ---- Getting started (GET /my/onboarding): the person's onboarding checklist, worded by the API ----
+export type StepState = 'done' | 'waiting' | 'to_do';
+export interface MyStep { id: string; title: string; kind: string; required: boolean; state: StepState; line: string; yours: boolean }
+export interface MyOnboarding { checklistName: string; done: number; total: number; ready: boolean; line: string; steps: MyStep[] }
+
+/** The mark beside a step: ticked, waiting for the office, or still to do. */
+export const STEP_MARK: Record<StepState, string> = { done: '✓', waiting: '…', to_do: '○' };
+
+/** Whether any step is one the person can do in the app (so the card offers to go to the credentials tab). */
+export function hasStepsForMe(o: MyOnboarding | null): boolean {
+  return !!o?.steps.some(s => s.yours);
+}
+
+/** What My shifts says when there are none: someone being onboarded hears why. */
+export function noShiftsLine(word: { lowerMany: string }, onboarding: MyOnboarding | null): string {
+  if (onboarding) return `Your ${word.lowerMany} show here once the office has finished getting you started.`;
+  return `No ${word.lowerMany} in the next four weeks yet. New ones show here once the roster is published.`;
+}

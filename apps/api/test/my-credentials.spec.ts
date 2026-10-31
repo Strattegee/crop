@@ -9,7 +9,7 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { DOCUMENT_STORE, MemoryStore } from '../src/documents/document-store.js';
 import {
-  myAddRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine,
+  myAddRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine, myOnboardingLine, myStep,
 } from '../src/worker-app/worker-app.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -44,6 +44,22 @@ describe('my credentials: pure rules', () => {
     expect(myEvidenceRefusal('rejected', 0)).toMatch(/wasn't accepted/);
     expect(myEvidenceRefusal('unverified', 10)).toBe('You can add up to 10 files to one credential');
     expect(myEvidenceRefusal('unverified', 9)).toBeNull();
+  });
+  it('words onboarding steps for the person themselves', () => {
+    const s = (kind: 'task' | 'credential' | 'right_to_work' | 'employment', state: 'done' | 'waiting' | 'to_do', detail = 'Not recorded yet') =>
+      myStep({ id: 'x', title: 'T', kind, required: true, credentialTypeId: kind === 'credential' ? 'c' : null, state, detail }, 'Tickets');
+    expect(s('task', 'done', 'Ticked by Sam')).toMatchObject({ line: 'Done', yours: false });
+    expect(s('task', 'to_do').line).toBe('The office will tick this off');
+    expect(s('employment', 'to_do').line).toBe('The office will set up your employment');
+    expect(s('right_to_work', 'to_do').line).toBe('Please contact the office about your right to work');
+    expect(s('right_to_work', 'waiting').line).toBe('Sent: the office is checking it');
+    expect(s('credential', 'done').line).toBe('Checked');
+    expect(s('credential', 'waiting')).toMatchObject({ line: 'Sent: waiting for the office to check it', yours: false });
+    expect(s('credential', 'to_do')).toMatchObject({ line: 'Add it in Tickets', yours: true, need: 'missing' });
+    expect(s('credential', 'to_do', 'Has run out: record the new one')).toMatchObject({ line: 'Yours has run out: add the new one in Tickets', need: 'expired' });
+    expect(s('credential', 'to_do', 'Rejected: record it again')).toMatchObject({ line: 'Not accepted: add it again in Tickets', need: 'rejected' });
+    expect(myOnboardingLine(2, 5)).toBe('2 of 5 done');
+    expect(myOnboardingLine(5, 5)).toBe('All done: the office will let you know when you can start');
   });
 });
 
@@ -176,10 +192,44 @@ describe('my credentials in the worker app', () => {
     await http().post('/my/credentials').set(as('ana')).send({ credentialTypeId: firstAid, expiryDate: addDays(today, 700) }).expect(201);
   });
 
+  it('shows their onboarding checklist worded for them, and adds its credentials to what they need', async () => {
+    expect((await http().get('/my/onboarding').set(as('ana')).expect(200)).body).toEqual({ onboarding: null });
+    const checklist = (await http().post('/onboarding-checklists').set(as('admin')).send({
+      name: 'New kitchen staff',
+      steps: [
+        { kind: 'right_to_work', title: 'Right to work' },
+        { kind: 'credential', title: 'Barista course', credentialTypeId: barista },
+        { kind: 'task', title: 'Contract signed' },
+      ],
+    }).expect(201)).body;
+    await http().post(`/workers/${ben}/onboarding`).set(as('admin')).send({ checklistId: checklist.id }).expect(201);
+
+    let mine = (await http().get('/my/onboarding').set(as('ben')).expect(200)).body.onboarding;
+    expect(mine).toMatchObject({ checklistName: 'New kitchen staff', done: 1, total: 3, ready: false, line: '1 of 3 done' });
+    expect(mine.steps.map((s: { title: string; line: string; yours: boolean }) => [s.title, s.line, s.yours])).toEqual([
+      ['Right to work', 'Checked', false],
+      ['Barista course', 'Add it in Credentials', true],
+      ['Contract signed', 'The office will tick this off', false],
+    ]);
+    // Nothing written for the office (who ticked, notes) reaches the app.
+    expect(JSON.stringify(mine)).not.toMatch(/detail|byName|note/);
+
+    // Barista course is only optional for a chef, but onboarding asks for it, so the Credentials tab lists it.
+    const creds = (await http().get('/my/credentials').set(as('ben')).expect(200)).body;
+    expect(creds.needs).toContainEqual({ credentialTypeId: barista, typeName: 'Barista course', must: true, problem: 'missing', line: 'Add your Barista course', canAdd: true });
+
+    await http().post('/my/credentials').set(as('ben')).send({ credentialTypeId: barista }).expect(201);
+    mine = (await http().get('/my/onboarding').set(as('ben')).expect(200)).body.onboarding;
+    expect(mine.steps[1]).toMatchObject({ state: 'waiting', line: 'Sent: waiting for the office to check it', yours: false });
+    const after = (await http().get('/my/credentials').set(as('ben')).expect(200)).body;
+    expect(after.needs.map((n: { credentialTypeId: string }) => n.credentialTypeId)).not.toContain(barista);
+    // The other business's people see nothing of it.
+    await http().get('/my/onboarding').set(as('other')).expect(404);
+  });
+
   it('is only for people linked to someone here', async () => {
     await http().get('/my/credentials').set(as('admin')).expect(404);
     await http().post('/my/credentials').set(as('admin')).send({ credentialTypeId: foodSafety }).expect(404);
-    expect((await http().get('/my/credentials').set(as('ben')).expect(200)).body.credentials).toEqual([]);
     expect(ben).toBeTruthy();
   });
 });

@@ -50,5 +50,7 @@ export const styles = StyleSheet.create({
   stepText: { fontSize: 20, color: NAVY },
   label: { fontWeight: '600', marginTop: 10, marginBottom: 4 },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#c5ccd6', borderRadius: 8, padding: 10, minHeight: 44 },
+  stepMark: { width: 22, fontSize: 18, textAlign: 'center', color: '#5d6775' },
+  stepMarkDone: { color: '#1a7f37' },
   link: { color: NAVY, textDecorationLine: 'underline', fontWeight: '600' },
 });

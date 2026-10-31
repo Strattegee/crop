@@ -15,7 +15,7 @@ import { checkAndStore } from '../documents/file-checks.js';
 import { appliesTo, credentialStatus } from '../workforce/compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { T, wordsFor } from '../terms/words.js';
-import { requireLinked } from './worker-app.controller.js';
+import { myOnboarding, requireLinked } from './worker-app.controller.js';
 import { tellOffice } from './tell-office.js';
 import {
   appCredentialEmail,
@@ -65,6 +65,11 @@ export class MyCredentialsController {
         line: myNeedLine(i), canAdd: myNeedAddable(i),
       }));
 
+      // Credentials their onboarding checklist still needs (the office may ask for more than their role's rules).
+      const start = await myOnboarding(db, t.tenantId, w.id);
+      const listed = new Set(needs.map(n => n.credentialTypeId));
+      const startNeeds = (start?.steps ?? []).filter(s => s.kind === 'credential' && s.yours && s.credentialTypeId && !listed.has(s.credentialTypeId));
+
       // What they can add: every active credential type, the ones asked of their role first (strongest level wins).
       const levels = new Map<string, Level>();
       for (const r of ctx.rules) {
@@ -76,6 +81,14 @@ export class MyCredentialsController {
         `select id, name, has_number as "hasNumber", has_expiry as "hasExpiry" from credential_types where active order by lower(name)`,
       )).rows.map(ty => ({ ...ty, level: levels.get(ty.id) ?? null }))
         .sort((a, b) => (a.level ? LEVEL_ORDER[a.level] : 3) - (b.level ? LEVEL_ORDER[b.level] : 3));
+
+      const typeName = new Map(types.map(ty => [ty.id, ty.name]));
+      for (const s of startNeeds) {
+        const name = typeName.get(s.credentialTypeId!) ?? s.title;
+        const problem = s.need ?? 'missing';
+        needs.push({ credentialTypeId: s.credentialTypeId!, typeName: name, must: s.required, problem,
+          line: myNeedLine({ typeName: name, problem, credentialTypeId: s.credentialTypeId! }), canAdd: true });
+      }
 
       return { today: ctx.today, credentials, needs, types };
     });
