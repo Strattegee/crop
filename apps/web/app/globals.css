@@ -495,3 +495,4 @@ tr.grp-row th { background: #f3f5f7; text-align: left; font-size: 12px; text-tra
 .role-picker legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
 .role-picker .role-group { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-bottom: 6px; }
 .role-picker .role-group .grp-h { flex-basis: 100%; margin: 6px 0 0; }
+.upload-page h2 { font-size: 17px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .upload-item .form-row { align-items: flex-end; }
