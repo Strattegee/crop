@@ -1,4 +1,4 @@
-import { giveAppAccess } from './app-access-actions';
+import { giveAppAccess, removeAppAccess } from './app-access-actions';
 
 export type AppAccess = { state: 'none' | 'invited' | 'active'; email: string | null; invitedAt: string | null; refusal: string | null };
 
@@ -16,6 +16,19 @@ export function AppAccessCard({ workerId, a, first, canGive, timeZone }: {
         <p style={{ margin: 0 }}>
           Invited{a.invitedAt && ` on ${day(a.invitedAt)}`}. {first} gets in the first time they sign in with {a.email} (the email must be verified when they sign in).
         </p>
+      )}
+      {a.state !== 'none' && canGive && (
+        <details style={{ marginTop: 8 }}>
+          <summary className="small">{a.state === 'active' ? 'Take away app access' : 'Cancel the invitation'}</summary>
+          <p className="muted small">
+            {a.state === 'active'
+              ? `${first} can no longer sign in to the app here from their next tap. Their record, shifts and history stay, and you can give the app again later.`
+              : `The invitation to ${a.email} stops working. You can invite them again later.`}
+          </p>
+          <form action={removeAppAccess.bind(null, workerId, a.state === 'invited')}>
+            <button type="submit" className="btn small secondary">{a.state === 'active' ? 'Take away app access' : 'Cancel invitation'}</button>
+          </form>
+        </details>
       )}
       {a.state === 'none' && (
         <>
