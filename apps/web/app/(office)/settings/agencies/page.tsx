@@ -5,7 +5,7 @@ import { whenIn, businessZone } from '../../../../lib/business';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
-import { cancelInvite, createInvite, endLink, moveAgency, setBookMode, setTiming } from './actions';
+import { addOutsideAgency, cancelInvite, createInvite, endLink, moveAgency, saveOutsideAgency, setBookMode, setTiming, switchOutsideAgency } from './actions';
 import { TIMING_BANDS, minutesWords, stepChoices, type AgencyTiming } from '../../../../lib/agency-timing';
 import { NEW_LINK_COOKIE } from './invite-cookie';
 
@@ -16,6 +16,7 @@ type LinkRow = {
   preference: number | null; bookMode: 'automatic' | 'approve_first'; createdAt: string; endedAt: string | null;
   endedByName: string | null; endedBySide: 'employer' | 'agency' | null; endReason: string | null;
 };
+type Outside = { id: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean; emailsSent: number; lastSentAt: string | null };
 type Invite = { id: string; forName: string | null; createdByName: string | null; createdAt: string; expiresAt: string; state: 'pending' | 'used' | 'cancelled' | 'expired'; acceptedBy: string | null };
 
 const art = (w: string) => `${/^[aeiou]/i.test(w) ? 'an' : 'a'} ${w}`;
@@ -29,9 +30,10 @@ const INVITE_STATE: Record<Invite['state'], string> = { pending: 'Waiting', used
  */
 export default async function AgenciesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [data, agency, sp, zone, settings] = await Promise.all([
+  const [data, agency, sp, zone, settings, outside] = await Promise.all([
     api<{ links: LinkRow[]; invitations: Invite[] }>('/agency-links'), currentAgency(), searchParams, businessZone(),
     api<{ agencyTiming: AgencyTiming }>('/settings'),
+    api<Outside[]>('/outside-agencies').catch(() => [] as Outside[]),
   ]);
   const timing = settings.agencyTiming;
   const newLink = (await cookies()).get(NEW_LINK_COOKIE)?.value;
@@ -138,6 +140,64 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           )}
         </div>
       )}
+
+
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <h2>{tw.many(T.agency)} not on CROP</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          {tw.many(T.agency)} that don’t use CROP can still be asked. From a {tw.lower(T.shift)}’s panel on the roster you can email them the
+          {' '}{tw.lower(T.shift)} with everything it needs: the standard requirements for the role and any special ones for that {tw.lower(T.shift)},
+          each marked must have, ideal or optional. They reply to whoever sent it.
+        </p>
+        {outside.length === 0 ? <p className="muted">None added yet.</p> : (
+          <table>
+            <thead><tr><th>{tw.one(T.agency)}</th><th>Email</th><th>Emailed</th><th /></tr></thead>
+            <tbody>
+              {outside.map(a => (
+                <tr key={a.id} style={a.active ? undefined : { opacity: 0.6 }}>
+                  <td><b>{a.name}</b>{!a.active && <span className="muted small"> (switched off)</span>}
+                    {a.phone && <div className="muted small">{a.phone}</div>}
+                    {a.notes && <div className="muted small">{a.notes}</div>}
+                  </td>
+                  <td className="small">{a.email}</td>
+                  <td className="small">{a.emailsSent === 0 ? 'Not yet' : `${a.emailsSent} ${a.emailsSent === 1 ? tw.lower(T.shift) : shifts}${a.lastSentAt ? `, last ${when(a.lastSentAt)}` : ''}`}</td>
+                  <td>
+                    {canEdit && (
+                      <details>
+                        <summary className="small">Change</summary>
+                        <form action={saveOutsideAgency.bind(null, a.id)} style={{ marginTop: 6 }}>
+                          <label className="small">Name<input name="name" defaultValue={a.name} maxLength={120} required /></label>
+                          <label className="small">Email<input name="email" type="email" defaultValue={a.email} maxLength={200} required /></label>
+                          <label className="small">Phone (optional)<input name="phone" defaultValue={a.phone ?? ''} maxLength={40} /></label>
+                          <label className="small">Notes (optional)<input name="notes" defaultValue={a.notes ?? ''} maxLength={500} /></label>
+                          <button className="btn small secondary" type="submit">Save</button>
+                        </form>
+                        <form action={switchOutsideAgency.bind(null, a.id, !a.active)} style={{ marginTop: 6 }}>
+                          <button className="btn small secondary" type="submit">{a.active ? 'Switch off' : 'Switch on'}</button>
+                        </form>
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {canEdit && (
+          <details style={{ marginTop: 12 }} open={outside.length === 0}>
+            <summary className="small">Add {art(anAgency)} not on CROP</summary>
+            <form action={addOutsideAgency} style={{ marginTop: 6 }}>
+              <div className="form-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <label>Name<input name="name" maxLength={120} required /></label>
+                <label>Email for {shifts}<input name="email" type="email" maxLength={200} required /></label>
+                <label>Phone (optional)<input name="phone" maxLength={40} /></label>
+              </div>
+              <div className="form-row"><label>Notes (optional, for your office)<input name="notes" maxLength={500} /></label></div>
+              <button type="submit" className="btn secondary">Add</button>
+            </form>
+          </details>
+        )}
+      </div>
 
       {canEdit && (
         <div className="card">

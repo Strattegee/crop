@@ -100,6 +100,14 @@ export async function agencyFillWithdraw(shiftId: string, f: FormData) {
     `Taken back from your ${tw.lower(T.agency, true)}.`);
 }
 
+/** Email an open shift to agencies not on CROP (migration 0059). Changes nothing on the shift. */
+export async function outsideAgencyEmail(shiftId: string, f: FormData) {
+  const tw = await words();
+  const agencyIds = f.getAll('agencyIds').filter((v): v is string => typeof v === 'string' && v !== '');
+  await attempt(back(f), () => api(`/shifts/${shiftId}/outside-agencies`, { method: 'POST', body: { agencyIds, note: str(f, 'note') } }),
+    `Emailed. They reply to you; add the person to the ${tw.lower(T.shift)} when they do.`);
+}
+
 export async function recordReply(offerId: string, reply: 'accept' | 'decline', f: FormData) {
   await attempt(back(f), () => api(`/offers/${offerId}/${reply}`, { method: 'POST' }), reply === 'accept' ? 'Accepted and booked.' : 'Recorded as declined.');
 }

@@ -47,3 +47,20 @@ export async function setTiming(f: FormData) {
   await attempt(BACK, () => api('/settings', { method: 'PATCH', body: { agencyTiming: { soonMinutes: n('soonMinutes'), todayMinutes: n('todayMinutes'), laterMinutes: n('laterMinutes') } } }),
     'Timing saved. It applies to requests sent from now on.');
 }
+
+/** Agencies not on CROP (migration 0059): the business's list, emailed shifts from the roster's shift panel. */
+export async function addOutsideAgency(f: FormData) {
+  await attempt(BACK, () => api('/outside-agencies', { method: 'POST', body: {
+    name: str(f, 'name'), email: str(f, 'email'), phone: str(f, 'phone'), notes: str(f, 'notes'),
+  } }), 'Added. You can now email it shifts from the roster.');
+}
+
+export async function saveOutsideAgency(id: string, f: FormData) {
+  await attempt(BACK, () => api(`/outside-agencies/${id}`, { method: 'PATCH', body: {
+    name: str(f, 'name'), email: str(f, 'email'), phone: str(f, 'phone') ?? null, notes: str(f, 'notes') ?? null,
+  } }), 'Saved.');
+}
+
+export async function switchOutsideAgency(id: string, active: boolean) {
+  await attempt(BACK, () => api(`/outside-agencies/${id}`, { method: 'PATCH', body: { active } }), active ? 'Switched on.' : 'Switched off. It keeps its history.');
+}
