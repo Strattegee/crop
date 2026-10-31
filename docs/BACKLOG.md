@@ -84,7 +84,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [x] Left strip: people / equipment / items, hours and balance, drag to assign or book.
 - [x] Leave lines on the roster (26 Oct). A/P/N letters on cards and Day totals row also done (cost per day waits for pay rates, Release 2).
 - [x] Draft / Live / History and Publish week, with a change log (26 Oct, scheduled run). Publishing doesn't message staff yet (see questions).
-- [ ] Still from the design: Template stage (grey with "Template"); offered/broadcast stage colour; day totals; app requests panel (Needs attention and Cards / Detailed / Simple done 27 Oct); leave lines (Steve's "T" line).
+- [ ] Still from the design: Template stage (grey with "Template"); app requests panel. Done: offered stage colour (pale yellow), day totals, leave lines and Steve's "T" (covering) line, Needs attention, Cards / Detailed / Simple. To ask Steve: what the Template stage and the app requests panel should show (leave and credentials sent from the app already reach the Dashboard's decisions and the daily email).
 
 ## From 26 Oct (David testing staging as a café owner)
 - [x] Platform admin screen for Strattegee: add a business, give/change/remove access, audit log (26 Oct). Next: welcome email when access is given (ask David), and a way to rename a business.
@@ -113,7 +113,7 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [ ] Currency per business (AUD, NZD, USD, GBP) for item costs, charges and later pay and invoicing; money already stored in cents.
 - [ ] Industry templates per country (credentials differ: e.g. AU White Card vs UK CSCS vs US OSHA 10; NZ Site Safe). Tag pack credentials by country.
 - [ ] Business number per country (AU ABN built; NZ NZBN, UK Companies House number, US EIN) on clients.
-- [ ] Date and number formats per country (US month-first dates), and spelling (UI stays Australian English for now).
+- [ ] Date and number formats per country (US month-first dates), and spelling (UI stays Australian English for now). Checked 31 Oct: every date on screen and in messages is written with the month as a word ("Mon 2 Nov", "2 Nov 2026"), never as numbers, so none can be misread in the US; date boxes follow the person's own browser. Left until a US or UK business asks for its own order.
 
 ## Questions for David and Steve (new, 26 Oct night)
 - Steve (29 Oct): the covering line says "Covering Sandra Harrison" without the kind of leave (we never show leave kinds, since personal leave can mean health). Is that enough, or should the office be able to add a short note?
