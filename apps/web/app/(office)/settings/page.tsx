@@ -67,6 +67,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card">
+        <h2>Dashboards</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Which dashboard each person in the office lands on, who sees cost figures, and your business’s own targets.</p>
+        <Link href="/settings/dashboards" className="btn small secondary">Dashboards</Link>
+      </div>
+
+      <div className="card">
         <h2>Shift types</h2>
         <p className="muted" style={{ marginTop: 0 }}>Your usual shifts, each with a letter for the {tw.lower(T.roster)}, a name and standard hours (for example D, Day shift, 7:00–3:30).</p>
         <Link href="/settings/shift-types" className="btn small secondary">Shift types</Link>
