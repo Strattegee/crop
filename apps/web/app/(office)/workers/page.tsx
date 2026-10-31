@@ -6,6 +6,9 @@ import { Notices } from '../notices';
 import { addWorker } from './actions';
 import { EMPLOYMENT_LABEL } from './[id]/employment-card';
 import { T, words } from '../../../lib/terms';
+import { businessZone, todayIn } from '../../../lib/business';
+import type { CardData } from '../../../lib/person-card';
+import { PersonCard } from './person-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +16,7 @@ type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
   status: string; roles: string[]; compliance: string; issueCount: number;
   employmentType: string | null; contractedHours: number | null; leftOn?: string | null;
+  gender?: 'F' | 'M' | null; card?: CardData;
 };
 
 export default async function WorkersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -27,6 +31,15 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
     api<Worker[]>(`/workers?${qs}`), currentAgency(),
     api<{ id: string; name: string }[]>('/onboarding-checklists').catch(() => [] as { id: string; name: string }[]),
   ]);
+  const today = todayIn(await businessZone());
+  // Cards by default (David, 31 Oct: the employee card); the table is still there as a list.
+  const asList = p.show === 'list';
+  const showHref = (show?: string) => {
+    const q = new URLSearchParams(qs);
+    if (show) q.set('show', show);
+    const s = q.toString();
+    return s ? `/workers?${s}` : '/workers';
+  };
   // Employment terms are set by owners and admins.
   const canSetEmployment = agency?.role === 'owner' || agency?.role === 'admin';
 
@@ -99,10 +112,21 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             <option value="left">Has left</option>
           </select>
         </label>
+        {asList && <input type="hidden" name="show" value="list" />}
         <button type="submit" className="btn secondary">Filter</button>
+        <span className="view-switch" style={{ marginLeft: 'auto', alignSelf: 'flex-end' }}>
+          <Link href={showHref()} aria-current={!asList ? 'true' : undefined}>Cards</Link>
+          <Link href={showHref('list')} aria-current={asList ? 'true' : undefined}>List</Link>
+        </span>
       </form>
 
-      <div className="card" style={{ overflowX: 'auto' }}>
+      {!asList && (workers.length === 0 ? (
+        <div className="card"><p className="muted" style={{ margin: 0 }}>No workers found.</p></div>
+      ) : (
+        <div className="pcard-grid">{workers.map(w => <PersonCard key={w.id} p={w} today={today} />)}</div>
+      ))}
+
+      {asList && <div className="card" style={{ overflowX: 'auto' }}>
         {workers.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>No workers found.</p>
         ) : (
@@ -126,7 +150,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             </tbody>
           </table>
         )}
-      </div>
+      </div>}
     </>
   );
 }
