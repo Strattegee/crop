@@ -1,12 +1,13 @@
 import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
+import { industryGroups, needsHeadings, type PackInfo } from '../../../lib/industry-groups';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
 import { addItem, count, issue, receive, transfer } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-type Item = { id: string; name: string; category: string; unit: string; sku: string | null; unitCostCents: number; chargeCents: number | null; tracksStock: boolean; reorderLevel: number | null; active: boolean; onHand: number };
+type Item = { id: string; name: string; category: string; unit: string; sku: string | null; unitCostCents: number; chargeCents: number | null; tracksStock: boolean; reorderLevel: number | null; active: boolean; onHand: number; industries?: string[] };
 type Stock = { itemId: string; facilityId: string; facilityName: string; onHand: number; low: boolean };
 type Facility = { id: string; name: string; active: boolean };
 type Worker = { id: string; firstName: string; lastName: string; preferredName?: string | null; status: string };
@@ -17,9 +18,11 @@ const q = (n: number) => (Math.round(n * 1000) / 1000).toString();
 /** Items and consumables (backlog item 5): what's on hand at each site, receiving, issuing and stocktakes. */
 export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [items, stock, sites, workers, agency, sp] = await Promise.all([
+  const [items, stock, sites, workers, agency, sp, packs] = await Promise.all([
     api<Item[]>('/items'), api<Stock[]>('/stock'), api<Facility[]>('/facilities'), api<Worker[]>('/workers').catch(() => [] as Worker[]), currentAgency(), searchParams,
+    api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
   ]);
+  const itemGroups = industryGroups(items, packs);
   const canAdmin = agency?.role === 'owner' || agency?.role === 'admin';
   const activeSites = sites.filter(s => s.active);
   const people = workers.filter(w => w.status === 'active');
@@ -51,7 +54,9 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
           <table>
             <thead><tr><th>Item</th><th>Cost</th><th>Charge</th><th>On hand</th><th>Record</th></tr></thead>
             <tbody>
-              {items.map(i => {
+              {itemGroups.map(g => [
+                needsHeadings(itemGroups) && <tr key={`g-${g.key}`} className="grp-row"><th colSpan={5}>{g.label} <span className="muted">({g.items.length})</span></th></tr>,
+                ...g.items.map(i => {
                 const at = stock.filter(s => s.itemId === i.id);
                 return (
                   <tr key={i.id}>
@@ -111,7 +116,8 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
                     </td>
                   </tr>
                 );
-              })}
+              }),
+              ])}
             </tbody>
           </table>
         )}

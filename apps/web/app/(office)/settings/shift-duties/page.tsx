@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
+import { industryGroups, needsHeadings, type IndustryGroup, type PackInfo } from '../../../../lib/industry-groups';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
 import { addDuty, saveDuty, setDutyActive } from './actions';
@@ -8,30 +9,35 @@ import { addDuty, saveDuty, setDutyActive } from './actions';
 export const dynamic = 'force-dynamic';
 
 type Duty = {
-  id: string; name: string; description: string | null; active: boolean;
+  id: string; name: string; description: string | null; active: boolean; industries?: string[];
   requirements: { credentialTypeId: string; typeName: string; severity: 'hard' | 'warning' | 'optional' }[];
 };
-type CredentialType = { id: string; name: string; active: boolean };
+type CredentialType = { id: string; name: string; active: boolean; industries?: string[] };
 
-function NeedsFields({ types, duty }: { types: CredentialType[]; duty?: Duty }) {
-  if (!types.length) return <p className="muted small">No credentials yet. Add them under Compliance first.</p>;
+function NeedsFields({ groups, duty }: { groups: IndustryGroup<CredentialType>[]; duty?: Duty }) {
+  if (!groups.length) return <p className="muted small">No credentials yet. Add them under Compliance first.</p>;
   return (
     <fieldset className="duty-needs">
       <legend>What it needs</legend>
-      {types.map(t => {
-        const r = duty?.requirements.find(x => x.credentialTypeId === t.id);
-        return (
-          <label key={t.id} className="inline">
-            <span>{t.name}</span>
-            <select name={`req_${t.id}`} defaultValue={r ? ({ hard: 'must', warning: 'should', optional: 'optional' } as const)[r.severity] : ''}>
-              <option value="">Not needed</option>
-              <option value="must">Must have</option>
-              <option value="should">Should have (a warning)</option>
-              <option value="optional">Optional (listed, never checked)</option>
-            </select>
-          </label>
-        );
-      })}
+      {groups.map(g => (
+        <div key={g.key}>
+          {needsHeadings(groups) && <h4 className="grp-head">{g.label}</h4>}
+          {g.items.map(t => {
+            const r = duty?.requirements.find(x => x.credentialTypeId === t.id);
+            return (
+              <label key={t.id} className="inline">
+                <span>{t.name}</span>
+                <select name={`req_${t.id}`} defaultValue={r ? ({ hard: 'must', warning: 'should', optional: 'optional' } as const)[r.severity] : ''}>
+                  <option value="">Not needed</option>
+                  <option value="must">Must have</option>
+                  <option value="should">Should have (a warning)</option>
+                  <option value="optional">Optional (listed, never checked)</option>
+                </select>
+              </label>
+            );
+          })}
+        </div>
+      ))}
     </fieldset>
   );
 }
@@ -42,11 +48,13 @@ function NeedsFields({ types, duty }: { types: CredentialType[]; duty?: Duty }) 
  */
 export default async function ShiftDutiesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string; edit?: string }> }) {
   const tw = await words();
-  const [duties, types, agency, sp] = await Promise.all([
+  const [duties, types, agency, sp, packs] = await Promise.all([
     api<Duty[]>('/shift-duties'), api<CredentialType[]>('/credential-types'), currentAgency(), searchParams,
+    api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
   ]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
-  const activeTypes = types.filter(t => t.active);
+  const typeGroups = industryGroups(types.filter(t => t.active), packs);
+  const dutyGroups = industryGroups(duties, packs);
   const editing = canEdit && sp.edit ? duties.find(d => d.id === sp.edit) : undefined;
   const shift = tw.lower(T.shift);
 
@@ -70,7 +78,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
               <label>Name<input name="name" defaultValue={editing.name} maxLength={80} required /></label>
               <label>Description<input name="description" defaultValue={editing.description ?? ''} maxLength={300} /></label>
             </div>
-            <NeedsFields types={activeTypes} duty={editing} />
+            <NeedsFields groups={typeGroups} duty={editing} />
             <div className="form-row">
               <button type="submit" className="btn">Save</button>
               <Link href="/settings/shift-duties" className="btn secondary">Cancel</Link>
@@ -86,7 +94,9 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
           <table>
             <thead><tr><th>Duty</th><th>Needs</th><th /></tr></thead>
             <tbody>
-              {duties.map(d => (
+              {dutyGroups.map(g => [
+                needsHeadings(dutyGroups) && <tr key={`g-${g.key}`} className="grp-row"><th colSpan={3}>{g.label} <span className="muted">({g.items.length})</span></th></tr>,
+                ...g.items.map(d => (
                 <tr key={d.id} style={{ opacity: d.active ? 1 : 0.5 }}>
                   <td><b>{d.name}</b>{!d.active && ' (off)'}{d.description && <div className="muted small">{d.description}</div>}</td>
                   <td>
@@ -105,7 +115,8 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
                     )}
                   </td>
                 </tr>
-              ))}
+                )),
+              ])}
             </tbody>
           </table>
         )}
@@ -119,7 +130,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
               <label>Name<input name="name" required maxLength={80} placeholder="e.g. Serves alcohol" /></label>
               <label>Description<input name="description" maxLength={300} placeholder="e.g. The bar is open" /></label>
             </div>
-            <NeedsFields types={activeTypes} />
+            <NeedsFields groups={typeGroups} />
             <button type="submit" className="btn">Add</button>
           </form>
         </div>
