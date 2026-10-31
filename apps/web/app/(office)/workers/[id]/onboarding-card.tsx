@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { checklistOption, suggestedChecklist } from '../../../../lib/onboarding';
 import { askForItems, finishOnboarding, startOnboarding, stopOnboarding, tickStep } from './onboarding-actions';
 
 type StepState = 'done' | 'waiting' | 'to_do';
@@ -13,7 +14,7 @@ export type Onboarding = {
   };
   history: { id: string; checklistName: string; finishedAt: string; finishedByName: string | null; outcome: 'completed' | 'stopped'; stopReason: string | null }[];
 };
-type Checklist = { id: string; name: string; archived: boolean; steps: unknown[] };
+type Checklist = { id: string; name: string; forRoles?: string[]; archived: boolean; steps: unknown[] };
 
 const MARK: Record<StepState, string> = { done: '✓', waiting: '…', to_do: '○' };
 const COLOUR: Record<StepState, string> = { done: 'var(--ok, #1a7f37)', waiting: 'var(--warn, #9a6700)', to_do: 'var(--muted, #6e7781)' };
@@ -23,8 +24,8 @@ const COLOUR: Record<StepState, string> = { done: 'var(--ok, #1a7f37)', waiting:
  * The person's onboarding: each step with its state (record steps tick themselves), tick boxes for tasks, and
  * Finish (owners and admins, once every required step is done) or Stop.
  */
-export function OnboardingCard({ workerId, o, checklists, status, canDecide, contact, timeZone }: {
-  workerId: string; o: Onboarding; checklists: Checklist[]; status: string; canDecide: boolean; timeZone: string;
+export function OnboardingCard({ workerId, o, checklists, roles = [], status, canDecide, contact, timeZone }: {
+  workerId: string; o: Onboarding; checklists: Checklist[]; roles?: string[]; status: string; canDecide: boolean; timeZone: string;
   contact: { first: string; email: boolean; phone: boolean };
 }) {
   // Dates in the business's time zone, never the server's.
@@ -109,7 +110,9 @@ export function OnboardingCard({ workerId, o, checklists, status, canDecide, con
       ) : usable.length ? (
         <form action={startOnboarding.bind(null, workerId)} className="form-row" style={{ marginTop: 0 }}>
           <label>Checklist
-            <select name="checklistId" required>{usable.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            <select name="checklistId" required defaultValue={(suggestedChecklist(usable, roles) ?? usable[0]).id}>
+              {usable.map(x => <option key={x.id} value={x.id}>{checklistOption(x)}</option>)}
+            </select>
           </label>
           {status === 'active' && <label className="inline"><input type="checkbox" name="hold" defaultChecked={false} /> Keep them off the roster until it’s finished</label>}
           {status === 'onboarding' && <input type="hidden" name="hold" value="on" />}

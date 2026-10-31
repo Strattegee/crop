@@ -6,7 +6,7 @@ type Body = Record<string, unknown> | undefined | null;
 /** Field names as people see them, so error messages read naturally in the app. */
 const LABELS: Record<string, string> = {
   firstName: 'First name', lastName: 'Last name', preferredName: 'Preferred name', email: 'Email', phone: 'Mobile',
-  roles: 'Roles', notes: 'Notes', status: 'Status', name: 'Name', category: 'Category', timezone: 'Time zone',
+  roles: 'Roles', forRoles: 'Roles it’s for', notes: 'Notes', status: 'Status', name: 'Name', category: 'Category', timezone: 'Time zone',
   credentialTypeId: 'Credential', number: 'Number', issuedBy: 'Issued by', issueDate: 'Issue date', expiryDate: 'Expiry date',
   reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Level',
   verificationMethod: 'How it is verified', abn: 'ABN', billingContactName: 'Billing contact', billingEmail: 'Billing email',

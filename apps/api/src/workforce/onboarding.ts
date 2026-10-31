@@ -190,3 +190,23 @@ export function askMessage(o: {
   const sms = `${o.business}: before you start we still need ${shortList} from you. ${o.linkLines ? o.linkLines.sms : o.emailed === false ? `Please send a photo or bring them in.` : 'Details are in your email.'}`;
   return { subject, email: lines.join('\n'), sms };
 }
+
+/** Sent instead of a checklist id: pick the checklist that fits the person's roles. */
+export const CHECKLIST_BY_ROLE = 'auto';
+
+/**
+ * The checklist that fits a person's roles: the one written for the most of their roles (roles match exactly, like
+ * credential rules), else one for anyone (no roles), alphabetically on ties. Null when none fits, e.g. every
+ * checklist is for other roles. Put-away checklists should be left out by the caller.
+ */
+export function checklistForRoles<C extends { id: string; name: string; forRoles: string[] }>(checklists: C[], roles: string[]): C | null {
+  const mine = new Set(roles);
+  const byName = (a: C, b: C) => a.name.localeCompare(b.name);
+  const scored = checklists
+    .filter(c => c.forRoles.length)
+    .map(c => ({ c, n: c.forRoles.filter(r => mine.has(r)).length }))
+    .filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n || byName(a.c, b.c));
+  if (scored.length) return scored[0].c;
+  return checklists.filter(c => !c.forRoles.length).sort(byName)[0] ?? null;
+}

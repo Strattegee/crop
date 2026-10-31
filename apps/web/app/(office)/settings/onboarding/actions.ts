@@ -2,11 +2,12 @@
 
 import { api } from '../../../../lib/api';
 import { attempt, str } from '../../../../lib/actions';
+import { parseRoles } from '../../../../lib/onboarding';
 
 const BACK = '/settings/onboarding';
 
 export type ChecklistStep = { id: string; title: string; help: string | null; kind: string; credentialTypeId: string | null; typeName: string | null; required: boolean };
-export type Checklist = { id: string; name: string; description: string | null; archived: boolean; inProgress: number; steps: ChecklistStep[] };
+export type Checklist = { id: string; name: string; description: string | null; forRoles: string[]; archived: boolean; inProgress: number; steps: ChecklistStep[] };
 
 const asInput = (s: ChecklistStep) => ({ id: s.id, kind: s.kind, title: s.title, help: s.help, credentialTypeId: s.credentialTypeId, required: s.required });
 
@@ -30,14 +31,16 @@ function stepFrom(f: FormData) {
 
 export async function addChecklist(f: FormData) {
   const fromRequirements = f.get('fromRequirements') === 'on';
-  const roles = (str(f, 'roles') ?? '').split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
+  // The roles it's for: its starting steps come from their rules, and it's chosen for people with those roles.
+  // Kept exactly as written, because rules match roles exactly.
+  const roles = parseRoles(str(f, 'roles'));
   await attempt(BACK, () => api('/onboarding-checklists', {
-    method: 'POST', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, fromRequirements, roles },
+    method: 'POST', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, fromRequirements, roles, forRoles: roles },
   }), fromRequirements ? 'Checklist added from your credential rules. Add your own tasks below.' : 'Checklist added. Now add its steps.');
 }
 
 export async function renameChecklist(id: string, f: FormData) {
-  await attempt(BACK, () => api(`/onboarding-checklists/${id}`, { method: 'PATCH', body: { name: str(f, 'name'), description: str(f, 'description') ?? null } }), 'Checklist saved.');
+  await attempt(BACK, () => api(`/onboarding-checklists/${id}`, { method: 'PATCH', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, forRoles: parseRoles(str(f, 'forRoles')) } }), 'Checklist saved.');
 }
 
 export async function setArchived(id: string, archived: boolean) {

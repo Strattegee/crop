@@ -33,6 +33,11 @@ describe('recruitment on the person page', () => {
     expect(np).not.toContain('Offer →');
     expect(renderToStaticMarkup(<RecruitmentCard workerId="w1" status="active" stage={null} events={[]} checklists={[]} when={when} />)).toBe('');
   });
+  it('picks the checklist for the person’s roles at Offer', () => {
+    const html = renderToStaticMarkup(<RecruitmentCard workerId="w1" status="applicant" stage="offer" events={events} roles={['Chef']}
+      checklists={[{ id: 'c1', name: 'Anyone', forRoles: [] }, { id: 'c2', name: 'Kitchen', forRoles: ['Chef'] }]} when={when} />);
+    expect(html).toContain('<option value="c2" selected="">Kitchen (for Chef)</option>');
+  });
   it('lets Offer start onboarding with a checklist', () => {
     const html = renderToStaticMarkup(<RecruitmentCard workerId="w1" status="applicant" stage="offer" events={events}
       checklists={[{ id: 'c1', name: 'Kitchen starter' }]} when={when} />);

@@ -9,7 +9,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import {
-  askableItems, askMessage, defaultTitle, notReadyMessage, STEP_KINDS, stepProgress, stepsFromRequirements, summarise,
+  askableItems, askMessage, CHECKLIST_BY_ROLE, checklistForRoles, defaultTitle, notReadyMessage, STEP_KINDS, stepProgress, stepsFromRequirements, summarise,
   type Step, type StepInput, type StepKind, type Tick,
 } from './onboarding.js';
 import { loadSettings } from './settings.js';
@@ -63,6 +63,9 @@ function stepsField(body: Record<string, unknown>): StepInput[] | null {
   });
 }
 
+/** The roles a checklist is for, exactly as written (rules match roles exactly). Undefined when not sent. */
+const forRolesField = (body: Record<string, unknown>) => textList(body, 'forRoles', { max: 30 }) ?? undefined;
+
 /** Replaces a checklist's steps: steps sent with their id are kept (and updated), others are marked removed. */
 async function setSteps(db: PoolClient, tenantId: string, checklistId: string, steps: StepInput[]) {
   const typeIds = steps.filter(s => s.credentialTypeId).map(s => s.credentialTypeId!);
@@ -102,7 +105,7 @@ async function stepsOf(db: PoolClient, checklistId: string) {
 
 async function checklistById(db: PoolClient, id: string) {
   const row = (await db.query<{ id: string }>(
-    `select c.id, c.name, c.description, c.archived_at is not null as archived,
+    `select c.id, c.name, c.description, c.for_roles as "forRoles", c.archived_at is not null as archived,
             (select count(*)::int from worker_onboardings o where o.checklist_id = c.id and o.finished_at is null) as "inProgress"
        from onboarding_checklists c where c.id = $1`, [id])).rows[0];
   if (!row) throw new NotFoundException('Checklist not found');
@@ -148,6 +151,26 @@ export async function onboardingProgress(db: PoolClient, tenantId: string, onboa
   };
 }
 
+/**
+ * The checklist to use: the one asked for, or (for `auto`) the one that fits the person's roles (`checklistForRoles`).
+ */
+export async function resolveChecklist(db: PoolClient, workerId: string, checklistId: string): Promise<string> {
+  if (checklistId !== CHECKLIST_BY_ROLE) {
+    if (!UUID.test(checklistId)) throw new BadRequestException('Choose a checklist');
+    return checklistId;
+  }
+  const roles = (await db.query<{ roles: string[] }>('select roles from workers where id = $1', [workerId])).rows[0]?.roles ?? [];
+  const live = (await db.query<{ id: string; name: string; forRoles: string[] }>(
+    `select id, name, for_roles as "forRoles" from onboarding_checklists where archived_at is null`)).rows;
+  const pick = checklistForRoles(live, roles);
+  if (!pick) {
+    throw new BadRequestException(live.length
+      ? `No checklist is for ${roles.length ? roles.join(', ') : 'someone with no roles'}: choose one`
+      : 'There are no onboarding checklists yet: add one in Settings');
+  }
+  return pick.id;
+}
+
 async function startOnboarding(db: PoolClient, tenantId: string, auth: AuthContext, workerId: string, checklistId: string) {
   const c = (await db.query<{ archived: boolean }>('select archived_at is not null as archived from onboarding_checklists where id = $1', [checklistId])).rows[0];
   if (!c) throw new BadRequestException('Choose a checklist');
@@ -164,7 +187,7 @@ async function startOnboarding(db: PoolClient, tenantId: string, auth: AuthConte
 
 /** Starts onboarding a person (used when adding a worker too). `hold` keeps them off the roster until it's finished. */
 export async function beginOnboarding(db: PoolClient, tenantId: string, auth: AuthContext, workerId: string, checklistId: string, hold: boolean) {
-  const id = await startOnboarding(db, tenantId, auth, workerId, checklistId);
+  const id = await startOnboarding(db, tenantId, auth, workerId, await resolveChecklist(db, workerId, checklistId));
   if (hold) await db.query(`update workers set status = 'onboarding', updated_at = now() where id = $1 and status = 'active'`, [workerId]);
   // An applicant always moves to Onboarding on the recruitment board (never straight onto the roster).
   const was = (await db.query<{ stage: string | null }>(
@@ -193,7 +216,8 @@ export class OnboardingChecklistsController {
   }
 
   /**
-   * Adds a checklist. `steps` lists them in order; or `fromRequirements: true` (optionally with `roles`) starts it
+   * Adds a checklist. `forRoles` = the roles it's for (empty = anyone), so it can be chosen by role (`auto`).
+   * `steps` lists them in order; or `fromRequirements: true` (optionally with `roles`) starts it
    * from the business's rules: right to work, employment terms and the credentials people must or should hold.
    */
   @Roles('owner', 'admin')
@@ -204,11 +228,12 @@ export class OnboardingChecklistsController {
     const steps = stepsField(body);
     const fromRequirements = bool(body, 'fromRequirements') ?? false;
     const roles = textList(body, 'roles') ?? [];
+    const forRoles = forRolesField(body) ?? [];
     return withTenant(this.pool, t.tenantId, async db => {
       let id: string;
       try {
-        id = (await db.query<{ id: string }>('insert into onboarding_checklists(tenant_id, name, description) values ($1,$2,$3) returning id',
-          [t.tenantId, name, description])).rows[0].id;
+        id = (await db.query<{ id: string }>('insert into onboarding_checklists(tenant_id, name, description, for_roles) values ($1,$2,$3,$4) returning id',
+          [t.tenantId, name, description, forRoles])).rows[0].id;
       } catch (err) { throw duplicate(err, name); }
       let list = steps ?? [];
       if (fromRequirements) {
@@ -222,20 +247,22 @@ export class OnboardingChecklistsController {
     });
   }
 
-  /** Change the name, description, steps (the whole list; keep a step by sending its id) or put it away (`archived`). */
+  /** Change the name, description, the roles it's for (`forRoles`), steps (the whole list; keep a step by sending its id) or put it away (`archived`). */
   @Roles('owner', 'admin')
   @Patch('onboarding-checklists/:id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { max: 80 });
     const description = body && 'description' in body ? text(body, 'description', { max: 300 }) : undefined;
     const archived = bool(body, 'archived');
+    const forRoles = forRolesField(body);
     const steps = stepsField(body);
     return withTenant(this.pool, t.tenantId, async db => {
       try {
         const n = (await db.query(
           `update onboarding_checklists set name = coalesce($2, name), description = case when $3 then $4 else description end,
-                  archived_at = case when $5::boolean is null then archived_at when $5 then coalesce(archived_at, now()) else null end
-            where id = $1`, [id, name, description !== undefined, description ?? null, archived])).rowCount;
+                  archived_at = case when $5::boolean is null then archived_at when $5 then coalesce(archived_at, now()) else null end,
+                  for_roles = coalesce($6, for_roles)
+            where id = $1`, [id, name, description !== undefined, description ?? null, archived, forRoles ?? null])).rowCount;
         if (!n) throw new NotFoundException('Checklist not found');
       } catch (err) {
         if ((err as { code?: string }).code === '23505') throw new BadRequestException(name ? `There is already a checklist called ${name}` : 'There is already a checklist with that name in use');
@@ -288,12 +315,15 @@ export class WorkerOnboardingController {
     });
   }
 
-  /** `{ checklistId, hold? }` — hold (default true) keeps an active person off the roster until onboarding is finished. */
+  /**
+   * `{ checklistId?, hold? }` — checklistId `auto` (or left out) picks the checklist for the person's roles. hold
+   * (default true) keeps an active person off the roster until onboarding is finished.
+   */
   @Roles(...OFFICE_ROLES)
   @Post('workers/:id/onboarding')
   start(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) workerId: string, @Body() body: Record<string, unknown>) {
-    const checklistId = text(body, 'checklistId', { required: true, max: 40 })!;
-    if (!UUID.test(checklistId)) throw new BadRequestException('Choose a checklist');
+    const checklistId = text(body, 'checklistId', { max: 40 }) ?? CHECKLIST_BY_ROLE;
+    if (checklistId !== CHECKLIST_BY_ROLE && !UUID.test(checklistId)) throw new BadRequestException('Choose a checklist');
     const hold = bool(body, 'hold') ?? true;
     return withTenant(this.pool, t.tenantId, async db => {
       const w = (await db.query<{ status: string }>('select status from workers where id = $1 for update', [workerId])).rows[0];

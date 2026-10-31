@@ -455,3 +455,9 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: the other agency and onboarding follow-ups (a checklist chosen automatically by role; the agency seeing which of its people meet an employer's requirements ahead of time).
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 morning, 6:15am Melbourne (scheduled run)
+
+- Shipped: onboarding checklists chosen by role. In Settings › Onboarding checklists, each checklist can say which roles it is for (blank means anyone), and that can be changed later. Wherever onboarding starts (the person's page, the recruitment board and their Recruitment card) the checklist for the person's roles is already picked, and each choice shows its roles; adding a person has "The checklist for their roles". The checklist written for most of their roles wins, otherwise one for anyone; if no checklist fits, the office has to choose one. Role names in that form are now kept exactly as typed (they were being upper-cased, which stopped them matching).
+- Next: the agency seeing which of its people meet an employer's requirements ahead of time, then other follow-ups.
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.

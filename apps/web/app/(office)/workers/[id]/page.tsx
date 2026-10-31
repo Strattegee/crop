@@ -145,11 +145,11 @@ export default async function WorkerPage({ params, searchParams }: {
 
       {tab === 'overview' && w.status !== 'agency' && (
         <RecruitmentCard workerId={id} status={w.status} stage={w.recruitmentStage ?? null} events={recruitment}
-          checklists={checklists.filter(c => !c.archived)} when={whenIn(zone)} />
+          checklists={checklists.filter(c => !c.archived)} roles={w.roles} when={whenIn(zone)} />
       )}
 
       {onboarding && (
-        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={zone} />
+        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} roles={w.roles} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={zone} />
       )}
 
         <div className="card" style={{ overflowX: 'auto' }}>
