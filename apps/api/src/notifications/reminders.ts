@@ -6,6 +6,7 @@ import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
 import { queueNotification } from './notify.js';
 import { T, wordsFor } from '../terms/words.js';
+import { queueDailyEmails } from '../dashboard/daily-email.js';
 
 const WORKER_STAGES = [7, 30, 60]; // days before expiry
 const OFFICE_STAGE = 30;
@@ -43,9 +44,9 @@ function longDate(iso: string) {
 /**
  * Expiry reminders (spec CRD-7), checked hourly and sent from 8am agency time:
  * - Workers: at 60, 30 and 7 days before a credential or visa expires (7 days: email and text).
- * - Office (owners and admins): one daily email listing what reaches 30 days and what expired, for people
- *   and for equipment dates (registration, service, inspection…), with how many shifts a machine is booked on
- *   after its date runs out.
+ * - Office: what reaches 30 days and what expired, for people and for equipment dates (registration, service,
+ *   inspection…), with how many shifts a machine is booked on after its date runs out. Since 31 Oct this goes in each
+ *   office person's daily dashboard email (`dashboard/daily-email.ts`) for Compliance and Overview dashboards.
  * Each reminder has a de-duplication key, so running more often never sends twice.
  * Messages carry no health information or document numbers (vaccinations are "a vaccination record").
  */
@@ -138,23 +139,11 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
       keys.push(k);
     }
 
-    const total = lines.length + equipLines.length;
-    if (total) {
-      const appUrl = (process.env.APP_URL ?? '').replace(/\/$/, '');
-      const sections: string[] = [];
-      if (lines.length) {
-        sections.push(`${equipLines.length ? 'People:\n' : ''}${lines.join('\n')}\n\n${appUrl ? `See the compliance page: ${appUrl}/compliance` : 'See the Compliance page in CROP.'}`);
-      }
-      if (equipLines.length) {
-        sections.push(`${words.one(T.equipment)}:\n${equipLines.join('\n')}\n\nRecord the new date against the ${words.lower(T.equipment)} in CROP once it's done.`);
-      }
-      const body = `These need attention at ${agency}:\n\n${sections.join('\n\n')}`;
-      const offices = (await db.query<{ email: string }>('select email from app_agency_office_emails()')).rows;
-      for (const o of offices) {
-        await q({ channel: 'email', to: o.email, template: 'compliance_expiry', dedupeKey: `office-digest:${today}:${o.email}`,
-          subject: `Compliance: ${total} ${total === 1 ? 'date' : 'dates'} to follow up`, body });
-      }
-      // Mark each item as reported, so the next digest only has what's new.
+    // The office hears about these in the daily dashboard email (David, 31 Oct), which replaced the separate digest.
+    const daily = await queueDailyEmails(this.pool, db, tenantId, agency, today, words, { people: lines, equipment: equipLines });
+    queued += daily.queued;
+    // Mark each item as reported once someone has been sent it, so the next email only has what's new.
+    if (daily.datesSent) {
       for (const k of keys) {
         await db.query('insert into reminder_marks(tenant_id, mark) values ($1, $2) on conflict do nothing', [tenantId, k]);
       }
