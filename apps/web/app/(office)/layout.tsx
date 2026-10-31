@@ -11,7 +11,7 @@ import { T, words } from '../../lib/terms';
 const GROUPS: { codes: number[]; label?: (w: Awaited<ReturnType<typeof words>>) => string }[] = [
   { codes: [1000] },
   { codes: [2000] },
-  { codes: [3000, 3200, 3500], label: w => w.many(T.worker) },
+  { codes: [3000, 3100, 3200, 3500], label: w => w.many(T.worker) },
   { codes: [4000, 4100], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
   { codes: [5000, 5500], label: w => `${w.one(T.equipment)} & ${w.lower(T.item, true)}` },
   { codes: [6000] },

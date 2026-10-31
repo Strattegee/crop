@@ -15,6 +15,7 @@ import {
 import { loadSettings } from './settings.js';
 import { queueNotification } from '../notifications/notify.js';
 import { createUploadLink } from './upload-links.controller.js';
+import { recruitmentEvent } from './recruitment.controller.js';
 import { uploadLinkLines, uploadLinkUrl } from './upload-links.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -165,6 +166,12 @@ async function startOnboarding(db: PoolClient, tenantId: string, auth: AuthConte
 export async function beginOnboarding(db: PoolClient, tenantId: string, auth: AuthContext, workerId: string, checklistId: string, hold: boolean) {
   const id = await startOnboarding(db, tenantId, auth, workerId, checklistId);
   if (hold) await db.query(`update workers set status = 'onboarding', updated_at = now() where id = $1 and status = 'active'`, [workerId]);
+  // An applicant always moves to Onboarding on the recruitment board (never straight onto the roster).
+  const was = (await db.query<{ stage: string | null }>(
+    `update workers w set status = 'onboarding', recruitment_stage = null, stage_changed_at = now(), updated_at = now()
+       from (select recruitment_stage from workers where id = $1) old
+      where w.id = $1 and w.status = 'applicant' returning old.recruitment_stage as stage`, [workerId])).rows[0];
+  if (was) await recruitmentEvent(db, tenantId, workerId, auth, 'onboarding', was.stage);
   return id;
 }
 
@@ -382,6 +389,10 @@ export class WorkerOnboardingController {
       let activated = false;
       if (activate) {
         activated = ((await db.query(`update workers set status = 'active', updated_at = now() where id = $1 and status in ('onboarding', 'inactive')`, [o.worker_id])).rowCount ?? 0) > 0;
+        // Someone who came through the recruitment board has started.
+        if (activated && (await db.query('select 1 from recruitment_events where worker_id = $1 limit 1', [o.worker_id])).rowCount) {
+          await recruitmentEvent(db, t.tenantId, o.worker_id, auth, 'started', 'onboarding');
+        }
       }
       return { ...(await onboardingProgress(db, t.tenantId, id)), activated };
     });

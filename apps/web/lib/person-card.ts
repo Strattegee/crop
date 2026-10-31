@@ -70,5 +70,5 @@ export const LIGHT: Record<string, { cls: 'ok' | 'warn' | 'bad'; label: string }
 
 /** Status words shown on the card when the person isn't simply active. */
 export const STATUS_WORD: Record<string, string> = {
-  onboarding: 'Onboarding', inactive: 'Inactive', offboarded: 'Offboarded', agency: 'Agency',
+  applicant: 'Applicant', onboarding: 'Onboarding', inactive: 'Inactive', offboarded: 'Offboarded', agency: 'Agency',
 };
