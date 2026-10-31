@@ -318,23 +318,34 @@ export default async function RosterPage({ searchParams }: {
     title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
   // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
-  const marks = (s: Shift) => {
+  // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
+  // (F/M gender, V vehicle, E equipment, I items, D duties) so the office sees at a glance how much a shift involves.
+  const letterCol = (s: Shift) => {
     const list = s.status === 'cancelled' ? [] : shiftMarkers(s);
-    return list.length ? <span className="mks">{list.map(m => <b key={m.key} className={`mk ${m.cls}`} title={m.title} aria-label={m.title}>{m.letter}</b>)}</span> : null;
+    const shiftName = s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM';
+    return (
+      <span className="mkcol">
+        <b className={`mk mk-shift ${band(s)}`} title={shiftName} aria-label={shiftName}>{s.shiftLetter ?? LETTER[band(s)]}</b>
+        {list.map(m => <b key={m.key} className={`mk ${m.cls}`} title={m.title} aria-label={m.title}>{m.letter}</b>)}
+      </span>
+    );
   };
-  const cardBody = (s: Shift, kind: Row['kind']) => cardLook === 'simple' ? (
-    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{marks(s)}{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
-  ) : (<>
-    <span className={`band ${band(s)}`}><b className="ltr" aria-label={s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM'}>{s.shiftLetter ?? LETTER[band(s)]}</b>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
-    <span className="st">{stage(s, tw).label}{marks(s)}</span>
-    {kind === 'area' ? (<>
-      <span className={`ln who-on${s.workerName || s.equipmentOnly ? '' : ' unfilled'}`}>{s.equipmentOnly ? s.role : s.workerName ?? 'Unfilled'}</span>
-      {!s.equipmentOnly && <span className="ln rl">{s.role}</span>}
-    </>) : <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>}
-    {s.coveringName && <span className="cv">{coveringLine(s.coveringName)}</span>}
-    {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
-    {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
-    {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
+  const cardBody = (s: Shift, kind: Row['kind']) => (<>
+    {letterCol(s)}
+    <span className="cbody">{cardLook === 'simple' ? (
+      <span className={`band ${band(s)}`}>{simpleLine(s, kind)}<span className="sr-only"> · {stage(s, tw).label}</span></span>
+    ) : (<>
+      <span className={`band ${band(s)}`}>{s.localStart}–{s.localEnd}{s.shiftCode ? ` · ${s.shiftCode}` : ''}</span>
+      <span className="st">{stage(s, tw).label}</span>
+      {kind === 'area' ? (<>
+        <span className={`ln who-on${s.workerName || s.equipmentOnly ? '' : ' unfilled'}`}>{s.equipmentOnly ? s.role : s.workerName ?? 'Unfilled'}</span>
+        {!s.equipmentOnly && <span className="ln rl">{s.role}</span>}
+      </>) : <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>}
+      {s.coveringName && <span className="cv">{coveringLine(s.coveringName)}</span>}
+      {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
+      {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
+      {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
+    </>)}</span>
   </>);
 
   const bankReady = candidates.filter(c => c.eligible && ['bank', 'casual'].includes(c.employmentType ?? '') && !c.offer);
@@ -1197,7 +1208,7 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <div className="roster-legend">
-        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g">F</b>/<b className="mk mk-g">M</b> gender requested (or of the person on it)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><i className="leave-key" /> Leave</span>
+        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g f">F</b>/<b className="mk mk-g m">M</b> gender requested (pale: the person's own; ringed red: doesn't match)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><i className="leave-key" /> Leave</span>
         <span><i className="rb accepted" /> Accepted (when approval is on)</span>
       </div>
 

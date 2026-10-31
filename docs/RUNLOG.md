@@ -400,3 +400,4 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: the agency and onboarding follow-ups (push alerts with quiet hours wait for the Expo account; adding shifts stays on the web for now).
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+- (31 Oct, with David) Roster cards now have a column of letters down the left: the shift's letter, then colour-coded F/M, V, E, I, D, so operators see at a glance how much a shift involves.
