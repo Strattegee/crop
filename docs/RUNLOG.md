@@ -393,3 +393,10 @@ Newest first. One entry per working session or scheduled run.
 - Not yet tried on a phone (needs the development build).
 - Next: the covering line from the phone, then the agency and onboarding follow-ups (push alerts wait for the Expo account).
 - Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.
+
+## 2026-10-31 midday, 12:10pm Melbourne (scheduled run)
+
+- Shipped: the covering line from the phone in manager mode. A shift now has a Covering part: it says who the shift covers (or nobody), and Change lists the people away that day first (on leave, leave requested, never the kind of leave), then everyone else; picking one saves it, Nobody clears it. It's hidden on cancelled and equipment-only shifts, and while the week's after-publishing rule stops this person changing shifts. No API change.
+- Not yet tried on a phone (needs the development build).
+- Next: the agency and onboarding follow-ups (push alerts with quiet hours wait for the Expo account; adding shifts stays on the web for now).
+- Waiting on David: the public apply form (spam protection and the form's questions); a development build of the app to try it (and the Expo account push needs); checking the app's Zitadel access token type is JWT; confirming owners and admins may give their own people app access.

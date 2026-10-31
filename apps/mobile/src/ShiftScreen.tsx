@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { api, ApiError, SignedOut } from './api';
 import {
-  actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, confirmLabel, mondayOf, offerable, offeredMessage,
-  pendingOffers, phoneLinks, REQUEST_SENT, requestKind, shiftWhen, stageOf,
-  type Action, type Candidate, type FillState,
+  actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, canSetCovering, confirmLabel, coveringChoices,
+  coveringMessage, mondayOf, offerable, offeredMessage, pendingOffers, phoneLinks, REQUEST_SENT, requestKind, shiftWhen, stageOf,
+  type Action, type Candidate, type CoveringChoice, type FillState, type LeaveLine,
 } from './shift';
 import { styles } from './styles';
 
@@ -12,7 +12,7 @@ type Word = { one: string; lower: string };
 
 /**
  * One shift in manager mode (backlog item 9a): who is on it, and filling it from the phone. Put on a ready person,
- * offer it to bank and casual staff, confirm, take off, record a pull-out, cancel, call or text the person.
+ * offer it to bank and casual staff, confirm, take off, record a pull-out, cancel, say who it is covering, call or text the person.
  * All through the office endpoints, so eligibility and the after-publishing rule apply as on the web; when that rule
  * stops this person making a change, each button asks an owner or admin instead (a change request).
  */
@@ -28,6 +28,7 @@ export function ShiftScreen({ tenant, shiftId, today, word, onBack, onSignedOut 
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [covering, setCovering] = useState<CoveringChoice[] | null>(null);
 
   const fail = useCallback((e: unknown) => {
     if (e instanceof SignedOut) onSignedOut();
@@ -41,6 +42,7 @@ export function ShiftScreen({ tenant, shiftId, today, word, onBack, onSignedOut 
       const s = await api<FillState>(`/shifts/${shiftId}/bank-fill?everyone=true`, { tenant });
       setState(s);
       setPicked(new Set());
+      setCovering(null);
       const weeks = await api<{ facilityId: string; changeRefusal?: string | null }[]>(
         `/roster/weeks?weekStart=${mondayOf(s.shift.localDate)}&facilityId=${s.shift.facilityId}`, { tenant }).catch(() => []);
       setRefusal(weeks.find(w => w.facilityId === s.shift.facilityId)?.changeRefusal ?? null);
@@ -80,6 +82,33 @@ export function ShiftScreen({ tenant, shiftId, today, word, onBack, onSignedOut 
       return run(`/shifts/${shiftId}/change-requests`, { change: kind, workerId: body.workerId, reason: reasonText }, () => REQUEST_SENT);
     }
     return run(path, body, done);
+  };
+
+  /** Opens the covering list: people (and leave that day) from GET /roster for the shift's date. */
+  const openCovering = async (sh: FillState['shift']) => {
+    setBusy(true);
+    try {
+      const r = await api<{ people: { id: string; name: string }[]; leave?: LeaveLine[] }>(
+        `/roster?from=${sh.localDate}&to=${sh.localDate}&facilityId=${sh.facilityId}`, { tenant });
+      setCovering(coveringChoices(r.people, r.leave ?? [], sh.localDate, { id: sh.coveringWorkerId ?? null, name: sh.coveringName }, sh.workerId));
+    } catch (e) {
+      if (e instanceof SignedOut) return onSignedOut();
+      Alert.alert('Not done', e instanceof Error ? e.message : 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveCovering = async (workerId: string | null) => {
+    setBusy(true);
+    try {
+      const r = await api<{ coveringName: string | null }>(`/shifts/${shiftId}/covering`, { method: 'PUT', tenant, body: { workerId } });
+      Alert.alert('Saved', coveringMessage(r.coveringName));
+    } catch (e) {
+      if (e instanceof SignedOut) return onSignedOut();
+      Alert.alert('Not done', e instanceof Error ? e.message : 'Something went wrong');
+    }
+    await load();
   };
 
   const ask = (title: string, message: string | undefined, yes: string, go: () => void) =>
@@ -235,6 +264,42 @@ export function ShiftScreen({ tenant, shiftId, today, word, onBack, onSignedOut 
           </>
         )}
 
+        {canSetCovering(s, !!refusal) && (
+          <>
+            <Text style={styles.section}>Covering</Text>
+            {covering === null ? (
+              <View style={styles.card}>
+                <Text>{s.coveringName ? `Covering ${s.coveringName}` : `Not covering anyone`}</Text>
+                <Pressable disabled={busy} onPress={() => openCovering(s)} accessibilityRole="button">
+                  <Text style={[styles.link, { marginTop: 8 }]}>{s.coveringName ? 'Change' : 'Say who it covers'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <Text style={[styles.muted, styles.small]}>{`Shown on the ${word.lower} as "Covering <name>", never the reason they're away.`}</Text>
+                {covering.some(c => c.away) && <Text style={[styles.label, { marginTop: 8 }]}>Away that day</Text>}
+                <View style={styles.chips}>
+                  {covering.filter(c => c.away).map(c => <CoverChip key={c.id} c={c} on={c.id === s.coveringWorkerId} busy={busy} pick={saveCovering} />)}
+                </View>
+                <Text style={[styles.label, { marginTop: 8 }]}>{covering.some(c => c.away) ? 'Everyone else' : 'Who it covers'}</Text>
+                <View style={styles.chips}>
+                  {covering.filter(c => !c.away).map(c => <CoverChip key={c.id} c={c} on={c.id === s.coveringWorkerId} busy={busy} pick={saveCovering} />)}
+                </View>
+                <View style={styles.row}>
+                  {!!s.coveringName && (
+                    <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} disabled={busy} onPress={() => saveCovering(null)}>
+                      <Text style={[styles.buttonText, styles.secondaryText]}>Nobody</Text>
+                    </Pressable>
+                  )}
+                  <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} onPress={() => setCovering(null)}>
+                    <Text style={[styles.buttonText, styles.secondaryText]}>Close</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
         {can('cancel') && (
           <View style={{ marginTop: 28 }}>
             {!cancelling ? (
@@ -259,6 +324,15 @@ export function ShiftScreen({ tenant, shiftId, today, word, onBack, onSignedOut 
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function CoverChip({ c, on, busy, pick }: { c: CoveringChoice; on: boolean; busy: boolean; pick: (id: string) => void }) {
+  return (
+    <Pressable style={[styles.chip, on && styles.chipOn]} disabled={busy || on} onPress={() => pick(c.id)}
+      accessibilityRole="radio" accessibilityState={{ selected: on }}>
+      <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
+    </Pressable>
   );
 }
 
