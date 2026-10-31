@@ -7,6 +7,7 @@ import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
 import { PersonCard } from '../workers/person-card';
 import { RolePicker } from '../workers/role-picker';
+import { checklistOption, suggestedChecklist, type ChecklistChoice } from '../../../lib/onboarding';
 import { addApplicant, moveTo, startOnboarding } from './actions';
 import { BoardDrag } from './board-drag';
 import { STAGES, nextStage, previousStage, daysLine } from '../../../lib/recruitment';
@@ -28,7 +29,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const [b, checklists, packs, roleList] = await Promise.all([
     api<Board>('/recruitment'),
-    api<{ id: string; name: string }[]>('/onboarding-checklists').catch(() => [] as { id: string; name: string }[]),
+    api<ChecklistChoice[]>('/onboarding-checklists').catch(() => [] as ChecklistChoice[]),
     api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
     api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
   ]);
@@ -85,8 +86,8 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
                       )}
                       {col.stage === 'offer' && (checklists.length ? (
                         <form action={startOnboarding.bind(null, p.id)} className="rinline">
-                          <select name="checklistId" required defaultValue={checklists[0].id} aria-label="Onboarding checklist">
-                            {checklists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <select name="checklistId" required defaultValue={(suggestedChecklist(checklists, p.roles) ?? checklists[0]).id} aria-label="Onboarding checklist">
+                            {checklists.map(c => <option key={c.id} value={c.id}>{checklistOption(c)}</option>)}
                           </select>
                           <button className="btn small">Start onboarding →</button>
                         </form>

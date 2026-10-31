@@ -1,14 +1,15 @@
 import Link from 'next/link';
 import { historyLine, nextStage, previousStage, recruitmentState, type RecruitmentEvent } from '../../../../lib/recruitment';
+import { checklistOption, suggestedChecklist, type ChecklistChoice } from '../../../../lib/onboarding';
 import { moveFrom, startOnboardingFrom } from '../../recruitment/actions';
 
 /**
  * Recruitment on the person's page (David, 31 Oct): where they are, the same moves as the board for applicants, and
  * every move so far (who, when, any note). Shown only for people who have been through recruitment.
  */
-export function RecruitmentCard({ workerId, status, stage, events, checklists, when }: {
+export function RecruitmentCard({ workerId, status, stage, events, checklists, roles = [], when }: {
   workerId: string; status: string; stage: string | null; events: RecruitmentEvent[];
-  checklists: { id: string; name: string }[]; when: (iso: string) => string;
+  checklists: ChecklistChoice[]; roles?: string[]; when: (iso: string) => string;
 }) {
   const state = recruitmentState(status, stage, events);
   if (!state) return null;
@@ -29,8 +30,8 @@ export function RecruitmentCard({ workerId, status, stage, events, checklists, w
           )}
           {at === 'offer' && (checklists.length ? (
             <form action={startOnboardingFrom.bind(null, back, workerId)} className="rinline">
-              <select name="checklistId" required defaultValue={checklists[0].id} aria-label="Onboarding checklist">
-                {checklists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <select name="checklistId" required defaultValue={(suggestedChecklist(checklists, roles) ?? checklists[0]).id} aria-label="Onboarding checklist">
+                {checklists.map(c => <option key={c.id} value={c.id}>{checklistOption(c)}</option>)}
               </select>
               <button className="btn small">Start onboarding →</button>
             </form>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
+import { forRolesLine } from '../../../../lib/onboarding';
 import { Notices } from '../../notices';
 import {
   addChecklist, addStep, moveStep, removeStep, renameChecklist, setArchived, toggleRequired, type Checklist, type ChecklistStep,
@@ -61,7 +62,9 @@ export default async function OnboardingChecklistsPage({ searchParams }: { searc
       <p className="muted">
         What a new {person} needs before they can work. Some steps are tasks the office ticks, such as a signed contract or an induction. Others tick
         themselves when the {person}’s record is complete: a credential checked and current, right to work checked, employment terms set. Start a
-        checklist when adding a {person}, or from their page; they stay off the {tw.lower(T.roster)} until an owner or admin finishes it.
+        checklist when adding a {person}, or from their page; they stay off the {tw.lower(T.roster)} until an owner or admin finishes it. A
+        checklist can be for some {tw.lower(T.role, true)}: when onboarding starts, CROP picks the checklist for the {person}’s {tw.lower(T.role, true)} (or one
+        for anyone), and the office can still choose another.
       </p>
       <Notices error={sp.error} done={sp.done} />
       {!canEdit && <div className="notice error">Only owners and administrators can change checklists.</div>}
@@ -73,7 +76,7 @@ export default async function OnboardingChecklistsPage({ searchParams }: { searc
           <h2 style={{ marginBottom: 4 }}>{c.name}{c.archived && <span className="muted"> (put away)</span>}</h2>
           {c.description && <p className="muted" style={{ marginTop: 0 }}>{c.description}</p>}
           <p className="muted small" style={{ marginTop: 0 }}>
-            {c.steps.length} step{c.steps.length === 1 ? '' : 's'}, {c.steps.filter(s => s.required).length} required
+            {forRolesLine(c.forRoles)} · {c.steps.length} step{c.steps.length === 1 ? '' : 's'}, {c.steps.filter(s => s.required).length} required
             {c.inProgress > 0 && <> · {c.inProgress} {c.inProgress === 1 ? person : tw.lower(T.worker, true)} being onboarded with it</>}
           </p>
           {c.steps.length > 0 && (
@@ -103,10 +106,11 @@ export default async function OnboardingChecklistsPage({ searchParams }: { searc
           )}
           {canEdit && (
             <details style={{ marginTop: 6 }}>
-              <summary style={{ cursor: 'pointer' }}>Rename or put away</summary>
+              <summary style={{ cursor: 'pointer' }}>Rename, change its {tw.lower(T.role, true)} or put away</summary>
               <form action={renameChecklist.bind(null, c.id)} className="form-row" style={{ marginTop: 8 }}>
                 <label>Name<input name="name" defaultValue={c.name} maxLength={80} required /></label>
                 <label>Description<input name="description" defaultValue={c.description ?? ''} maxLength={300} /></label>
+                <label>For {tw.lower(T.role, true)}<input name="forRoles" defaultValue={c.forRoles.join(', ')} maxLength={600} placeholder="Blank for anyone" /></label>
                 <button type="submit" className="btn small">Save</button>
               </form>
               <form action={setArchived.bind(null, c.id, !c.archived)} style={{ marginTop: 6 }}>
@@ -127,7 +131,7 @@ export default async function OnboardingChecklistsPage({ searchParams }: { searc
             </div>
             <div className="form-row">
               <label className="inline"><input type="checkbox" name="fromRequirements" defaultChecked /> Start from our credential rules (right to work, employment terms and the credentials {tw.lower(T.worker, true)} must or should hold)</label>
-              <label>For roles<input name="roles" maxLength={200} placeholder="Optional, e.g. CHEF, BARISTA" /></label>
+              <label>For {tw.lower(T.role, true)}<input name="roles" maxLength={600} placeholder="Blank for anyone, e.g. Chef, Barista" /></label>
             </div>
             <button type="submit" className="btn">Add checklist</button>
           </form>

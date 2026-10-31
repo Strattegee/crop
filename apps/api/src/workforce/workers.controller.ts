@@ -73,14 +73,14 @@ export class WorkersController {
     });
   }
 
-  /** Adds a worker. `onboardingChecklistId` starts onboarding them at once and keeps them off the roster until it's finished. */
+  /** Adds a worker. `onboardingChecklistId` (an id, or `auto` for the one that fits their roles) starts onboarding them at once and keeps them off the roster until it's finished. */
   @Roles(...OFFICE_ROLES)
   @Post()
   create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const checklistId = text(body, 'onboardingChecklistId', { max: 40 });
     const applicant = bool(body, 'applicant') ?? false;
     if (applicant && checklistId) throw new BadRequestException('Add them as an applicant, or start their onboarding, not both');
-    if (checklistId && !/^[0-9a-f-]{36}$/i.test(checklistId)) throw new BadRequestException('Choose a checklist');
+    if (checklistId && checklistId !== 'auto' && !/^[0-9a-f-]{36}$/i.test(checklistId)) throw new BadRequestException('Choose a checklist');
     const values = [
       t.tenantId,
       text(body, 'firstName', { required: true, max: 100 }),

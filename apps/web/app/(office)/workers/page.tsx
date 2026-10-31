@@ -11,6 +11,7 @@ import type { CardData } from '../../../lib/person-card';
 import { PersonCard } from './person-card';
 import { RolePicker } from './role-picker';
 import { industryGroups, type PackInfo } from '../../../lib/industry-groups';
+import { checklistOption, type ChecklistChoice } from '../../../lib/onboarding';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   if (p.employment) qs.set('employment', p.employment);
   const [workers, agency, checklists, packs, roleList] = await Promise.all([
     api<Worker[]>(`/workers?${qs}`), currentAgency(),
-    api<{ id: string; name: string }[]>('/onboarding-checklists').catch(() => [] as { id: string; name: string }[]),
+    api<ChecklistChoice[]>('/onboarding-checklists').catch(() => [] as ChecklistChoice[]),
     api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
     api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
   ]);
@@ -82,7 +83,8 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
             <label>Onboarding
               <select name="onboardingChecklistId" defaultValue="">
                 <option value="">None: can be rostered now</option>
-                {checklists.map(c => <option key={c.id} value={c.id}>{c.name} (rostered once finished)</option>)}
+                {checklists.length > 1 && <option value="auto">The checklist for their {tw.lower(T.role, true)} (rostered once finished)</option>}
+                {checklists.map(c => <option key={c.id} value={c.id}>{checklistOption(c)} (rostered once finished)</option>)}
               </select>
             </label>
           )}

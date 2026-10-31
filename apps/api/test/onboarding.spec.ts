@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { askableItems, askMessage, notReadyMessage, stepProgress, stepsFromRequirements, summarise, type OnboardingFacts, type Step } from '../src/workforce/onboarding.js';
+import { askableItems, askMessage, checklistForRoles, notReadyMessage, stepProgress, stepsFromRequirements, summarise, type OnboardingFacts, type Step } from '../src/workforce/onboarding.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('onboarding: rules', () => {
@@ -94,6 +94,19 @@ describe('onboarding: rules', () => {
       { credentialTypeId: 'fa', typeName: 'First aid', scope: 'all_workers', role: null, severity: 'warning' },
       { credentialTypeId: 'fa', typeName: 'First aid', scope: 'role', role: 'Bartender', severity: 'hard' },
     ], ['Bartender']).slice(2).map(s => [s.title, s.required])).toEqual([['First aid', true], ['RSA', true]]);
+  });
+  it('picks the checklist for the most of a person’s roles, else one for anyone, else none', () => {
+    const c = (id: string, forRoles: string[]) => ({ id, name: id, forRoles });
+    const lists = [c('Anyone', []), c('Bar', ['Bartender']), c('Bar and floor', ['Bartender', 'Waiter']), c('Kitchen', ['Chef'])];
+    expect(checklistForRoles(lists, ['Chef'])?.id).toBe('Kitchen');
+    expect(checklistForRoles(lists, ['Bartender'])?.id).toBe('Bar');
+    expect(checklistForRoles(lists, ['Waiter', 'Bartender'])?.id).toBe('Bar and floor');
+    expect(checklistForRoles(lists, ['Barista'])?.id).toBe('Anyone');
+    expect(checklistForRoles(lists, [])?.id).toBe('Anyone');
+    // Roles match exactly, as in credential rules.
+    expect(checklistForRoles(lists, ['chef'])?.id).toBe('Anyone');
+    expect(checklistForRoles(lists.slice(1), ['Barista'])).toBeNull();
+    expect(checklistForRoles([c('B', []), c('A', [])], [])?.id).toBe('A');
   });
 });
 
@@ -296,5 +309,35 @@ describe('onboarding: API', () => {
       await c.query('rollback');
     } finally { await c.end(); }
     expect(tenantId).toBeTruthy();
+  });
+  it('a checklist can be for some roles, and starting onboarding without one picks it by role', async () => {
+    const kitchen = (await http().post('/onboarding-checklists').set(as('admin')).send({ name: 'Kitchen', forRoles: ['Chef', ' Chef '], steps: [{ kind: 'employment' }] }).expect(201)).body;
+    expect(kitchen.forRoles).toEqual(['Chef']);
+    const anyone = (await http().post('/onboarding-checklists').set(as('admin')).send({ name: 'Anyone', steps: [{ kind: 'employment' }] }).expect(201)).body;
+    expect(anyone.forRoles).toEqual([]);
+    const bar = (await http().get('/onboarding-checklists').set(as('alloc')).expect(200)).body.find((x: { name: string }) => x.name === 'New bar staff');
+    await http().patch(`/onboarding-checklists/${bar.id}`).set(as('alloc')).send({ forRoles: ['Bartender'] }).expect(403);
+    const changed = (await http().patch(`/onboarding-checklists/${bar.id}`).set(as('admin')).send({ forRoles: ['Bartender'] }).expect(200)).body;
+    expect(changed).toMatchObject({ forRoles: ['Bartender'], name: 'New bar staff' });
+    // Renaming leaves the roles alone.
+    expect((await http().patch(`/onboarding-checklists/${bar.id}`).set(as('admin')).send({ description: 'Bar' }).expect(200)).body.forRoles).toEqual(['Bartender']);
+
+    const chef = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Ash', lastName: 'Example', roles: ['Chef'], onboardingChecklistId: 'auto' }).expect(201)).body;
+    expect(chef.status).toBe('onboarding');
+    expect((await http().get(`/workers/${chef.id}/onboarding`).set(as('alloc')).expect(200)).body.current.checklistName).toBe('Kitchen');
+
+    const barPerson = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Bo', lastName: 'Example', roles: ['Bartender'] }).expect(201)).body;
+    const o = (await http().post(`/workers/${barPerson.id}/onboarding`).set(as('alloc')).send({ hold: false }).expect(201)).body;
+    expect(o.checklistName).toBe('New bar staff');
+
+    const waiter = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Cy', lastName: 'Example', roles: ['Waiter'] }).expect(201)).body;
+    expect((await http().post(`/workers/${waiter.id}/onboarding`).set(as('alloc')).send({ checklistId: 'auto' }).expect(201)).body.checklistName).toBe('Anyone');
+
+    // With no checklist for anyone, a role nobody wrote one for is refused and nothing is created.
+    await http().patch(`/onboarding-checklists/${anyone.id}`).set(as('admin')).send({ archived: true }).expect(200);
+    const res = await http().post('/workers').set(as('alloc')).send({ firstName: 'Di', lastName: 'Example', roles: ['Waiter'], onboardingChecklistId: 'auto' }).expect(400);
+    expect(res.body.message).toBe('No checklist is for Waiter: choose one');
+    expect((await http().get('/workers?search=Di').set(as('alloc')).expect(200)).body).toEqual([]);
+    await http().post(`/workers/${waiter.id}/onboarding`).set(as('alloc')).send({ checklistId: 'nonsense' }).expect(400);
   });
 });
