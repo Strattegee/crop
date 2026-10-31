@@ -280,4 +280,32 @@ describe('agency pull out and placement emails: API', () => {
     // A third business's copies are untouched (it never had this shift).
     expect((await owner.query(`select count(*)::int as n from agency_inbox where tenant_id = $1`, [ids.nosy])).rows[0].n).toBe(0);
   });
+
+  it('tells agencies up front when equipment on the shift needs a licensed operator (migration 0057)', async () => {
+    const lic = (await owner.query<{ id: string }>(`insert into credential_types(tenant_id, name, category) values ($1, 'Forklift licence', 'licence') returning id`, [ids.bayside])).rows[0].id;
+    const ftype = (await owner.query<{ id: string }>(`insert into equipment_types(tenant_id, name, operator_credential_type_id) values ($1, 'Forklift', $2) returning id`, [ids.bayside, lic])).rows[0].id;
+    const fork = (await owner.query<{ id: string }>(`insert into equipment(tenant_id, equipment_type_id, name) values ($1, $2, 'Forklift 1') returning id`, [ids.bayside, ftype])).rows[0].id;
+    const operatorRule = (copy: string) => owner.query(`select requirements from agency_inbox where id = $1`, [copy])
+      .then(r => (r.rows[0].requirements as Array<{ name: string; severity: string; forDuty: string | null; credentialTypeId: string | null }>).find(x => x.name === 'Forklift licence'));
+    // Equipment booked before the shift goes to agencies: the copy carries the operator's licence as a must-have.
+    const s = await newShift(110);
+    await http().post(`/shifts/${s}/equipment`).set(as('emp')).send({ equipmentId: fork }).expect(200);
+    const copy = await sendToAgency(s);
+    expect(await operatorRule(copy)).toMatchObject({ severity: 'hard', forDuty: 'Forklift operator', credentialTypeId: null });
+    // Not matched by the agency, so none of its people can be put forward for it.
+    const ppl = (await http().get(`/agency-requests/${copy}/people`).set(as('ag')).expect(200)).body as { people: Array<{ eligible: boolean }> } | Array<{ eligible: boolean }>;
+    const list = Array.isArray(ppl) ? ppl : ppl.people;
+    expect(list.every(p => !p.eligible)).toBe(true);
+    // Taken off while the agency holds it: the rule goes from the copy.
+    await http().post(`/shifts/${s}/equipment/${fork}/remove`).set(as('emp')).send({}).expect((r) => { if (r.status >= 300) throw new Error(`${r.status} ${JSON.stringify(r.body)}`); });
+    expect(await operatorRule(copy)).toBeUndefined();
+    // Someone already put forward: equipment added later tells the agency.
+    const s2 = await newShift(130);
+    const placedId = await placed(s2);
+    await timer.runOnce();
+    await owner.query(`insert into shift_assignments(tenant_id, shift_id, resource_kind, equipment_id, status) values ($1,$2,'equipment',$3,'confirmed')`, [ids.bayside, s2, fork]);
+    const row = (await owner.query(`select notice from agency_inbox where id = $1`, [placedId])).rows[0];
+    expect(row.notice).toBe('changed');
+    expect(await operatorRule(placedId)).toMatchObject({ severity: 'hard' });
+  });
 });
