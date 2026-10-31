@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { addDays, todayIn } from '../src/workforce/compliance.js';
-import { defaultFocus, kpiByKey, KPIS, kpisFor, median, percent, seesCosts, standing, targetRefusal, worded } from '../src/dashboard/kpis.js';
+import { defaultFocus, kpiByKey, KPIS, kpisFor, median, percent, seesCosts, standing, targetRefusal, trendDays, worded } from '../src/dashboard/kpis.js';
 import { DEFAULT_WORDS, makeWords, T } from '../src/terms/words.js';
 import { dailyEmail, emailValue, worthSending } from '../src/dashboard/daily-email.js';
 import { ExpiryReminders } from '../src/notifications/reminders.js';
@@ -40,6 +40,13 @@ describe('dashboard rules (David, 31 Oct)', () => {
     expect(worded(kpiByKey('blocked_shifts')!.label, w, T)).toBe('Blocked jobs, 7 days');
     expect(worded(kpiByKey('started_unfilled')!.label, w, T)).toBe('Jobs that started empty');
     expect(KPIS.every(k => !/\bshifts?\b/i.test((k.label + k.how + k.question).replace(/\{\w+\}/g, "")))).toBe(true);
+  });
+  it('trend days are the same weekday for 13 weeks, ending today', () => {
+    const d = trendDays('2026-10-31');
+    expect(d).toHaveLength(13);
+    expect(d.at(-1)).toBe('2026-10-31');
+    expect(d.at(-2)).toBe('2026-10-24');
+    expect(d[0]).toBe('2026-08-08');
   });
   it('statistics and target checks', () => {
     expect(median([])).toBeNull();
@@ -172,6 +179,24 @@ describe('dashboards end to end', () => {
     await http().put('/dashboard/targets').set(as('owner')).send({ targets: [{ key: 'filled_48h', value: null }] }).expect(200);
     k = (await http().get('/dashboard').set(as('alloc')).expect(200)).body.kpis.find((x: { key: string }) => x.key === 'filled_48h');
     expect(k.standing).toBe('no_target');
+  });
+
+  it('keeps each day\'s value and compares with a week ago', async () => {
+    const zone = 'Australia/Melbourne';
+    const today = todayIn(zone);
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    const tenant = (await owner.query<{ id: string }>(`select id from tenants where slug = 'care'`)).rows[0].id;
+    await owner.query(`insert into dashboard_snapshots(tenant_id, day, kpi, value) values ($1,$2,'filled_48h',40)`, [tenant, addDays(today, -7)]);
+    const k = (await http().get('/dashboard').set(as('alloc')).expect(200)).body.kpis.find((x: { key: string }) => x.key === 'filled_48h');
+    expect(k.weekAgo).toBe(40);
+    expect(k.trend).toHaveLength(13);
+    expect(k.trend.at(-1)).toBe(k.value);
+    const kept = (await owner.query(`select value from dashboard_snapshots where tenant_id = $1 and kpi = 'filled_48h' and day = $2`, [tenant, today])).rows;
+    expect(kept).toHaveLength(1);
+    await owner.end();
+    const other = (await http().get('/dashboard?focus=allocator').set(as('other')).expect(200)).body.kpis.find((x: { key: string }) => x.key === 'filled_48h');
+    expect(other.weekAgo).toBeNull();
   });
 
   it('counts applicants waiting longer than the business\'s stage limit', async () => {

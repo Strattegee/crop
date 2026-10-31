@@ -10,6 +10,8 @@ export interface Kpi {
   key: string; label: string; question: string; how: string; unit: Unit; better: 'higher' | 'lower'; href: string;
   value: number | null; detail: string | null; breakdown: { label: string; value: number }[];
   target: number | null; suggested: number; standing: Standing;
+  /** The value kept a week ago, and the 13-week trend (same weekday each week, today last; null = nothing kept). */
+  weekAgo?: number | null; trend?: (number | null)[];
 }
 
 export interface Dashboard {
@@ -59,3 +61,23 @@ export const FOCUS_CHOICES: { value: Focus; label: string; hint: string }[] = [
   { value: 'recruitment', label: 'Recruitment', hint: 'Applicants, onboarding and who is ready to start' },
   { value: 'overview', label: 'Overview', hint: 'A bit of everything, for owners and managers' },
 ];
+
+/** "Up from 85% a week ago", with whether that's better or worse; null when there's nothing to compare. */
+export function weekLine(k: Pick<Kpi, 'value' | 'weekAgo' | 'unit' | 'better'>): { text: string; tone: 'better' | 'worse' | 'same' } | null {
+  if (k.value === null || k.weekAgo === null || k.weekAgo === undefined) return null;
+  if (k.value === k.weekAgo) return { text: 'Same as a week ago', tone: 'same' };
+  const up = k.value > k.weekAgo;
+  return { text: `${up ? 'Up' : 'Down'} from ${showValue(k.weekAgo, k.unit)} a week ago`, tone: up === (k.better === 'higher') ? 'better' : 'worse' };
+}
+
+/** SVG polyline points for a trend line `w` by `h`, skipping weeks with nothing kept; null under two points. */
+export function sparkPoints(trend: (number | null)[] | undefined, w = 120, h = 24): string | null {
+  if (!trend) return null;
+  const pts = trend.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] !== null);
+  if (pts.length < 2) return null;
+  const vs = pts.map(p => p[1]);
+  const lo = Math.min(...vs); const hi = Math.max(...vs);
+  const x = (i: number) => (trend.length === 1 ? 0 : (i / (trend.length - 1)) * w);
+  const y = (v: number) => (hi === lo ? h / 2 : h - 2 - ((v - lo) / (hi - lo)) * (h - 4));
+  return pts.map(([i, v]) => `${Math.round(x(i) * 10) / 10},${Math.round(y(v) * 10) / 10}`).join(' ');
+}

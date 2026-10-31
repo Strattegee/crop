@@ -181,3 +181,18 @@ export async function funnel(db: PoolClient) {
     return { stage, label: STAGE_LABEL[stage], reached: here.size, movedOn: i < order.length - 1 ? movedOn : null, conversion: i < order.length - 1 ? percent(movedOn, here.size) : null };
   });
 }
+
+/** Keeps today's value of a measure (the latest worked out today wins), for "a week ago" and trend lines. */
+export async function saveSnapshot(db: PoolClient, tenantId: string, day: string, kpi: string, value: number | null) {
+  await db.query(
+    `insert into dashboard_snapshots(tenant_id, day, kpi, value) values ($1,$2,$3,$4)
+     on conflict (tenant_id, kpi, day) do update set value = excluded.value, updated_at = now()`, [tenantId, day, kpi, value]);
+}
+
+/** Each measure's values on the weekly days from `trendDays` (null where nothing was kept that day). */
+export async function history(db: PoolClient, keys: string[], days: string[]): Promise<Map<string, (number | null)[]>> {
+  const rows = (await db.query<{ kpi: string; day: string; value: string | null }>(
+    `select kpi, to_char(day, 'YYYY-MM-DD') as day, value from dashboard_snapshots where kpi = any($1) and day = any($2::date[])`, [keys, days])).rows;
+  const by = new Map(rows.map(r => [`${r.kpi}:${r.day}`, r.value === null ? null : Number(r.value)]));
+  return new Map(keys.map(k => [k, days.map(d => by.get(`${k}:${d}`) ?? null)]));
+}

@@ -3,8 +3,9 @@ import type { Membership } from '../auth/auth.types.js';
 import { queueNotification } from '../notifications/notify.js';
 import { AttentionController } from '../roster/attention.controller.js';
 import { T, type Words } from '../terms/words.js';
-import { MEASURES, targetsOf } from './dashboard-data.js';
-import { defaultFocus, FOCUS_LABEL, kpisFor, standing, tidy, worded, type Focus, type KpiDef, type Standing } from './kpis.js';
+import { history, MEASURES, saveSnapshot, targetsOf } from './dashboard-data.js';
+import { addDays } from '../workforce/compliance.js';
+import { defaultFocus, FOCUS_LABEL, KPIS, kpisFor, SETTING_KPIS, standing, tidy, worded, type Focus, type KpiDef, type Standing } from './kpis.js';
 
 /**
  * The daily email (David, 31 Oct: "the daily email becomes a copy of the dashboard's top items, replacing the separate
@@ -15,7 +16,7 @@ import { defaultFocus, FOCUS_LABEL, kpisFor, standing, tidy, worded, type Focus,
  * lines already say "a vaccination record".
  */
 
-export interface EmailNumber { label: string; value: string; standing: Standing; target: string | null }
+export interface EmailNumber { label: string; value: string; standing: Standing; target: string | null; weekAgo?: string | null }
 export interface EmailAttention { when: string; title: string; where: string; urgent: boolean }
 export interface DailyEmailInput {
   business: string; firstName: string; focus: Focus; dateWords: string; appUrl: string;
@@ -56,7 +57,7 @@ export function dailyEmail(i: DailyEmailInput): { subject: string; body: string 
   if (i.numbers.length) {
     const ordered = [...off, ...i.numbers.filter(n => n.standing !== 'off_target')];
     parts.push(['Your numbers:', ...ordered.map(n =>
-      `- ${n.label}: ${n.value}${n.standing === 'off_target' ? ` (off target: ${n.target})` : n.standing === 'on_target' ? ' (on target)' : ''}`)].join('\n'));
+      `- ${n.label}: ${n.value}${n.standing === 'off_target' ? ` (off target: ${n.target})` : n.standing === 'on_target' ? ' (on target)' : ''}${n.weekAgo ? `; a week ago ${n.weekAgo}` : ''}`)].join('\n'));
   }
   if (i.attention && i.attention.total > 0) {
     const head = `Needs attention in the next 7 days: ${i.attention.total}${i.attention.urgent ? `, ${i.attention.urgent} within a day` : ''}`;
@@ -137,6 +138,10 @@ export async function queueDailyEmails(
     }
     return measured.get(def.key)!;
   };
+  // Keep today's value of every measure (for "a week ago" and the dashboard's trend lines), and read last week's.
+  const all = KPIS.filter(k => !SETTING_KPIS.has(k.key));
+  for (const def of all) await saveSnapshot(db, tenantId, today, def.key, await measure(def));
+  const lastWeek = await history(db, all.map(k => k.key), [addDays(today, -7)]);
   const decisions = {
     leave: (await db.query<{ n: number }>(`select count(*)::int as n from leave_records where status = 'requested'`)).rows[0].n,
     changes: (await db.query<{ n: number }>(`select count(*)::int as n from roster_change_requests where status = 'pending'`)).rows[0].n,
@@ -153,7 +158,8 @@ export async function queueDailyEmails(
       const target = targets.get(def.key) ?? null;
       const st = standing(value, target, def.better);
       numbers.push({ label: say(def.label), value: emailValue(value, def.unit), standing: st,
-        target: target === null ? null : `${def.better === 'higher' ? 'at least' : 'at most'} ${emailValue(target, def.unit)}` });
+        target: target === null ? null : `${def.better === 'higher' ? 'at least' : 'at most'} ${emailValue(target, def.unit)}`,
+        weekAgo: (() => { const v = lastWeek.get(def.key)?.[0] ?? null; return v === null ? null : emailValue(v, def.unit); })() });
     }
     const wantsAttention = focus === 'allocator' || focus === 'overview';
     const gets = dateTakers.has(m.user_id);
