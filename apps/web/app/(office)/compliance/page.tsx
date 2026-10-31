@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
+import { businessZone } from '../../../lib/business';
 import { Badge, formatDate, VERIFICATION_LABEL } from '../../../lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ type Summary = {
 };
 
 export default async function CompliancePage() {
-  const s = await api<Summary>('/compliance/summary');
+  const [s, zone] = await Promise.all([api<Summary>('/compliance/summary'), businessZone()]);
   return (
     <>
       <h1>Compliance</h1>
@@ -39,7 +40,7 @@ export default async function CompliancePage() {
               {s.verificationQueue.map(i => (
                 <tr key={i.id}>
                   <td><Link href={`/workers/${i.workerId}`}>{i.workerName}</Link></td>
-                  <td>{i.typeName}</td><td>{i.number ?? '—'}</td><td>{formatDate(i.expiryDate)}</td><td>{formatDate(i.createdAt)}</td>
+                  <td>{i.typeName}</td><td>{i.number ?? '—'}</td><td>{formatDate(i.expiryDate)}</td><td>{formatDate(i.createdAt, zone)}</td>
                 </tr>
               ))}
             </tbody>

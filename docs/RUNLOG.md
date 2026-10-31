@@ -416,3 +416,4 @@ Newest first. One entry per working session or scheduled run.
 - (31 Oct, with David) Dashboard numbers now show the change since a week ago (green when better, red when worse) and a small 13-week trend line; the daily email says what each number was a week ago. CROP keeps one value per number per day from now on, so the comparisons appear after the first week.
 - (31 Oct, with David) Manager mode in the app now starts with the person's own dashboard numbers in one swipeable row (off target first, then the change since a week ago), from the same measures as the web and the daily email. Not yet tried on a phone (needs the development build).
 - (31 Oct) Shift duties (and the credentials each needs), the items list and the type picker when adding equipment are now grouped by industry like the other lists.
+- (31 Oct) Time zones: timestamps on the Compliance page and the person's page now show in the business's own time zone, not Melbourne's.

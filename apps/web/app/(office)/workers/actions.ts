@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { businessZone, todayIn } from '../../../lib/business';
 import { api } from '../../../lib/api';
 import { attempt, failTo, str } from '../../../lib/actions';
 
@@ -28,8 +29,7 @@ export async function addWorker(f: FormData) {
   if (employmentType) {
     const hours = str(f, 'contractedHours');
     try {
-      const { timezone } = await api<{ timezone?: string }>('/settings');
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'Australia/Melbourne' }).format(new Date());
+      const today = todayIn(await businessZone());
       await api(`/workers/${id}/employment`, { method: 'POST', body: { employmentType, contractedHours: hours === undefined ? null : Number(hours), startsOn: today } });
     } catch (err) {
       if (err && typeof err === 'object' && 'digest' in err) throw err; // Next.js redirect (e.g. to sign in)

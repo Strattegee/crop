@@ -23,7 +23,7 @@ import { PersonCard } from '../person-card';
 import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
 import { RolePicker } from '../role-picker';
 import { UploadLinkCard, type UploadLinkInfo } from './upload-link-card';
-import { whenIn } from '../../../../lib/business';
+import { businessZone, todayIn, whenIn } from '../../../../lib/business';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 import { RecruitmentCard } from './recruitment-card';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
@@ -83,7 +83,8 @@ export default async function WorkerPage({ params, searchParams }: {
   ]);
   const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
   // "Today" in the business's time zone, never the server's.
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone || 'Australia/Melbourne' }).format(new Date());
+  const zone = settings.timezone || await businessZone();
+  const today = todayIn(zone);
   // Tabs (David, 31 Oct): one record, its parts one click away. The tab lives in the URL so links and Back work.
   const tabs = personTabs({ issues: w.issues, rtwIssue: rtw.issue, onboarding: !!onboarding?.current, words: { credentials: tw.many(T.credential), shifts: tw.many(T.shift) } });
   const tab: PersonTab = tabs.some(t => t.id === sp.tab) ? sp.tab as PersonTab : 'overview';
@@ -144,11 +145,11 @@ export default async function WorkerPage({ params, searchParams }: {
 
       {tab === 'overview' && w.status !== 'agency' && (
         <RecruitmentCard workerId={id} status={w.status} stage={w.recruitmentStage ?? null} events={recruitment}
-          checklists={checklists.filter(c => !c.archived)} when={whenIn(settings.timezone || 'Australia/Melbourne')} />
+          checklists={checklists.filter(c => !c.archived)} when={whenIn(zone)} />
       )}
 
       {onboarding && (
-        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={settings.timezone || 'Australia/Melbourne'} />
+        <OnboardingCard workerId={id} o={onboarding} checklists={checklists} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={zone} />
       )}
 
         <div className="card" style={{ overflowX: 'auto' }}>
@@ -157,14 +158,14 @@ export default async function WorkerPage({ params, searchParams }: {
           {upcoming.length > 8 && <p className="small" style={{ marginBottom: 0 }}><Link href={`/workers/${id}?tab=shifts`}>All {upcoming.length} {tw.lower(T.shift, true)}</Link></p>}
         </div>
       {appAccess && w.status !== 'agency' && (
-        <AppAccessCard workerId={id} a={appAccess} first={w.preferredName || w.firstName} canGive={canVerify} timeZone={settings.timezone || 'Australia/Melbourne'} />
+        <AppAccessCard workerId={id} a={appAccess} first={w.preferredName || w.firstName} canGive={canVerify} timeZone={zone} />
       )}
 
         {w.notes && <div className="card"><h2>Notes</h2><p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{w.notes}</p></div>}
       </>)}
       {tab === 'credentials' && (<>
         {uploadInfo && <UploadLinkCard workerId={id} info={uploadInfo} first={w.preferredName || w.firstName} hasEmail={!!w.email} hasPhone={!!w.phone}
-          when={whenIn(settings.timezone || 'Australia/Melbourne')} word={tw.lower(T.credential)} />}
+          when={whenIn(zone)} word={tw.lower(T.credential)} />}
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>{tw.many(T.credential)}</h2>
         {w.credentials.length === 0 ? <p className="muted">No credentials recorded yet.</p> : (
@@ -204,7 +205,7 @@ export default async function WorkerPage({ params, searchParams }: {
                   </td>
                   <td>
                     <Badge label={VERIFICATION_LABEL[c.verification]} />
-                    {c.verification === 'verified' && c.verifiedAt && <div className="muted" style={{ fontSize: 12 }}>{formatDate(c.verifiedAt)}{c.verificationNote ? ` · ${c.verificationNote}` : ''}</div>}
+                    {c.verification === 'verified' && c.verifiedAt && <div className="muted" style={{ fontSize: 12 }}>{formatDate(c.verifiedAt, zone)}{c.verificationNote ? ` · ${c.verificationNote}` : ''}</div>}
                     {c.verification === 'rejected' && <div className="muted" style={{ fontSize: 12 }}>{c.rejectionReason}</div>}
                     {c.addedInApp && c.verification === 'unverified' && <div className="muted" style={{ fontSize: 12 }}>Added by them in the app</div>}
                     {c.sentByLink && c.verification === 'unverified' && <div className="muted" style={{ fontSize: 12 }}>Sent by them through their upload link</div>}

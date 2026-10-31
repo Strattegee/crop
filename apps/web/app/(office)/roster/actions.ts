@@ -1,6 +1,7 @@
 'use server';
 
 import { api, ApiError } from '../../../lib/api';
+import { businessZone, todayIn } from '../../../lib/business';
 import { attempt, str } from '../../../lib/actions';
 import { loadCafeDemo } from './demo-cafe';
 import { fillOpenShifts } from '../demo-tools';
@@ -160,7 +161,7 @@ export async function setGender(shiftId: string, f: FormData) {
 export async function loadDemoWeek(f: FormData) {
   if (process.env.DEMO_TOOLS !== 'on') return;
   const week = str(f, 'week') ?? new Date().toISOString().slice(0, 10);
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
+  const today = todayIn(await businessZone());
   await attempt(back(f), () => loadCafeDemo(week, today), 'Demo café loaded: 32 invented staff, credentials, equipment, stock and a week of shifts.');
 }
 

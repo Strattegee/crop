@@ -1,6 +1,7 @@
 'use server';
 
 import { api } from '../../../lib/api';
+import { businessZone, todayIn } from '../../../lib/business';
 import { revalidatePath } from 'next/cache';
 import { attempt } from '../../../lib/actions';
 import { completeDemoCredentials } from '../demo-tools';
@@ -37,7 +38,7 @@ export async function addDemoStaff(id: string) {
     const types = await api<{ id: string; name: string }[]>('/credential-types');
     const typeId = new Map(types.map(t => [t.name.toLowerCase(), t.id]));
     const libs = new Map(pack.credentials.map(c => [c.name, c]));
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
+    const today = todayIn(await businessZone());
     const seed = [...id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
     let n = 0;
     const post = <T = { id: string }>(p: string, body: unknown) => api<T>(p, { method: 'POST', body });
