@@ -9,7 +9,7 @@ export interface ShiftDetail {
   status: 'open' | 'assigned' | 'booked' | 'cancelled' | string; equipmentOnly: boolean;
   localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; assignmentStatus: 'assigned' | 'confirmed' | null; agencyName: string | null;
-  offersPending: number; pulledOutName: string | null; coveringName: string | null; cancelledReason: string | null; notes: string | null;
+  offersPending: number; pulledOutName: string | null; coveringWorkerId?: string | null; coveringName: string | null; cancelledReason: string | null; notes: string | null;
 }
 
 export interface Reason { code: string; message: string }
@@ -153,3 +153,44 @@ export function phoneLinks(phone: string | null | undefined): { call: string; te
 
 /** The message after a change request is sent instead of a change. */
 export const REQUEST_SENT = 'Sent to the owners and admins to approve. You will see it under Requests until they decide.';
+
+export type CoveringChoice = { id: string; label: string; away: boolean };
+
+/** Leave rows from GET /roster (requested or approved; the kind is never sent). */
+export interface LeaveLine { workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string }
+
+/**
+ * Who the shift could be covering (Steve's "T" line), as on the web's shift panel: people on leave that day first
+ * (approved, then requested, labelled "on leave" / "leave requested", never the kind), then everyone else by name.
+ * The person working the shift is left out; whoever it covers now stays in the list even if they've left the roster.
+ */
+export function coveringChoices(
+  people: { id: string; name: string }[], leave: LeaveLine[], localDate: string,
+  current: { id: string | null; name: string | null }, workingId: string | null,
+): CoveringChoice[] {
+  const away = new Map<string, 'approved' | 'requested'>();
+  for (const l of leave) {
+    if (l.startsOn > localDate || l.endsOn < localDate) continue;
+    if (l.status === 'approved' || !away.has(l.workerId)) away.set(l.workerId, l.status);
+  }
+  const list = people.filter(p => p.id !== workingId);
+  if (current.id && current.name && !list.some(p => p.id === current.id)) list.push({ id: current.id, name: current.name });
+  const rank = (id: string) => (away.get(id) === 'approved' ? 0 : away.get(id) === 'requested' ? 1 : 2);
+  return list
+    .map(p => ({ p, r: rank(p.id) }))
+    .sort((a, b) => a.r - b.r || a.p.name.localeCompare(b.p.name))
+    .map(({ p, r }) => ({ id: p.id, label: r === 0 ? `${p.name} · on leave` : r === 1 ? `${p.name} · leave requested` : p.name, away: r < 2 }));
+}
+
+/**
+ * Whether the covering line can be changed from the phone: not on cancelled or equipment-only shifts, and not while the
+ * after-publishing rule refuses this person's changes (there is no change request for it; they ask on the web).
+ */
+export function canSetCovering(s: Pick<ShiftDetail, 'status' | 'equipmentOnly'>, refused: boolean): boolean {
+  return s.status !== 'cancelled' && !s.equipmentOnly && !refused;
+}
+
+/** The message after saving the covering line. */
+export function coveringMessage(name: string | null): string {
+  return name ? `Shown as "Covering ${name}". The reason they're away is never shown.` : 'It no longer says who it covers.';
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, confirmLabel, mondayOf, offerable, offeredMessage,
+  actionsFor, assignable, canSetCovering, coveringChoices, coveringMessage, assignedMessage, assignQuestion, candidateMeta, candidateState, confirmLabel, mondayOf, offerable, offeredMessage,
   pendingOffers, phoneLinks, requestKind, sentences, shiftWhen, stageOf, type Candidate, type ShiftDetail,
 } from '../src/shift';
 
@@ -88,5 +88,38 @@ describe('a shift in manager mode', () => {
     expect(phoneLinks('+61 (4) 1234-5678')).toEqual({ call: 'tel:+61412345678', text: 'sms:+61412345678' });
     expect(phoneLinks('')).toBeNull();
     expect(phoneLinks(null)).toBeNull();
+  });
+});
+
+describe('the covering line from the phone', () => {
+  const people = [{ id: 'a', name: 'Ann Bell' }, { id: 'b', name: 'Bo Chen' }, { id: 'c', name: 'Cy Dunn' }, { id: 'd', name: 'Di Ede' }];
+  const leave = [
+    { workerId: 'c', status: 'requested' as const, startsOn: '2026-11-01', endsOn: '2026-11-03' },
+    { workerId: 'd', status: 'approved' as const, startsOn: '2026-11-02', endsOn: '2026-11-02' },
+    { workerId: 'a', status: 'approved' as const, startsOn: '2026-11-05', endsOn: '2026-11-06' },
+  ];
+
+  it('puts people away that day first, never the kind of leave, and leaves out whoever works it', () => {
+    const list = coveringChoices(people, leave, '2026-11-02', { id: null, name: null }, 'b');
+    expect(list.map(c => c.label)).toEqual(['Di Ede · on leave', 'Cy Dunn · leave requested', 'Ann Bell']);
+    expect(list.map(c => c.away)).toEqual([true, true, false]);
+  });
+
+  it('keeps whoever it covers now even if they are no longer on the roster', () => {
+    const list = coveringChoices(people, [], '2026-11-02', { id: 'z', name: 'Al Zed' }, null);
+    expect(list.some(c => c.id === 'z' && c.label === 'Al Zed')).toBe(true);
+    expect(coveringChoices(people, [], '2026-11-02', { id: 'a', name: 'Ann Bell' }, null).filter(c => c.id === 'a')).toHaveLength(1);
+  });
+
+  it('can only be changed on live people shifts while changes are allowed', () => {
+    expect(canSetCovering(shift, false)).toBe(true);
+    expect(canSetCovering(shift, true)).toBe(false);
+    expect(canSetCovering({ ...shift, status: 'cancelled' }, false)).toBe(false);
+    expect(canSetCovering({ ...shift, equipmentOnly: true }, false)).toBe(false);
+  });
+
+  it('says what the card will show', () => {
+    expect(coveringMessage('Di Ede')).toBe('Shown as "Covering Di Ede". The reason they\'re away is never shown.');
+    expect(coveringMessage(null)).toBe('It no longer says who it covers.');
   });
 });
