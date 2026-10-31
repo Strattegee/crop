@@ -1,8 +1,11 @@
-/** Display helpers (Australian formats). */
-export function formatDate(iso: string | null | undefined): string {
+/**
+ * Display helpers (Australian formats). A date (YYYY-MM-DD) is shown as it is; a timestamp is shown as the date in
+ * `zone`, the business's time zone (`businessZone()`), never the server's.
+ */
+export function formatDate(iso: string | null | undefined, zone = 'UTC'): string {
   if (!iso) return '—';
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
-  return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: iso.length === 10 ? 'UTC' : 'Australia/Melbourne' }).format(d);
+  return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: iso.length === 10 ? 'UTC' : zone }).format(d);
 }
 
 export const COMPLIANCE_LABEL: Record<string, [string, 'ok' | 'warn' | 'bad']> = {
