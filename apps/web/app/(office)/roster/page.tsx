@@ -6,7 +6,7 @@ import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  agencyFill, agencyFillNext, agencyFillWithdraw, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  agencyFill, agencyFillNext, agencyFillWithdraw, outsideAgencyEmail, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
 } from './actions';
 import { AttentionPanel } from './attention-panel';
@@ -63,6 +63,14 @@ type AgencyFillState = {
   activeAgencies: number; canRequest: boolean; problem: string | null;
   timing?: { band: 'soon' | 'today' | 'later'; bandWords: string; defaultMinutes: number; defaultWords: string };
   placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string; confirmedCredentials?: string[] } | null;
+};
+/** Agencies not on CROP (migration 0059): who it can be emailed to, what the email lists, what was sent. */
+type OutsideReq = { name: string; levelWords: string; forWhat: string | null };
+type OutsideState = {
+  agencies: { id: string; name: string; email: string; lastSentAt: string | null }[];
+  requirements: { standard: OutsideReq[]; special: OutsideReq[] };
+  sent: { id: string; agencyName: string; toAddress: string; note: string | null; sentByName: string | null; sentAt: string; delivery: string | null }[];
+  canSend: boolean; problem: string | null;
 };
 type Offer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 /** Draft → Live → History per site and week (migration 0022). */
@@ -265,7 +273,7 @@ export default async function RosterPage({ searchParams }: {
   let panelError: string | null = null;
   // Duties are needed by the shift panel and the Add shifts form.
   const liveShift = selected && selected.status !== 'cancelled' ? selected : null;
-  const [shiftHistory, duties, shiftItems, stockHere, agencyState] = await Promise.all([
+  const [shiftHistory, duties, shiftItems, stockHere, agencyState, outsideState] = await Promise.all([
     selected ? api<Change[]>(`/shifts/${selected.id}/history`).catch(() => [] as Change[]) : Promise.resolve([] as Change[]),
     api<Duty[]>('/shift-duties').catch(() => [] as Duty[]),
     // Items on the shift (backlog item 5): what it used, and stock at its site for the item list.
@@ -273,6 +281,8 @@ export default async function RosterPage({ searchParams }: {
     liveShift ? api<{ itemId: string; onHand: number }[]>(`/stock?facilityId=${liveShift.facilityId}`).catch(() => []) : Promise.resolve([]),
     // Agency fill (backlog items 7–8): where the shift stands with the business's agencies.
     selected && !selected.equipmentOnly ? api<AgencyFillState>(`/shifts/${selected.id}/agency-fill`).catch(() => null) : Promise.resolve(null),
+    // Agencies not on CROP: emailed the shift's requirements; they reply outside CROP.
+    selected && !selected.equipmentOnly ? api<OutsideState>(`/shifts/${selected.id}/outside-agencies`).catch(() => null) : Promise.resolve(null),
   ]);
   const itemChoices = liveShift ? shiftItemChoices(itemList, stockHere) : [];
   if (selected && selected.status !== 'cancelled') {
@@ -1097,6 +1107,9 @@ export default async function RosterPage({ searchParams }: {
                       </details>
                     )}
                     {agencyState && <AgencyFillSection st={agencyState} shiftId={selected.id} here={here} when={when} tw={tw} />}
+                    {outsideState && (outsideState.agencies.length > 0 || outsideState.sent.length > 0) && (
+                      <OutsideAgencySection st={outsideState} shiftId={selected.id} role={selected.role} here={here} when={when} tw={tw} />
+                    )}
                   </>
                 )}
               </section>
@@ -1252,6 +1265,51 @@ export default async function RosterPage({ searchParams }: {
           ))}
         {attention && attention.total > 0 && <span className="att-count"><b>{attention.total}</b> need attention{attention.urgent > 0 && <> · <b className="bad">{attention.urgent}</b> within a day</>}</span>}
       </div>
+    </div>
+  );
+}
+
+/** Agencies not on CROP: tick who to email, see what the email lists and what has been sent. */
+function OutsideAgencySection({ st, shiftId, role, here, when, tw }: { st: OutsideState; shiftId: string; role: string; here: string; when: (iso: string) => string; tw: Words }) {
+  const agencies = tw.lower(T.agency, true);
+  const reqLine = (r: OutsideReq) => `${r.name}: ${r.levelWords.toLowerCase()}${r.forWhat ? ` (for ${r.forWhat})` : ''}`;
+  return (
+    <div className="agencyfill" style={{ marginTop: 12 }}>
+      <p style={{ margin: '0 0 6px' }}><strong>{tw.many(T.agency)} not on CROP</strong> <span className="muted">· email them this {tw.lower(T.shift)} and its requirements</span></p>
+      {st.sent.length > 0 && (
+        <ul className="small" style={{ margin: '0 0 6px', paddingLeft: 18 }}>
+          {st.sent.map(e => (
+            <li key={e.id}>Emailed {e.agencyName} {when(e.sentAt)}{e.sentByName ? ` (${e.sentByName})` : ''}{e.delivery === 'skipped' ? ', not sent' : e.delivery === 'failed' ? ', failed' : ''}</li>
+          ))}
+        </ul>
+      )}
+      {st.canSend ? (
+        <form action={outsideAgencyEmail.bind(null, shiftId)}>
+          <input type="hidden" name="back" value={here} />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {st.agencies.map(a => (
+              <label key={a.id} className="inline small"><input type="checkbox" name="agencyIds" value={a.id} />{a.name}</label>
+            ))}
+          </div>
+          <details className="small" style={{ margin: '6px 0' }}>
+            <summary style={{ cursor: 'pointer' }}>What the email lists</summary>
+            <p style={{ margin: '4px 0 2px' }}>Standard for {role}:</p>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>{st.requirements.standard.length ? st.requirements.standard.map(r => <li key={r.name}>{reqLine(r)}</li>) : <li className="muted">None recorded</li>}</ul>
+            {st.requirements.special.length > 0 && (
+              <>
+                <p style={{ margin: '4px 0 2px' }}>Special for this {tw.lower(T.shift)}:</p>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>{st.requirements.special.map(r => <li key={r.name}>{reqLine(r)}</li>)}</ul>
+              </>
+            )}
+            <p className="muted" style={{ margin: '4px 0 0' }}>Duties and a gender requested are listed too. They are asked to reply to you by email.</p>
+          </details>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="sr-only" htmlFor="outsideNote">Note for the {agencies}</label>
+            <input id="outsideNote" name="note" maxLength={300} placeholder={`Note for the ${agencies} (optional)`} style={{ flex: '1 1 180px' }} />
+            <button className="btn small secondary">Email the ticked {agencies}</button>
+          </div>
+        </form>
+      ) : st.problem && st.sent.length === 0 ? <p className="muted small" style={{ margin: 0 }}>{st.problem}</p> : null}
     </div>
   );
 }
