@@ -32,7 +32,8 @@ export default async function DashboardSettings({ searchParams }: { searchParams
       <h1>Dashboards</h1>
       <p className="muted">
         Everyone in the office lands on a dashboard made for their work. What they can see and do is still set by their access;
-        the dashboard only chooses what comes first.
+        the dashboard only chooses what comes first. Each person also gets one email a day from 8am with their dashboard’s top items
+        (numbers off target, what needs attention, decisions waiting and, for Compliance and Overview, dates to follow up), only when something needs them.
       </p>
       <Notices error={sp.error} done={sp.done} />
 

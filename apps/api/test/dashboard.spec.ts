@@ -9,7 +9,9 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { addDays, todayIn } from '../src/workforce/compliance.js';
 import { defaultFocus, kpiByKey, KPIS, kpisFor, median, percent, seesCosts, standing, targetRefusal, worded } from '../src/dashboard/kpis.js';
-import { makeWords, T } from '../src/terms/words.js';
+import { DEFAULT_WORDS, makeWords, T } from '../src/terms/words.js';
+import { dailyEmail, emailValue, worthSending } from '../src/dashboard/daily-email.js';
+import { ExpiryReminders } from '../src/notifications/reminders.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('dashboard rules (David, 31 Oct)', () => {
@@ -51,6 +53,32 @@ describe('dashboard rules (David, 31 Oct)', () => {
     expect(targetRefusal(cnt, 1.5)).toMatch(/whole/);
     expect(targetRefusal(cnt, -1)).toMatch(/0 or more/);
     expect(targetRefusal(pct, 95)).toBeNull();
+  });
+});
+
+describe('daily dashboard email (David, 31 Oct)', () => {
+  const base = { business: 'Demo Care', firstName: 'Alice', focus: 'allocator' as const, dateWords: 'Monday 2 November', appUrl: 'https://x.test', words: DEFAULT_WORDS,
+    numbers: [{ label: 'Filled, next 48 hours', value: '80%', standing: 'off_target' as const, target: 'at least 95%' }, { label: 'Time to fill', value: '3 hours', standing: 'no_target' as const, target: null }],
+    attention: null, decisions: null, expiry: null };
+  it('only goes when something needs the person', () => {
+    expect(worthSending({ ...base, numbers: [] })).toBe(false);
+    expect(dailyEmail({ ...base, numbers: [{ ...base.numbers[0], standing: 'on_target' }] })).toBeNull();
+    expect(worthSending(base)).toBe(true);
+    expect(worthSending({ ...base, numbers: [], decisions: { leave: 1, changes: 0 } })).toBe(true);
+  });
+  it('puts numbers off target first and says what to do', () => {
+    const m = dailyEmail({ ...base, numbers: [...base.numbers].reverse(),
+      attention: { total: 7, urgent: 2, items: [{ urgent: true, title: 'Nobody on this shift', when: '2026-11-02 09:00 Carer', where: 'Bayside (starts in 3 hours)' }] },
+      expiry: { people: ['- Ana Example: CPR expires 27 November 2026 (25 days)'], equipment: [] } })!;
+    expect(m.subject).toBe('Allocator dashboard: 2 within a day, 1 number off target, 1 date to follow up');
+    expect(m.body).toContain('Your numbers:\n- Filled, next 48 hours: 80% (off target: at least 95%)\n- Time to fill: 3 hours');
+    expect(m.body).toContain('Needs attention in the next 7 days: 7, 2 within a day\n- Soon: Nobody on this shift, 2026-11-02 09:00 Carer, Bayside (starts in 3 hours)');
+    expect(m.body).toContain('Dates to follow up:\n- Ana Example: CPR');
+    expect(m.body).toContain('https://x.test/dashboard');
+  });
+  it('words values', () => {
+    expect(emailValue(null, 'percent')).toBe('nothing to measure yet');
+    expect(emailValue(1, 'days')).toBe('1 day');
   });
 });
 

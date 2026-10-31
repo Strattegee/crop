@@ -122,8 +122,8 @@ describe('expiry reminders', () => {
     expect(msgs.some(m => /influenza|police/i.test(m.body))).toBe(false);
   });
 
-  it('sends the office one digest of what needs following up', async () => {
-    const digest = (await sent()).filter(m => m.template === 'compliance_expiry');
+  it('puts what needs following up in the office\'s daily dashboard email', async () => {
+    const digest = (await sent()).filter(m => m.template === 'daily_dashboard');
     expect(digest).toHaveLength(1);
     expect(digest[0].to_address).toBe('office@x.com');
     expect(digest[0].body).toContain('Priyanka Sharma: CPR expires 27 November 2026 (25 days)');
@@ -131,11 +131,13 @@ describe('expiry reminders', () => {
     expect(digest[0].body).toContain('Priyanka Sharma: Manual handling expired 31 October 2026');
     expect(digest[0].body).not.toContain('CPR expired');
     expect(digest[0].body).not.toContain('visa'); // 50 days away
-    expect(digest[0].body).toContain('https://staging.cropwms.com/compliance');
+    expect(digest[0].body).toContain('Dates to follow up:');
+    expect(digest[0].body).toContain('https://staging.cropwms.com/dashboard');
+    expect(digest[0].body).toContain('Overview dashboard');
   });
 
-  it('includes equipment dates in the digest, with bookings that fall after them', async () => {
-    const body = (await sent()).find(m => m.template === 'compliance_expiry')!.body;
+  it('includes equipment dates in the email, with bookings that fall after them', async () => {
+    const body = (await sent()).find(m => m.template === 'daily_dashboard')!.body;
     expect(body).toContain('People:\n- Priyanka Sharma');
     expect(body).toContain('Equipment:\n');
     expect(body).toContain('- Forklift 2 (FL-02): Service was due 30 October 2026 (overdue); booked on 2 shifts after that date');
@@ -146,9 +148,14 @@ describe('expiry reminders', () => {
 
   it('never sends the same reminder twice', async () => {
     const before = (await sent()).length;
-    await reminders.runOnce(at(15));
-    await reminders.runOnce(at(9, addDays(TODAY, 1))); // next day: nothing new has crossed a stage
+    const reminded = (await sent()).filter(m => m.template === 'credential_expiry').length;
+    await reminders.runOnce(at(15)); // later the same day: nothing
     expect((await sent()).length).toBe(before);
+    await reminders.runOnce(at(9, addDays(TODAY, 1))); // next day: nothing new has crossed a stage
+    const after = await sent();
+    expect(after.filter(m => m.template === 'credential_expiry')).toHaveLength(reminded);
+    // Any email the next day (shifts may need attention by then) carries no dates already reported.
+    expect(after.slice(before).every(m => m.template === 'daily_dashboard' && !m.body.includes('Dates to follow up'))).toBe(true);
   });
 
   it('moves to the next stage as the date gets closer', async () => {
@@ -156,7 +163,7 @@ describe('expiry reminders', () => {
     const cpr = (await sent()).filter(m => m.template === 'credential_expiry' && /CPR/.test(m.body));
     expect(cpr.map(m => m.channel).sort()).toEqual(['email', 'email', 'sms']);
     // The forklift's registration is due that day.
-    const digests = (await sent()).filter(m => m.template === 'compliance_expiry');
+    const digests = (await sent()).filter(m => m.template === 'daily_dashboard');
     expect(digests.at(-1)!.body).toContain('- Forklift 2 (FL-02): Registration is due today; booked on 1 shift after that date');
   });
 });
