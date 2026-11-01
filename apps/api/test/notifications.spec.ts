@@ -88,6 +88,8 @@ describe('notifications', () => {
     expect(sms.sent[0].to).toBe('+61412345678');
     const log = await http().get('/notifications').set(as('admin')).expect(200);
     expect(log.body.smsThisMonth).toBe(2);
+    expect(log.body.smsPartsThisMonth).toBe(2);
+    expect(log.body.messages.find((m: { channel: string }) => m.channel === 'sms')).toMatchObject({ smsParts: 1, smsUnicode: [] });
     expect(log.body.messages.filter((m: { status: string }) => m.status === 'skipped')).toMatchObject([{ error: 'Monthly SMS limit reached' }]);
   });
 

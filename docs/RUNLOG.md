@@ -475,3 +475,11 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the page builds and the new helpers are tested.
 - Next: the roster's remaining design pieces (Template stage, app requests panel) wait on Steve's answer; next unheld items are the agency follow-ups (limiting a link to some roles or sites) and a shorter link for offer texts.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 afternoon, 3:15pm Melbourne (scheduled run)
+
+- Shipped: cheaper texts. Every text CROP sends is now written in plain characters before it goes (the dash in "07:00–15:30", curly quotes and the like become plain ones; names are never changed). That one dash was making every offer, booking and roster text "Unicode", where a text part holds 70 characters instead of 160, so a typical shift offer with its link now goes as two parts instead of four. The Messages page shows each text's parts (and which character made it cost more, when a name needs one), texts this month with their parts, and names every kind of message; the month's count now starts on the 1st in the business's own time zone.
+- Not checked in a browser (no local sign-in in this run); the page builds and the wording is tested.
+- Question for David (in the backlog): shorten the links in texts (about 25 characters fewer, often one part less per offer)? Held because the link is the person's only key to the offer.
+- Next: the agency follow-ups (limiting a link to some roles or sites) and other unheld items.
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT; the shorter-link question.
