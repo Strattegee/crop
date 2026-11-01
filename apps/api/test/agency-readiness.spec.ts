@@ -32,6 +32,10 @@ describe('agency readiness: rules', () => {
     // No role rules: one "Any role" group.
     expect(readinessGroups(levels.filter(l => l.kind !== 'role'), match, own, employer).map(g => g.label)).toEqual(['Any role', 'Serves alcohol']);
     expect(readinessGroups([], match, own, employer).map(g => [g.label, g.rules.length])).toEqual([['Any role', 0]]);
+    // A link limited to some roles: just those, each with its own rules (if any) and everyone's.
+    expect(readinessGroups(levels, match, own, employer, ['Nurse', 'Carer']).map(g => [g.label, g.rules.map(r => r.typeName)])).toEqual([
+      ['Carer', ['Our first aid']], ['Nurse', ['Our first aid']], ['Serves alcohol', ['Our RSA']],
+    ]);
   });
 
   it('checks a person: must-haves and right to work decide; should-haves and expiring ones are to check', () => {

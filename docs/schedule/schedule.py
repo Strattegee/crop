@@ -43,7 +43,7 @@ done=[
 ("APP","c4","Worker app and manager mode","2026-10-29","2026-10-31","Claude"),
 ("BCAST","c4","Offers to staff; accept with no double booking","2026-10-26","2026-10-30","Claude"),
 ("CLI","c6","Sites, areas, equipment, items, cover rules","2026-10-26","2026-10-29","Claude"),
-("AGY","c6","Agency links and agency fill","2026-10-29","2026-11-01","Claude"),
+("AGY","c6","Agency links and agency fill","2026-10-29","2026-11-02","Claude"),
 ("DASH","c5","Dashboards and daily email","2026-10-31","2026-10-31","Claude"),
 ]
 todo=[

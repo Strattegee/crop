@@ -5,7 +5,7 @@ import { whenIn, businessZone } from '../../../../lib/business';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
-import { addOutsideAgency, cancelInvite, createInvite, endLink, moveAgency, saveOutsideAgency, setBookMode, setSites, setTiming, switchOutsideAgency } from './actions';
+import { addOutsideAgency, cancelInvite, createInvite, endLink, moveAgency, saveOutsideAgency, setBookMode, setRoles, setSites, setTiming, switchOutsideAgency } from './actions';
 import { TIMING_BANDS, minutesWords, stepChoices, type AgencyTiming } from '../../../../lib/agency-timing';
 import { NEW_LINK_COOKIE } from './invite-cookie';
 
@@ -16,8 +16,10 @@ type LinkRow = {
   preference: number | null; bookMode: 'automatic' | 'approve_first'; createdAt: string; endedAt: string | null;
   endedByName: string | null; endedBySide: 'employer' | 'agency' | null; endReason: string | null;
   facilityIds: string[] | null; sitesWords: string | null;
+  roles: string[] | null; rolesWords: string | null;
 };
 type Site = { id: string; name: string };
+type Role = { name: string; active: boolean };
 type Outside = { id: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean; emailsSent: number; lastSentAt: string | null };
 type Invite = { id: string; forName: string | null; createdByName: string | null; createdAt: string; expiresAt: string; state: 'pending' | 'used' | 'cancelled' | 'expired'; acceptedBy: string | null };
 
@@ -32,13 +34,18 @@ const INVITE_STATE: Record<Invite['state'], string> = { pending: 'Waiting', used
  */
 export default async function AgenciesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [data, agency, sp, zone, settings, outside, sites] = await Promise.all([
+  const [data, agency, sp, zone, settings, outside, sites, roleRows] = await Promise.all([
     api<{ links: LinkRow[]; invitations: Invite[] }>('/agency-links'), currentAgency(), searchParams, businessZone(),
     api<{ agencyTiming: AgencyTiming }>('/settings'),
     api<Outside[]>('/outside-agencies').catch(() => [] as Outside[]),
     api<Site[]>('/facilities').catch(() => [] as Site[]),
+    api<Role[]>('/roles').catch(() => [] as Role[]),
   ]);
   const manySites = sites.length > 1;
+  // Roles to choose from: the business's active roles, plus any an agency is already limited to (kept exactly as written).
+  const roleNames = [...new Set([...roleRows.filter(r => r.active).map(r => r.name), ...data.links.flatMap(l => l.side === 'employer' ? l.roles ?? [] : [])])]
+    .sort((a, b) => a.localeCompare(b));
+  const manyRoles = roleNames.length > 1;
   const timing = settings.agencyTiming;
   const newLink = (await cookies()).get(NEW_LINK_COOKIE)?.value;
   const when = whenIn(zone);
@@ -79,9 +86,9 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           <p className="muted">No {agencies} linked yet.{canEdit && ' Make an invitation link below.'}</p>
         ) : (
           <>
-            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency} straight away, then to each next one in this order on the timer below, until someone is put forward.{manySites && ` ${art(anAgency).replace(/^a/, "A")} only gets ${shifts} at the ${tw.lower(T.site, true)} it fills.`}</p>
+            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency} straight away, then to each next one in this order on the timer below, until someone is put forward.{(manySites || manyRoles) && ` ${art(anAgency).replace(/^a/, "A")} only gets ${shifts} ${manySites && manyRoles ? `at the ${tw.lower(T.site, true)} and for the ${tw.lower(T.role, true)}` : manySites ? `at the ${tw.lower(T.site, true)}` : `for the ${tw.lower(T.role, true)}`} it fills.`}</p>
             <table>
-              <thead><tr><th>Order</th><th>{tw.one(T.agency)}</th><th>State</th><th>People they put forward</th>{manySites && <th>{tw.many(T.site)} they fill</th>}<th /></tr></thead>
+              <thead><tr><th>Order</th><th>{tw.one(T.agency)}</th><th>State</th><th>People they put forward</th>{manySites && <th>{tw.many(T.site)} they fill</th>}{manyRoles && <th>{tw.many(T.role)} they fill</th>}<th /></tr></thead>
               <tbody>
                 {weUse.map((l, i) => (
                   <tr key={l.connectionId}>
@@ -123,6 +130,24 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
                             </form>
                           </details>
                         ) : l.sitesWords}
+                      </td>
+                    )}
+                    {manyRoles && (
+                      <td className="small">
+                        {canEdit ? (
+                          <details>
+                            <summary>{l.rolesWords}</summary>
+                            <form action={setRoles.bind(null, l.connectionId)} style={{ marginTop: 6 }}>
+                              {roleNames.map(r => (
+                                <label key={r} style={{ display: 'block' }}>
+                                  <input type="checkbox" name="roles" value={r} defaultChecked={l.roles === null || l.roles.includes(r)} /> {r}
+                                </label>
+                              ))}
+                              <p className="muted small" style={{ margin: '4px 0' }}>All ticked (or none) means every {tw.lower(T.role)}, including new ones.</p>
+                              <button className="btn small secondary" type="submit">Save</button>
+                            </form>
+                          </details>
+                        ) : l.rolesWords}
                       </td>
                     )}
                     <td>{canEdit && <EndForm link={l} />}</td>
@@ -264,12 +289,13 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           <h2>Businesses we supply</h2>
           <p className="muted small" style={{ marginTop: 0 }}>Businesses that have linked with you as {art(anAgency)}.</p>
           <table>
-            <thead><tr><th>Business</th><th>{tw.many(T.site)} you fill</th><th>State</th><th /></tr></thead>
+            <thead><tr><th>Business</th><th>{tw.many(T.site)} you fill</th><th>{tw.many(T.role)} you fill</th><th>State</th><th /></tr></thead>
             <tbody>
               {weSupply.map(l => (
                 <tr key={l.connectionId}>
                   <td><b>{l.otherName}</b><div className="muted small">Linked {when(l.createdAt)}</div></td>
                   <td className="small">{l.sitesWords ?? '–'}</td>
+                  <td className="small">{l.rolesWords ?? '–'}</td>
                   <td className="small">
                     {l.statusWords}
                     <div><Link href={`/settings/agencies/${l.connectionId}`} className="btn small secondary" style={{ marginTop: 4 }}>

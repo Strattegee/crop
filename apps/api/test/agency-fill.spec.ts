@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { AgencyEscalator } from '../src/agencies/agency-fill.controller.js';
-import { agencyFillProblem, agencySitesWords, agencyRules, linkCoversSite, sitesChoice, sitesWords, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
+import { agencyFillProblem, agencySitesWords, agencyRules, linkCoversRole, linkCoversSite, rolesChoice, rolesWords, sitesChoice, sitesWords, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('agency fill: rules', () => {
@@ -49,6 +49,26 @@ describe('agency fill: rules', () => {
     expect(inWords(29.5 * 3600_000)).toBe('in 1 day 6 hours');
     expect(inWords(24 * 3600_000)).toBe('in 1 day');
     expect(inWords(80 * 3600_000)).toBe('in 3 days');
+  });
+
+  it('reads and checks the roles an agency fills', () => {
+    expect(linkCoversRole(null, 'Nurse')).toBe(true);
+    expect(linkCoversRole(['Nurse'], 'Nurse')).toBe(true);
+    expect(linkCoversRole(['Nurse'], 'nurse')).toBe(false);
+    expect(rolesChoice(undefined, ['Carer', 'Nurse'])).toEqual({ roles: null });
+    expect(rolesChoice([], ['Carer', 'Nurse'])).toEqual({ roles: null });
+    expect(rolesChoice(['Nurse', 'Carer'], ['Carer', 'Nurse'])).toEqual({ roles: null });
+    expect(rolesChoice([' Nurse ', 'Nurse'], ['Carer', 'Nurse', 'Cook'])).toEqual({ roles: ['Nurse'] });
+    expect(rolesChoice(['Pilot'], ['Nurse'])).toEqual({ problem: "One of those roles isn't on your list" });
+    expect(rolesChoice('Nurse', ['Nurse'])).toEqual({ problem: 'Choose the roles from the list' });
+    expect(rolesWords(null)).toBe('Every role');
+    expect(rolesWords(['Nurse', 'Carer'])).toBe('Carer and Nurse');
+    expect(rolesWords(['C', 'A', 'B'])).toBe('3 roles: A, B and C');
+    const now = new Date('2026-11-01T00:00:00Z');
+    const open = { status: 'open' as const, equipmentOnly: false, startsAt: new Date('2026-11-03T00:00:00Z') };
+    expect(agencyFillProblem(open, 0, false, now, undefined, 2, { forSite: 2, forRole: 0, role: 'Cook' })).toMatch(/None of your agencies fills Cook shifts\. Choose which roles/);
+    expect(agencyFillProblem(open, 0, false, now, undefined, 2, { forSite: 1, forRole: 1, role: 'Cook' })).toMatch(/fills Cook shifts at this site\. Choose which sites and roles/);
+    expect(agencyFillProblem(open, 0, false, now, undefined, 2, { forSite: 0, forRole: 2, role: 'Cook' })).toMatch(/fills shifts at this site\. Choose which sites each/);
   });
 
   it('reads and checks the sites an agency fills', () => {
@@ -495,5 +515,62 @@ describe('agency fill: API', () => {
     const all = (await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ facilityIds: [site, dock] }).expect(200)).body;
     expect(all).toMatchObject({ facilityIds: null, sitesWords: 'Every site' });
     await http().patch(`/agency-links/${conn.metro}`).set(as('emp')).send({ facilityIds: null }).expect(200);
+  });
+  it('an agency can be limited to some roles; waiting turns for other roles are skipped', async () => {
+    await owner.query(`insert into business_roles(tenant_id, name) values ($1, 'Nurse'), ($1, 'Carer'), ($1, 'Cook') on conflict do nothing`, [ids.bayside]);
+    const shiftAs = async (role: string, hours: number) => (await owner.query<{ id: string }>(
+      `insert into shifts(tenant_id, facility_id, role, starts_at, ends_at) values ($1,$2,$3, now() + make_interval(hours => $4), now() + make_interval(hours => $4 + 8)) returning id`,
+      [ids.bayside, site, role, hours])).rows[0].id;
+    // Only the employer chooses, from its own roles.
+    await http().patch(`/agency-links/${conn.cfy}`).set(as('empalloc')).send({ roles: ['Nurse'] }).expect(403);
+    expect((await http().patch(`/agency-links/${conn.cfy}`).set(as('ag')).send({ roles: ['Nurse'] }).expect(400)).body.message).toMatch(/Only the employer chooses which roles/);
+    expect((await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ roles: ['Pilot'] }).expect(400)).body.message).toMatch(/isn't on your list/);
+
+    const link = (await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ roles: ['Nurse'] }).expect(200)).body;
+    expect(link).toMatchObject({ roles: ['Nurse'], rolesWords: 'Nurse', facilityIds: null });
+    expect((await owner.query(`select detail from agency_events where action = 'roles_changed'`)).rows.map(r => r.detail)).toEqual(['Fills roles: Nurse']);
+    // The agency sees the roles chosen (and "Every role" otherwise); the employer side and outsiders can't ask.
+    const agLink = (await http().get('/agency-links').set(as('ag')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === conn.cfy);
+    expect(agLink).toMatchObject({ side: 'agency', roles: ['Nurse'], rolesWords: 'Nurse' });
+    expect((await http().get(`/agency-links/${conn.cfy}/requirements`).set(as('ag')).expect(200)).body.link.rolesWords).toBe('Nurse');
+    expect((await http().get('/agency-links').set(as('metro')).expect(200)).body.links[0].rolesWords).toBe('Every role');
+    const people = (await http().get(`/agency-links/${conn.cfy}/people`).set(as('ag')).expect(200)).body;
+    expect(people.groups.filter((g: { kind: string }) => g.kind === 'role' || g.kind === 'any').map((g: { label: string }) => g.label)).toEqual(['Nurse']);
+    const c = new Client({ connectionString: db.appUrl });
+    await c.connect();
+    try {
+      for (const [tenant, err] of [[ids.bayside, /Only the agency/], [ids.nosy, /Link not found/]] as const) {
+        await c.query('begin');
+        await c.query(`select set_config('app.tenant_id', $1, true)`, [tenant]);
+        await expect(c.query('select app_agency_link_roles($1)', [conn.cfy])).rejects.toThrow(err);
+        await c.query('rollback');
+      }
+    } finally { await c.end(); }
+
+    // A Carer shift goes to Metro only; a Nurse shift to both.
+    const carer = await shiftAs('Carer', 90);
+    let st = (await http().post(`/shifts/${carer}/agency-fill`).set(as('emp')).send({}).expect(201)).body;
+    expect(st.rounds.map((r: { agencyName: string }) => r.agencyName)).toEqual(['Metro Nurses']);
+    const nurse = await shiftAs('Nurse', 92);
+    st = (await http().post(`/shifts/${nurse}/agency-fill`).set(as('emp')).send({}).expect(201)).body;
+    expect(st.rounds.map((r: { agencyName: string; state: string }) => [r.agencyName, r.state])).toEqual([['Caring For You', 'sent'], ['Metro Nurses', 'waiting']]);
+
+    // Metro is then limited to Carers: its waiting turn for the Nurse shift is skipped, not sent.
+    await http().patch(`/agency-links/${conn.metro}`).set(as('emp')).send({ roles: ['Carer'] }).expect(200);
+    await owner.query(`update agency_request_rounds r set due_at = now() - interval '1 minute' from agency_requests q where q.id = r.request_id and q.shift_id = $1`, [nurse]);
+    await timer.runOnce();
+    st = (await http().get(`/shifts/${nurse}/agency-fill`).set(as('emp')).expect(200)).body;
+    expect(st.rounds.map((r: { state: string; skippedReason: string | null }) => [r.state, r.skippedReason])).toEqual([['sent', null], ['skipped', "Doesn't fill this role"]]);
+
+    // Nobody fills a role: the office is told why.
+    const cook = await shiftAs('Cook', 94);
+    st = (await http().get(`/shifts/${cook}/agency-fill`).set(as('emp')).expect(200)).body;
+    expect(st).toMatchObject({ activeAgencies: 0, canRequest: false });
+    expect(st.problem).toMatch(/None of your agencies fills Cook shifts\. Choose which roles/);
+
+    // Every role ticked (or none) means every role, including ones added later.
+    expect((await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ roles: ['Nurse', 'Carer', 'Cook'] }).expect(200)).body)
+      .toMatchObject({ roles: null, rolesWords: 'Every role' });
+    await http().patch(`/agency-links/${conn.metro}`).set(as('emp')).send({ roles: [] }).expect(200);
   });
 });
