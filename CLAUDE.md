@@ -22,7 +22,7 @@ Build schedule: https://claude.ai/artifact/RtUPeMVpHrJbUZZAms7Dug
 Open → Offered/Broadcast → Booked; Open → Assigned → Booked; Cancelled; Completed → Timesheet (Release 2).
 
 ## Working rules
-- What to build next: `docs/BACKLOG.md` (priority order, decisions behind it). Scheduled runs follow `docs/WORKING-ALONE.md` and log in `docs/RUNLOG.md`. Progress page source: `docs/progress/`.
+- What to build next: `docs/BACKLOG.md` (priority order, decisions behind it). Scheduled runs follow `docs/WORKING-ALONE.md` and log in `docs/RUNLOG.md`. Progress page source: `docs/progress/`. Build schedule source: `docs/schedule/schedule.py` (republished by every scheduled run, WORKING-ALONE step 6).
 - Agency connections and agency fill (backlog items 7–8): proposal in `docs/decisions/2026-10-28-agency-connections-design.md`, approved by David 29 Oct with his answers recorded at the end of the note (build from those, not the original questions).
 - CROP serves any industry (packs: healthcare, labour hire, construction, hospitality); use neutral terms (Client, Site, Area, Role, Shift). Rules are business defaults that a client or site can make stricter.
 - Each parallel Claude session works on its own branch and opens a PR into `main`. Label a PR `claude-automerge` only when docs/WORKING-ALONE.md lets it ship without asking; GitHub then merges it once CI passes and deploys staging.
