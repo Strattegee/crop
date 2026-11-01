@@ -162,9 +162,12 @@ async function fillState(db: PoolClient, shiftId: string, now = new Date()) {
     `select id, connection_id as "connectionId", agency_name as "agencyName", position, due_at as "dueAt", sent_at as "sentAt", sent_how as "sentHow",
             skipped_at as "skippedAt", skipped_reason as "skippedReason"
        from agency_request_rounds where request_id = $1 order by position`, [request.id])).rows : [];
-  const active = (await db.query<{ n: number }>(`select count(*)::int as n from agency_connections where side = 'employer' and status = 'active'`)).rows[0].n;
+  const counts = (await db.query<{ anywhere: number; here: number }>(
+    `select count(*)::int as anywhere, count(*) filter (where facility_ids is null or $1 = any(facility_ids))::int as here
+       from agency_connections where side = 'employer' and status = 'active'`, [shift.facilityId])).rows[0];
+  const active = counts.here;
   const w = await wordsFor(db);
-  const problem = agencyFillProblem({ status: shift.status, equipmentOnly: shift.equipmentOnly, startsAt: new Date(shift.startsAt) }, active, request?.status === 'open', now, w);
+  const problem = agencyFillProblem({ status: shift.status, equipmentOnly: shift.equipmentOnly, startsAt: new Date(shift.startsAt) }, active, request?.status === 'open', now, w, counts.anywhere);
   const placement = request ? (await db.query<{ id: string; agencyName: string; workerName: string; status: Placement; putForwardByName: string | null; createdAt: Date; decidedAt: Date | null; confirmedCredentials: string[] }>(
     `select p.id, p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "workerName", p.status,
             p.put_forward_by_name as "putForwardByName", p.created_at as "createdAt", p.decided_at as "decidedAt",
@@ -227,7 +230,7 @@ export class AgencyFillController {
       const shift = await shiftById(db, id);
       const links = (await db.query<{ connectionId: string; preference: number | null; otherName: string }>(
         `select connection_id as "connectionId", preference, other_name as "otherName" from agency_connections
-          where side = 'employer' and status = 'active'`)).rows;
+          where side = 'employer' and status = 'active' and (facility_ids is null or $1 = any(facility_ids))`, [shift.facilityId])).rows;
       const step = chosenStep ?? escalationMinutes(new Date(shift.startsAt), now, shift.timezone, await agencyTimingOf(db));
       const plan = roundSchedule(links, now, step);
       const req = (await db.query<{ id: string }>(

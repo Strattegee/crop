@@ -52,13 +52,18 @@ export type FillShift = {
 };
 
 /** Why this shift can't be sent to agencies now, in plain words, or null when it can. */
-export function agencyFillProblem(shift: FillShift, activeAgencies: number, hasOpenRequest: boolean, now: Date, w: Words = DEFAULT_WORDS): string | null {
+/**
+ * Why a shift can't go to agencies now, or null. `activeAgencies` counts active links that fill the shift's site;
+ * `activeAnywhere` (all active links) tells "none for this site" apart from "none at all".
+ */
+export function agencyFillProblem(shift: FillShift, activeAgencies: number, hasOpenRequest: boolean, now: Date, w: Words = DEFAULT_WORDS, activeAnywhere = activeAgencies): string | null {
   const shiftWord = w.lower(T.shift);
   if (shift.status === 'cancelled') return `This ${shiftWord} has been cancelled`;
   if (shift.equipmentOnly) return `Nobody works an equipment-only ${shiftWord}, so it can't go to agencies`;
   if (shift.status !== 'open') return `Someone is already on this ${shiftWord}`;
   if (shift.startsAt.getTime() <= now.getTime()) return `This ${shiftWord} has already started`;
   if (hasOpenRequest) return `This ${shiftWord} has already been sent to agencies`;
+  if (activeAgencies === 0 && activeAnywhere > 0) return `None of your agencies fills ${w.lower(T.shift, true)} at this ${w.lower(T.site)}. Choose which ${w.lower(T.site, true)} each agency fills in Settings → Agencies.`;
   if (activeAgencies === 0) return 'No agency can be sent requests yet. Link an agency in Settings → Agencies; it can take requests once it has matched your requirements.';
   return null;
 }
@@ -310,4 +315,30 @@ export function agencyFilledMessage(firstName: string, agency: string, s: Agency
     subject: `${w.one(T.shift)} filled: ${s.role} on ${localDay(s.startsAt, s.siteTimezone)}`,
     email: `Hi ${firstName},\n\nThe ${shift} we offered you has been filled:\n\n${agencyShiftLine(s)}\n\nThanks for your time.\n\n${agency}`,
   };
+}
+
+/** Whether a link fills a site: no list means every site. */
+export function linkCoversSite(facilityIds: string[] | null, facilityId: string): boolean {
+  return facilityIds === null || facilityIds.includes(facilityId);
+}
+
+/**
+ * The sites an agency may fill, from the request body (`facilityIds`: null or [] of ids = every site).
+ * Returns the list to store (null = every site) or a problem. `known` are the business's site ids.
+ */
+export function sitesChoice(value: unknown, known: string[], w: Words = DEFAULT_WORDS): { facilityIds: string[] | null } | { problem: string } {
+  if (value === null || value === undefined) return { facilityIds: null };
+  if (!Array.isArray(value) || value.some(v => typeof v !== 'string')) return { problem: `Choose the ${w.lower(T.site, true)} from the list` };
+  const ids = [...new Set(value as string[])];
+  if (ids.some(id => !known.includes(id))) return { problem: `One of those ${w.lower(T.site, true)} isn't yours` };
+  if (ids.length === 0 || known.every(k => ids.includes(k))) return { facilityIds: null };
+  return { facilityIds: ids.sort() };
+}
+
+/** "Every site", "Riverside", "Riverside and Docklands", "3 sites: A, B and C". */
+export function sitesWords(names: string[] | null, w: Words = DEFAULT_WORDS): string {
+  if (names === null) return `Every ${w.lower(T.site)}`;
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  const list = sorted.length <= 1 ? (sorted[0] ?? '') : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
+  return sorted.length > 2 ? `${w.count(sorted.length, T.site)}: ${list}` : list;
 }

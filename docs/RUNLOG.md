@@ -485,3 +485,10 @@ Newest first. One entry per working session or scheduled run.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT; the shorter-link question.
 - (1 Nov, with David) The build schedule is revised (Caring For You live Monday 11 January 2027, after the Christmas quiet period) and its source now lives in `docs/schedule/`. Every scheduled run now updates and republishes it, and ticks off David's "what we need from you" list as items arrive, so the pages match on his phone and his Mac.
 - (1 Nov, with David) David made the Expo account. Added `apps/mobile/eas.json` and a "Build the worker app" workflow that builds the app on Expo's servers; once David adds the Expo token to GitHub, he can start an Android test build that installs straight on a phone and talks to staging. iPhone builds follow once Apple approves the developer account.
+
+## 2026-11-01 evening, 6:15pm Melbourne (scheduled run)
+
+- Shipped: agencies limited to some sites (from the approved agency design). In Settings › Agencies, a business with more than one site now chooses, for each agency, which sites it fills (every site ticked, or none, means all of them, including sites added later). A shift only goes to the agencies that fill its site; if the choice changes while a request is waiting for an agency's turn, that turn is skipped and the shift panel says why; when none of the agencies fills a site, the panel says so instead of offering to send. Each change is logged.
+- Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
+- Next: limiting a link to some roles, letting the agency see which sites it fills, and other unheld items.
+- Waiting on David: the public apply form's questions; the Expo token and first app build; checking the app's Zitadel access token type is JWT; the shorter-link question.
