@@ -12,6 +12,10 @@ import { makeWords } from '../src/terms/words.js';
 import {
   appAccessRefusal, appAccessState, appCredentialEmail, removeAccessRefusal, appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal, myShiftState, notLinkedMessage,
 } from '../src/worker-app/worker-app.js';
+import { NOTICE_VERSION, noticeRefusal, noticeState, noticeUrl } from '../src/worker-app/notice.js';
+import { readFileSync } from 'node:fs';
+import { withTenant } from '@crop/db';
+import { Pool } from 'pg';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('worker app: pure rules', () => {
@@ -31,6 +35,20 @@ describe('worker app: pure rules', () => {
     expect(notLinkedMessage('Demo Cafe')).toBe("Your sign-in isn't linked to anyone at Demo Cafe yet. Ask the office to give you access to the app.");
     expect(changeSummary({ kind: 'booked', workerName: 'Ana Example', equipmentName: null, detail: null, via: 'app' }))
       .toBe('Ana Example accepted the offer in the app and is booked');
+  });
+
+  it('works out when to show the worker privacy notice', () => {
+    expect(noticeState(null)).toBe('new');
+    expect(noticeState(NOTICE_VERSION)).toBe('seen');
+    expect(noticeState('0.0 (old)')).toBe('changed');
+    expect(noticeUrl('https://crop.test/')).toBe('https://crop.test/legal/worker-notice');
+    expect(noticeUrl(undefined)).toBeNull();
+    expect(noticeRefusal(NOTICE_VERSION)).toBeNull();
+    expect(noticeRefusal(undefined)).toBe('Say which version of the notice you read');
+    expect(noticeRefusal('0.0 (old)')).toMatch(/^The notice has changed/);
+    // The version the app asks people to confirm is the one the web's legal pages show.
+    const web = readFileSync(new URL('../../web/lib/legal/documents.ts', import.meta.url), 'utf8');
+    expect(web).toContain(`LEGAL_VERSION = "Version ${NOTICE_VERSION}"`);
   });
 
   it('checks dates for availability and leave asked for in the app', () => {
@@ -162,6 +180,44 @@ describe('worker app: access, my shifts and offers', () => {
     // The worker role can't reach office screens.
     await http().get('/workers').set(as('ana')).expect(403);
     await http().get(`/workers/${ana}/app-access`).set(as('ana')).expect(403);
+  });
+
+  it('shows the worker privacy notice until they confirm reading it, and the office sees when', async () => {
+    let me = (await http().get('/my').set(as('ana')).expect(200)).body;
+    expect(me.notice).toMatchObject({ version: NOTICE_VERSION, state: 'new', acknowledgedAt: null });
+    expect((await http().get(`/workers/${ana}/app-access`).set(as('alloc')).expect(200)).body.notice).toBeNull();
+    expect((await http().post('/my/notice').set(as('ana')).send({}).expect(409)).body.message).toBe('Say which version of the notice you read');
+    expect((await http().post('/my/notice').set(as('ana')).send({ version: 'old' }).expect(409)).body.message).toMatch(/has changed/);
+    const r = await http().post('/my/notice').set(as('ana')).send({ version: NOTICE_VERSION }).expect(200);
+    expect(r.body).toMatchObject({ state: 'seen', version: NOTICE_VERSION });
+    expect(r.body.acknowledgedAt).toBeTruthy();
+    // Again changes nothing.
+    await http().post('/my/notice').set(as('ana')).send({ version: NOTICE_VERSION }).expect(200);
+    expect((await owner.query('select count(*)::int as n from worker_notice_acknowledgements where worker_id = $1', [ana])).rows[0].n).toBe(1);
+    me = (await http().get('/my').set(as('ana')).expect(200)).body;
+    expect(me.notice.state).toBe('seen');
+    const office = (await http().get(`/workers/${ana}/app-access`).set(as('alloc')).expect(200)).body.notice;
+    expect(office).toMatchObject({ version: NOTICE_VERSION, current: true });
+    // An older version confirmed earlier means the new one is shown again.
+    await owner.query(`update worker_notice_acknowledgements set notice_version = '0.0 (old)' where worker_id = $1`, [ana]);
+    expect((await http().get('/my').set(as('ana')).expect(200)).body.notice.state).toBe('changed');
+    expect((await http().get(`/workers/${ana}/app-access`).set(as('alloc')).expect(200)).body.notice.current).toBe(false);
+    await http().post('/my/notice').set(as('ana')).send({ version: NOTICE_VERSION }).expect(200);
+    // Office accounts that aren't anyone on the roster have nothing to confirm.
+    await http().post('/my/notice').set(as('alloc')).send({ version: NOTICE_VERSION }).expect(404);
+    // The record can't be changed or removed by the app, and another business sees none of it.
+    const pool = new Pool({ connectionString: db.appUrl });
+    try {
+      const cafe = (await owner.query(`select id from tenants where slug = 'cafe'`)).rows[0].id;
+      const other = (await owner.query(`select id from tenants where slug = 'other'`)).rows[0].id;
+      await expect(withTenant(pool, cafe, c => c.query('delete from worker_notice_acknowledgements'))).rejects.toThrow(/permission denied/);
+      await expect(withTenant(pool, cafe, c => c.query(`update worker_notice_acknowledgements set notice_version = 'x'`))).rejects.toThrow(/permission denied/);
+      expect(await withTenant(pool, other, async c => (await c.query('select * from worker_notice_acknowledgements')).rowCount)).toBe(0);
+      await expect(withTenant(pool, other, c => c.query(
+        `insert into worker_notice_acknowledgements(tenant_id, worker_id, notice_version) values ($1, $2, 'x')`, [cafe, ana]))).rejects.toThrow(/row-level security/);
+    } finally {
+      await pool.end();
+    }
   });
 
   it('tells an office account that is nobody on the roster to ask for access', async () => {

@@ -513,3 +513,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
 - Next: sharing documents by agreement waits on the document list with Steve; other unheld items (shift duties follow-ups, words in API errors and the worker app).
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 morning, 6:15am Melbourne (scheduled run)
+
+- Shipped: the worker app now shows people the worker privacy notice (from the legal pack) the first time they open it for a business: a short "Before you start" screen with a button to read the notice and "I've read it". Each confirmation is kept with the version and time, can't be changed, and the person's Worker app card tells the office when they confirmed it. When the notice's version changes, everyone sees it again ("Our privacy notice has changed").
+- Not tried on a phone (no build in this run); the API, the wording and the office card are tested.
+- Next: other unheld items (words in API errors, shift duties follow-ups); linking the privacy policy from the apply form waits on the apply form's questions.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

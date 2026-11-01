@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+  needsNotice, noticeText, addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
 describe('worker app formatting', () => {
@@ -103,5 +103,18 @@ describe('getting started', () => {
     const word = { lowerMany: 'jobs' };
     expect(noShiftsLine(word, o([]))).toBe('Your jobs show here once the office has finished getting you started.');
     expect(noShiftsLine(word, null)).toBe('No jobs in the next four weeks yet. New ones show here once the roster is published.');
+  });
+
+  it('shows the worker privacy notice until it is confirmed', () => {
+    const n = { version: 'v1', url: 'https://crop.test/legal/worker-notice', state: 'new' as const, acknowledgedAt: null };
+    expect(needsNotice(n)).toBe(true);
+    expect(needsNotice({ ...n, state: 'changed' })).toBe(true);
+    expect(needsNotice({ ...n, state: 'seen' })).toBe(false);
+    expect(needsNotice(undefined)).toBe(false);
+    expect(noticeText(n, 'Demo Cafe')).toEqual({
+      heading: 'Before you start',
+      body: 'CROP is provided by Strattegee Pty Ltd. Demo Cafe uses it for your shifts and work records. Please read how your information is handled.',
+    });
+    expect(noticeText({ ...n, state: 'changed' }, 'Demo Cafe').heading).toBe('Our privacy notice has changed');
   });
 });
