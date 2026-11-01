@@ -21,7 +21,7 @@ const MAX_COPY_SHIFTS = 1000;
 
 function siteField(body: Record<string, unknown>): string {
   const v = body?.facilityId;
-  if (typeof v !== 'string' || !UUID.test(v)) throw new BadRequestException('Choose a site');
+  if (typeof v !== 'string' || !UUID.test(v)) throw new BadRequestException('Choose {a site}');
   return v;
 }
 
@@ -33,7 +33,7 @@ const weekField = (body: Record<string, unknown>, key: string, required = true) 
 async function site(db: PoolClient, facilityId: string) {
   const f = (await db.query<{ id: string; name: string; timezone: string }>(
     'select id, name, timezone from facilities where id = $1 for update', [facilityId])).rows[0];
-  if (!f) throw new BadRequestException('Choose a site');
+  if (!f) throw new BadRequestException('Choose {a site}');
   return f;
 }
 
@@ -200,7 +200,7 @@ export class RosterTemplatesController {
           `insert into roster_templates(tenant_id, facility_id, name, created_by, created_by_name) values ($1, $2, $3, $4, $5) returning id`,
           [t.tenantId, facilityId, name, auth.userId, actorOf(auth).name])).rows[0].id;
       } catch (e) {
-        if ((e as { code?: string }).code === '23505') throw new ConflictException(`There is already a template called ${name} for this site`);
+        if ((e as { code?: string }).code === '23505') throw new ConflictException(`There is already a template called ${name} for this {site}`);
         throw e;
       }
       const rows = slots.map(s => ({ ...s, id: randomUUID() }));

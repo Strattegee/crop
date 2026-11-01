@@ -91,11 +91,11 @@ export class BankFillController {
     return withTenant(this.pool, t.tenantId, async db => {
       const row = (await db.query<{ status: string; needs_person: boolean; ended: boolean }>(
         'select status, needs_person, ends_at <= now() as ended from shifts where id = $1 for update', [id])).rows[0];
-      if (!row) throw new NotFoundException('Shift not found');
-      if (row.status === 'cancelled') throw new ConflictException('This shift is cancelled');
-      if (!row.needs_person) throw new ConflictException('This shift is for equipment only, so nobody can be put on it');
-      if (row.status !== 'open') throw new ConflictException('Someone is already on this shift');
-      if (row.ended) throw new ConflictException('This shift has already finished');
+      if (!row) throw new NotFoundException('{Shift} not found');
+      if (row.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
+      if (!row.needs_person) throw new ConflictException('This {shift} is for equipment only, so nobody can be put on it');
+      if (row.status !== 'open') throw new ConflictException('Someone is already on this {shift}');
+      if (row.ended) throw new ConflictException('This {shift} has already finished');
       // Offering doesn't change the shift, but accepting would, so the after-publishing rule is checked now.
       const refusal = await rosterChangeRefusal(db, id);
       if (refusal) throw new ConflictException(refusal);

@@ -64,7 +64,7 @@ export class ComplianceController {
     const country = text(body, 'country', { max: 2 });
     if (country && !isCountry(country)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     const published = text(body, 'publishedChanges', { max: 20 });
-    if (published && !PUBLISHED_CHANGES.includes(published as PublishedChanges)) throw new BadRequestException('Choose what can change after a roster is published');
+    if (published && !PUBLISHED_CHANGES.includes(published as PublishedChanges)) throw new BadRequestException('Choose what can change after {a roster} is published');
     const timing = body?.agencyTiming as Record<string, unknown> | undefined;
     if (timing !== undefined && (typeof timing !== 'object' || timing === null || Array.isArray(timing))) throw new BadRequestException('Agency timing must be three numbers of minutes');
     const soon = timing ? int(timing, 'soonMinutes', 1, STEP_LIMITS.soonMinutes) : null;

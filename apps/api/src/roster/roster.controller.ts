@@ -97,7 +97,7 @@ export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
 
 export async function shiftById(db: PoolClient, id: string) {
   const s = (await db.query(`select ${SHIFT_COLS} from ${SHIFT_FROM} where s.id = $1`, [id])).rows[0];
-  if (!s) throw new NotFoundException('Shift not found');
+  if (!s) throw new NotFoundException('{Shift} not found');
   return s;
 }
 
@@ -137,7 +137,7 @@ export class ShiftCodesController {
     const breakMinutes = int(body, 'breakMinutes', 0, 240) ?? 0;
     const letter = letterField(body) ?? null;
     return withTenant(this.pool, t.tenantId, async db => {
-      if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose a site');
+      if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose {a site}');
       try {
         return (await db.query(
           `insert into shift_codes(tenant_id, facility_id, code, name, start_time, end_time, break_minutes, letter)
@@ -194,7 +194,7 @@ export class EmploymentController {
   list(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string, @Query('withdrawn') withdrawn?: string) {
     const all = withdrawn === 'true';
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+      if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
       return (await db.query(
         `select ${TERM_COLS}${all ? `, withdrawn_at as "withdrawnAt", withdrawn_reason as "withdrawnReason", replaces_id as "replacesId"` : ''}
            from employment_terms where worker_id = $1 ${all ? '' : 'and withdrawn_at is null'}
@@ -266,7 +266,7 @@ export class EmploymentController {
 
   /** Locks the worker (so two corrections can't cross) and returns their live terms' dates. */
   private async liveTerms(db: PoolClient, workerId: string): Promise<TermDates[]> {
-    if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+    if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
     return (await db.query<TermDates>(
       `select id, to_char(starts_on, 'YYYY-MM-DD') as "startsOn", to_char(ends_on, 'YYYY-MM-DD') as "endsOn", end_reason as "endReason"
          from employment_terms where worker_id = $1 and withdrawn_at is null`, [workerId])).rows;
@@ -331,7 +331,7 @@ export class EmploymentController {
     const contractedHours = hours(body, 'contractedHours');
     const startsOn = date(body, 'startsOn', { required: true })!;
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
       if ((await db.query('select 1 from employment_terms where worker_id = $1 and starts_on >= $2 and withdrawn_at is null', [workerId, startsOn])).rowCount) {
         throw new BadRequestException('Employment terms already start on or after that date');
       }
@@ -389,11 +389,11 @@ export class ShiftsController {
     const dates: string[] = [];
     for (let d = startDate; d <= endDate; d = addDays(d, 1)) if (!weekdays || weekdays.includes(isoWeekday(d))) dates.push(d);
     if (!dates.length) throw new BadRequestException('No dates match the days chosen');
-    if (dates.length * quantity > MAX_SHIFTS_PER_REQUEST) throw new BadRequestException(`That would create more than ${MAX_SHIFTS_PER_REQUEST} shifts`);
+    if (dates.length * quantity > MAX_SHIFTS_PER_REQUEST) throw new BadRequestException(`That would create more than ${MAX_SHIFTS_PER_REQUEST} {shifts}`);
     // Shift duties (migration 0029) to put on every shift created, e.g. "Serves alcohol".
     const dutiesRaw = body?.dutyIds;
     if (dutiesRaw !== undefined && dutiesRaw !== null && (!Array.isArray(dutiesRaw) || dutiesRaw.some(x => typeof x !== 'string' || !UUID.test(x)))) {
-      throw new BadRequestException('Choose the duties for these shifts');
+      throw new BadRequestException('Choose the duties for these {shifts}');
     }
     const dutyIds = [...new Set((dutiesRaw as string[] | null | undefined) ?? [])];
     if (dutyIds.length > 20) throw new BadRequestException('Choose 20 duties or fewer');
@@ -402,9 +402,9 @@ export class ShiftsController {
 
     return this.tx(t, auth, async db => {
       const facility = (await db.query<{ timezone: string }>('select timezone from facilities where id = $1', [facilityId])).rows[0];
-      if (!facility) throw new BadRequestException('Choose a site');
+      if (!facility) throw new BadRequestException('Choose {a site}');
       if (areaId && !(await db.query('select 1 from areas where id = $1 and facility_id = $2', [areaId, facilityId])).rowCount) {
-        throw new BadRequestException('Choose an area at this site');
+        throw new BadRequestException('Choose {an area} at this {site}');
       }
       let startTime = time(body, 'startTime', 'Start time');
       let endTime = time(body, 'endTime', 'End time');
@@ -413,7 +413,7 @@ export class ShiftsController {
         const sc = (await db.query<{ start: string; end: string; brk: number }>(
           `select to_char(start_time, 'HH24:MI') as start, to_char(end_time, 'HH24:MI') as end, break_minutes as brk
              from shift_codes where id = $1 and active and (facility_id is null or facility_id = $2)`, [shiftCodeId, facilityId])).rows[0];
-        if (!sc) throw new BadRequestException('Choose a shift code for this site');
+        if (!sc) throw new BadRequestException('Choose a shift code for this {site}');
         startTime ??= sc.start; endTime ??= sc.end; breakMinutes ??= sc.brk;
       }
       if (!startTime || !endTime) throw new BadRequestException('Choose a shift code, or enter start and end times');
@@ -526,7 +526,7 @@ export class ShiftsController {
   update(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const notes = text(body, 'notes', { max: 1000 });
     return this.tx(t, auth, async db => {
-      if (!(await db.query('update shifts set notes = $2, updated_at = now() where id = $1', [id, notes])).rowCount) throw new NotFoundException('Shift not found');
+      if (!(await db.query('update shifts set notes = $2, updated_at = now() where id = $1', [id, notes])).rowCount) throw new NotFoundException('{Shift} not found');
       return shiftById(db, id);
     });
   }
@@ -541,11 +541,11 @@ export class ShiftsController {
     const workerId = uuidField(body ?? {}, 'workerId', 'person');
     return this.tx(t, auth, async db => {
       const shift = await shiftById(db, id);
-      if (shift.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
-      if (shift.equipmentOnly) throw new BadRequestException('Nobody works an equipment-only shift, so it can\'t cover anyone');
+      if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
+      if (shift.equipmentOnly) throw new BadRequestException('Nobody works an equipment-only {shift}, so it can\'t cover anyone');
       if (workerId) {
         if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new BadRequestException('Choose a person');
-        if (workerId === shift.workerId) throw new BadRequestException(`${shift.workerName} is working this shift, so it can't be covering them`);
+        if (workerId === shift.workerId) throw new BadRequestException(`${shift.workerName} is working this {shift}, so it can't be covering them`);
       }
       if (shift.coveringWorkerId !== workerId) await db.query('update shifts set covering_worker_id = $2, updated_at = now() where id = $1', [id, workerId]);
       return shiftById(db, id);
@@ -562,8 +562,8 @@ export class ShiftsController {
     const requested = gender(body ?? {}, 'genderRequested');
     return this.tx(t, auth, async db => {
       const shift = await shiftById(db, id);
-      if (shift.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
-      if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works an equipment-only shift');
+      if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
+      if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works an equipment-only {shift}');
       if (shift.genderRequested !== requested) await db.query('update shifts set gender_requested = $2, updated_at = now() where id = $1', [id, requested]);
       const after = await shiftById(db, id);
       const personWarning = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined)?.message ?? null;
@@ -591,9 +591,9 @@ export class ShiftsController {
         `select s.status, s.starts_at <= now() as started, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
                 f.timezone, s.break_minutes as brk
            from shifts s join facilities f on f.id = s.facility_id where s.id = $1 for update of s`, [id])).rows[0];
-      if (!cur) throw new NotFoundException('Shift not found');
-      if (cur.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
-      if (cur.started) throw new ConflictException('This shift has already started, so its times can no longer be changed');
+      if (!cur) throw new NotFoundException('{Shift} not found');
+      if (cur.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
+      if (cur.started) throw new ConflictException('This {shift} has already started, so its times can no longer be changed');
       const r = (await db.query<{ future: boolean }>(
         `update shifts set starts_at = ($2::date + $3::time) at time zone $6,
                            ends_at = ($2::date + $5::int + $4::time) at time zone $6,
@@ -630,16 +630,16 @@ export class ShiftsController {
     const role = text(body ?? {}, 'role', { max: 60 });
     const areaGiven = body && Object.prototype.hasOwnProperty.call(body, 'areaId');
     const areaId = areaGiven ? uuidField(body, 'areaId', 'area') : undefined;
-    if (!role && !areaGiven) throw new BadRequestException('Choose a role or an area');
+    if (!role && !areaGiven) throw new BadRequestException('Choose a role or {an area}');
     return this.tx(t, auth, async db => {
       const cur = (await db.query<{ status: string; started: boolean; needs_person: boolean; facility_id: string }>(
         `select status, starts_at <= now() as started, needs_person, facility_id from shifts where id = $1 for update`, [id])).rows[0];
-      if (!cur) throw new NotFoundException('Shift not found');
-      if (cur.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
-      if (cur.started) throw new ConflictException('This shift has already started, so it can no longer be changed');
-      if (role && !cur.needs_person) throw new BadRequestException('Nobody works an equipment-only shift');
+      if (!cur) throw new NotFoundException('{Shift} not found');
+      if (cur.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
+      if (cur.started) throw new ConflictException('This {shift} has already started, so it can no longer be changed');
+      if (role && !cur.needs_person) throw new BadRequestException('Nobody works an equipment-only {shift}');
       if (areaId && !(await db.query('select 1 from areas where id = $1 and facility_id = $2', [areaId, cur.facility_id])).rowCount) {
-        throw new BadRequestException('Choose an area at this site');
+        throw new BadRequestException('Choose {an area} at this {site}');
       }
       await db.query(`update shifts set role = coalesce($2, role), area_id = case when $3 then $4::uuid else area_id end, updated_at = now() where id = $1`,
         [id, role, !!areaGiven, areaId ?? null]);

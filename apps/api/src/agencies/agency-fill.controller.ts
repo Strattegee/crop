@@ -263,7 +263,7 @@ export class AgencyFillController {
       const req = (await db.query<{ id: string }>(`select id from agency_requests where shift_id = $1 and status = 'open'`, [id])).rows[0];
       if (!req) {
         await shiftById(db, id);
-        throw new BadRequestException("This shift isn't with agencies at the moment");
+        throw new BadRequestException("This {shift} isn't with agencies at the moment");
       }
       const next = (await db.query<{ id: string }>(
         `select id from agency_request_rounds where request_id = $1 and sent_at is null and skipped_at is null order by position limit 1 for update`, [req.id])).rows[0];
@@ -286,7 +286,7 @@ export class AgencyFillController {
       const req = (await db.query<{ id: string }>(`select id from agency_requests where shift_id = $1 and status = 'open'`, [id])).rows[0];
       if (!req) {
         await shiftById(db, id);
-        throw new BadRequestException("This shift isn't with agencies at the moment");
+        throw new BadRequestException("This {shift} isn't with agencies at the moment");
       }
       await db.query('select app_agency_withdraw_request($1, $2)', [req.id, reason]);
       return fillState(db, id);

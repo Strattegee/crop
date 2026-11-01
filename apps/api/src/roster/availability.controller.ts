@@ -15,7 +15,7 @@ import {
 
 async function requireWorker(db: PoolClient, workerId: string, lock = false) {
   if (!(await db.query(`select 1 from workers where id = $1${lock ? ' for update' : ''}`, [workerId])).rowCount) {
-    throw new NotFoundException('Worker not found');
+    throw new NotFoundException('{Worker} not found');
   }
 }
 

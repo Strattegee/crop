@@ -87,7 +87,7 @@ export class AppAccessController {
   private async state(db: PoolClient, workerId: string) {
     const w = (await db.query<{ id: string; user_id: string | null; email: string | null; status: string; name: string }>(
       `select id, user_id, email, status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1`, [workerId])).rows[0];
-    if (!w) throw new NotFoundException('Worker not found');
+    if (!w) throw new NotFoundException('{Worker} not found');
     // Linked already, or an accepted invitation for them waiting to be linked at their first use of the app.
     const userId = w.user_id ?? (await db.query<{ u: string }>(
       `select accepted_user_id as u from invitations where worker_id = $1 and accepted_user_id is not null order by accepted_at desc limit 1`,
@@ -125,7 +125,7 @@ export class AppAccessController {
     return withTenant(this.pool, t.tenantId, async db => {
       const w = (await db.query<{ email: string | null; status: string; name: string }>(
         `select email, status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [workerId])).rows[0];
-      if (!w) throw new NotFoundException('Worker not found');
+      if (!w) throw new NotFoundException('{Worker} not found');
       const now = await this.state(db, workerId);
       if (now.state === 'active') throw new ConflictException(`${w.name} already has the app`);
       const refusal = appAccessRefusal(w);
@@ -150,7 +150,7 @@ export class AppAccessController {
   @HttpCode(200)
   remove(@Tenant() t: Membership, @Param('workerId', ParseUUIDPipe) workerId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+      if (!(await db.query('select 1 from workers where id = $1 for update', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
       const now = await this.state(db, workerId);
       const refusal = removeAccessRefusal(now);
       if (refusal) throw new ConflictException(refusal);

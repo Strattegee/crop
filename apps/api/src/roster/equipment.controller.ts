@@ -149,7 +149,7 @@ export class EquipmentController {
     const notes = text(body, 'notes', { max: 1000 });
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query('select 1 from equipment_types where id = $1 and active', [typeId])).rowCount) throw new BadRequestException('Choose an equipment type');
-      if (home && !(await db.query('select 1 from facilities where id = $1', [home])).rowCount) throw new BadRequestException('Choose a home site');
+      if (home && !(await db.query('select 1 from facilities where id = $1', [home])).rowCount) throw new BadRequestException('Choose a home {site}');
       try {
         const { id } = (await db.query<{ id: string }>(
           `insert into equipment(tenant_id, equipment_type_id, name, asset_number, registration, home_facility_id, notes)
@@ -198,7 +198,7 @@ export class EquipmentController {
     const home = uuidOrNull(body, 'homeFacilityId', 'a home site');
     const notes = text(body, 'notes', { max: 1000 });
     return withTenant(this.pool, t.tenantId, async db => {
-      if (home && !(await db.query('select 1 from facilities where id = $1', [home])).rowCount) throw new BadRequestException('Choose a home site');
+      if (home && !(await db.query('select 1 from facilities where id = $1', [home])).rowCount) throw new BadRequestException('Choose a home {site}');
       try {
         const r = await db.query(
           `update equipment set name = coalesce($2, name), status = coalesce($3::equipment_status, status),
@@ -265,12 +265,12 @@ export class ShiftEquipmentController {
     return withTenant(this.pool, t.tenantId, async db => {
       // Locking the shift serialises this with assigning a person; locking the equipment stops two bookings at once.
       const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
-      if (!shift) throw new NotFoundException('Shift not found');
-      if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
+      if (!shift) throw new NotFoundException('{Shift} not found');
+      if (shift.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
       if (!(await db.query('select 1 from equipment where id = $1 for update', [equipmentId])).rowCount) throw new BadRequestException('Choose equipment');
       if ((await db.query(
         `select 1 from shift_assignments where shift_id = $1 and equipment_id = $2 and status in ('assigned', 'confirmed')`, [id, equipmentId])).rowCount) {
-        throw new ConflictException('That equipment is already on this shift');
+        throw new ConflictException('That equipment is already on this {shift}');
       }
       const [check] = await equipmentForShift(db, t.tenantId, id, [equipmentId]);
       if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
@@ -288,11 +288,11 @@ export class ShiftEquipmentController {
   @HttpCode(200)
   remove(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('equipmentId', ParseUUIDPipe) equipmentId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from shifts where id = $1 for update', [id])).rowCount) throw new NotFoundException('Shift not found');
+      if (!(await db.query('select 1 from shifts where id = $1 for update', [id])).rowCount) throw new NotFoundException('{Shift} not found');
       const r = await db.query(
         `update shift_assignments set status = 'removed', ended_at = now()
           where shift_id = $1 and equipment_id = $2 and resource_kind = 'equipment' and status in ('assigned', 'confirmed')`, [id, equipmentId]);
-      if (!r.rowCount) throw new ConflictException('That equipment isn\'t on this shift');
+      if (!r.rowCount) throw new ConflictException('That equipment isn\'t on this {shift}');
       // An equipment-only shift goes back to open when nothing is left on it.
       await db.query(
         `update shifts set status = 'open', updated_at = now()

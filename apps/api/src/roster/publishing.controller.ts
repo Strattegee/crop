@@ -150,13 +150,13 @@ export class PublishingController {
   publish(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const weekStart = weekStartOf(body ?? {});
     const facilityId = facilityOf(body?.facilityId);
-    if (body?.facilityId && !facilityId) throw new BadRequestException('Choose a site');
+    if (body?.facilityId && !facilityId) throw new BadRequestException('Choose {a site}');
     const actor = actorOf(auth);
     return withTenant(this.pool, t.tenantId, async db => {
       // Locking the sites serialises two people publishing the same week.
       const sites = (await db.query<{ id: string }>(
         `select id from facilities where ($1::uuid is null or id = $1) order by id for update`, [facilityId])).rows;
-      if (!sites.length) throw new BadRequestException('Choose a site');
+      if (!sites.length) throw new BadRequestException('Choose {a site}');
       const before = await weeks(db, weekStart, facilityId);
       if (before.every(w => w.state === 'history')) throw new ConflictException('This week is over, so it can no longer be published');
       const toPublish = before.filter(w => w.state === 'draft' || (w.state === 'live' && w.changesSincePublish > 0));

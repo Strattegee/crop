@@ -141,7 +141,7 @@ export class FacilitiesController {
           [t.tenantId, facilityId, name, text(body, 'specialty', { max: 80 })],
         )).rows[0];
       } catch (err) {
-        if ((err as { code?: string }).code === '23505') throw new BadRequestException('That facility already has an area with that name');
+        if ((err as { code?: string }).code === '23505') throw new BadRequestException('That {site} already has {an area} with that name');
         throw err;
       }
     });
@@ -159,7 +159,7 @@ export class FacilitiesController {
          where id = $1 and facility_id = $2 returning id, name, specialty, active`,
         [areaId, facilityId, text(body, 'name', { max: 120 }), Boolean(body && 'specialty' in body), text(body, 'specialty', { max: 80 }), bool(body, 'active')],
       )).rows[0];
-      if (!row) throw new NotFoundException('area not found');
+      if (!row) throw new NotFoundException('{Area} not found');
       return row;
     });
   }

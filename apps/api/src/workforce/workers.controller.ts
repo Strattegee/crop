@@ -105,7 +105,7 @@ export class WorkersController {
         await beginOnboarding(db, t.tenantId, auth, row.id, checklistId, true);
         return (await db.query(`select ${WORKER_COLUMNS} from workers w where w.id = $1`, [row.id])).rows[0];
       } catch (err) {
-        if ((err as { code?: string }).code === '23505') throw new BadRequestException('A worker with that email already exists');
+        if ((err as { code?: string }).code === '23505') throw new BadRequestException('{A worker} with that email already exists');
         throw err;
       }
     });
@@ -117,7 +117,7 @@ export class WorkersController {
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const worker = (await db.query<Row & { roles: string[] }>(`select ${WORKER_COLUMNS} from workers w where w.id = $1`, [id])).rows[0];
-      if (!worker) throw new NotFoundException('worker not found');
+      if (!worker) throw new NotFoundException('{Worker} not found');
       const ctx = await complianceContext(db, t.tenantId);
       const credentials = (await db.query<Row & { expiryDate: string | null }>(
         `select ${CRED_COLUMNS} from worker_credentials c join credential_types t on t.id = c.credential_type_id
@@ -162,10 +162,10 @@ export class WorkersController {
             body && 'notes' in body, text(body, 'notes', { max: 2000 }),
             body && 'gender' in body, gender(body, 'gender')],
         )).rows[0];
-        if (!row) throw new NotFoundException('worker not found');
+        if (!row) throw new NotFoundException('{Worker} not found');
         return row;
       } catch (err) {
-        if ((err as { code?: string }).code === '23505') throw new BadRequestException('A worker with that email already exists');
+        if ((err as { code?: string }).code === '23505') throw new BadRequestException('{A worker} with that email already exists');
         throw err;
       }
     });
@@ -181,7 +181,7 @@ export class WorkersController {
     const fields = credentialFields(body);
     return withTenant(this.pool, t.tenantId, async db => {
       const worker = await db.query('select 1 from workers where id = $1', [workerId]);
-      if (!worker.rowCount) throw new NotFoundException('worker not found');
+      if (!worker.rowCount) throw new NotFoundException('{Worker} not found');
       const type = (await db.query<{ has_expiry: boolean; has_number: boolean }>('select has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
       if (!type) throw new NotFoundException('credential type not found');
       if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this credential');

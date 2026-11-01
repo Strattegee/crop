@@ -195,7 +195,7 @@ function validate(body: Record<string, unknown>, today: string) {
 }
 
 async function workerExists(db: PoolClient, workerId: string) {
-  if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('worker not found');
+  if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
 }
 
 async function currentRecord(db: PoolClient, workerId: string): Promise<string> {

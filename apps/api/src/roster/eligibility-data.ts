@@ -48,7 +48,7 @@ export async function loadShiftFacts(db: PoolClient, shiftId: string): Promise<S
             to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as local_start,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours
        from shifts s join facilities f on f.id = s.facility_id where s.id = $1`, [shiftId])).rows[0];
-  if (!s) throw new NotFoundException('Shift not found');
+  if (!s) throw new NotFoundException('{Shift} not found');
   return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, localStart: s.local_start, hours: s.hours, genderRequested: s.gender_requested };
 }
 

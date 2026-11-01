@@ -47,11 +47,11 @@ export class CoverRulesController {
     const credentialTypeId = body?.credentialTypeId;
     if (typeof credentialTypeId !== 'string' || !UUID.test(credentialTypeId)) throw new BadRequestException('Choose a credential');
     const facilityId = body?.facilityId === undefined || body?.facilityId === null || body?.facilityId === '' ? null : body.facilityId;
-    if (facilityId !== null && (typeof facilityId !== 'string' || !UUID.test(facilityId))) throw new BadRequestException('Choose a site');
+    if (facilityId !== null && (typeof facilityId !== 'string' || !UUID.test(facilityId))) throw new BadRequestException('Choose {a site}');
     return withTenant(this.pool, t.tenantId, async db => {
       const ct = (await db.query<{ active: boolean }>('select active from credential_types where id = $1', [credentialTypeId])).rows[0];
       if (!ct?.active) throw new BadRequestException('That credential is switched off or no longer exists');
-      if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose a site');
+      if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose {a site}');
       const existing = (await db.query<{ id: string; active: boolean }>(
         'select id, active from site_cover_rules where credential_type_id = $1 and facility_id is not distinct from $2', [credentialTypeId, facilityId])).rows[0];
       if (existing?.active) throw new BadRequestException('There is already a rule for that credential there');
@@ -86,7 +86,7 @@ export class CoverRulesController {
     const to = date(q, 'to', { required: true })!;
     if (to < from) throw new BadRequestException('The end date must be on or after the start date');
     if (to > addDays(from, MAX_DAYS - 1)) throw new BadRequestException(`Choose ${MAX_DAYS} days or fewer`);
-    if (q.facilityId && !UUID.test(q.facilityId)) throw new BadRequestException('Choose a site');
+    if (q.facilityId && !UUID.test(q.facilityId)) throw new BadRequestException('Choose {a site}');
     return withTenant(this.pool, t.tenantId, async db => {
       // Wide enough for any time zone; trimmed to the local dates asked for.
       const rows = await coverGapsBetween(db, new Date(`${addDays(from, -1)}T00:00:00Z`), new Date(`${addDays(to, 2)}T00:00:00Z`), q.facilityId || null);

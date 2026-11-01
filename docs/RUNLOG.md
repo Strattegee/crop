@@ -520,3 +520,10 @@ Newest first. One entry per working session or scheduled run.
 - Not tried on a phone (no build in this run); the API, the wording and the office card are tested.
 - Next: other unheld items (words in API errors, shift duties follow-ups); linking the privacy policy from the apply form waits on the apply form's questions.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 morning, 9:15am Melbourne (scheduled run)
+
+- Shipped: error messages now use each business's own words. When something is refused, the message on screen or in the app says it the business's way: a café that calls shifts "jobs" and sites "venues" sees "Job not found", "This job is cancelled" or "Choose a section at this venue" instead of CROP's words. About 90 messages across the roster, bank fill, equipment, items, duties, change requests, templates, people and the app were changed; names people typed are never altered, and a business that hasn't chosen its own words sees exactly what it saw before.
+- Not checked in a browser (no local sign-in in this run); every test passes, including new ones for a business with its own words and one without.
+- Next: the rest of the words work (onboarding requests, the worker app's own labels) and other unheld items.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
