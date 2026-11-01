@@ -34,8 +34,8 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
   const groups = new Map<string, StripPerson[]>();
   for (const p of shownPeople) groups.set(p.role, [...(groups.get(p.role) ?? []), p]);
 
-  const drag = (kind: 'person' | 'equipment', id: string) => (e: DragEvent) => {
-    e.dataTransfer.setData(DRAG, JSON.stringify({ kind, id }));
+  const drag = (kind: 'person' | 'equipment' | 'item', id: string, extra?: { name: string; unit: string }) => (e: DragEvent) => {
+    e.dataTransfer.setData(DRAG, JSON.stringify({ kind, id, ...extra }));
     e.dataTransfer.effectAllowed = 'copy';
     document.body.dataset.dragging = kind;
   };
@@ -100,26 +100,27 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
       {tab === 'items' && (
         <div className="strip-list">
           {items.filter(i => match(`${i.name} ${i.category}`)).map(i => (
-            <div key={i.id} className="strip-row eq">
+            <div key={i.id} className={`strip-row eq ${i.onHand != null && i.onHand <= 0 ? 'blocked' : ''}`} draggable={canDrag && (i.onHand == null || i.onHand > 0)}
+              onDragStart={drag('item', i.id, { name: i.name, unit: i.unit })} onDragEnd={end} title={canDrag ? `Drag onto a ${labels.shift.toLowerCase()} to add one` : undefined}>
               <span className="nm">{i.name}<small>{i.category}</small></span>
               <span className={`num ${i.low ? 'over' : ''}`}>{i.onHand == null ? '–' : `${fmt(i.onHand)} ${i.unit}`}</span>
             </div>
           ))}
           {items.length === 0 && <p className="muted small">No {labels.items.toLowerCase()} yet.</p>}
-          {items.length > 0 && <p className="muted small strip-help">On hand across all {labels.sites.toLowerCase()}; red is at or below the reorder level. Add them to a {labels.shift.toLowerCase()} from its panel.</p>}
+          {items.length > 0 && <p className="muted small strip-help">On hand across all {labels.sites.toLowerCase()}; red is at or below the reorder level. Drag one onto a {labels.shift.toLowerCase()} to add it (given to the {labels.person.toLowerCase()} on it, or used on the {labels.shift.toLowerCase()}); its panel opens to change how many.</p>}
         </div>
       )}
     </aside>
   );
 }
 
-/** Wraps the ribbon so shift cards (data-shift) accept a dragged person or piece of equipment. */
+/** Wraps the ribbon so shift cards (data-shift) accept a dragged person, piece of equipment or item. */
 export function DropZone({ back, children }: { back: string; children: ReactNode }) {
   const [pending, start] = useTransition();
   const target = (e: DragEvent) => (e.target as HTMLElement).closest<HTMLElement>('[data-shift]');
   const accepts = (el: HTMLElement | null) => {
     const kind = document.body.dataset.dragging;
-    return !!el && ((kind === 'person' && el.dataset.needsPerson === '1') || (kind === 'equipment' && el.dataset.takesEquipment === '1'));
+    return !!el && ((kind === 'person' && el.dataset.needsPerson === '1') || ((kind === 'equipment' || kind === 'item') && el.dataset.takesEquipment === '1'));
   };
   return (
     <div className={`roster-scroll ${pending ? 'busy' : ''}`}
@@ -131,8 +132,11 @@ export function DropZone({ back, children }: { back: string; children: ReactNode
         const raw = e.dataTransfer.getData(DRAG);
         if (!el || !raw) return;
         e.preventDefault();
-        const { kind, id } = JSON.parse(raw) as { kind: 'person' | 'equipment'; id: string };
-        start(() => dropOnShift(kind, el.dataset.shift!, id, back));
+        const { kind, id, name, unit } = JSON.parse(raw) as { kind: 'person' | 'equipment' | 'item'; id: string; name?: string; unit?: string };
+        const to = kind === 'item'
+          ? { workerId: el.dataset.worker || null, workerName: el.dataset.workerName || null, equipmentOnly: el.dataset.equipmentOnly === '1', itemName: name, itemUnit: unit }
+          : {};
+        start(() => dropOnShift(kind, el.dataset.shift!, id, back, to));
       }}>
       {children}
     </div>

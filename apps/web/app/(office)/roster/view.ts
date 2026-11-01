@@ -280,6 +280,30 @@ export function shiftItemChoices(items: PanelItem[], stockHere: { itemId: string
   return choices.map(({ id, label, disabled }) => ({ id, label, disabled }));
 }
 
+/**
+ * Dragging an item from the strip onto a shift (backlog item 5): one of it, given to the person on the shift
+ * when there is one (as the panel's "Give to" tick defaults), otherwise used on the shift. Mirrors the panel.
+ */
+export function itemDrop(workerId: string | null | undefined, equipmentOnly: boolean): { workerId: string | null; quantity: 1 } {
+  return { workerId: workerId && !equipmentOnly ? workerId : null, quantity: 1 };
+}
+
+/** What the office is told after dropping an item: what happened and where to change it. */
+export function itemDropMessage(itemName: string, unit: string | undefined, workerName: string | null | undefined, shiftWord: string): string {
+  const one = `${itemName} (1${unit ? ` ${unit}` : ''})`;
+  const what = workerName ? `${one} given to ${workerName} for this ${shiftWord}` : `${one} recorded as used on this ${shiftWord}`;
+  return `${what}. Change how many or return it under Items below.`;
+}
+
+/** The roster URL to come back to with a shift's panel open (keeps week, site, view; drops old messages). */
+export function withShift(back: string, shiftId: string): string {
+  const u = new URL(back.startsWith('/roster') ? back : '/roster', 'http://roster.local');
+  u.searchParams.set('shift', shiftId);
+  u.searchParams.delete('done');
+  u.searchParams.delete('error');
+  return `${u.pathname}${u.search}`;
+}
+
 /** Steve's "T" line on a card (migration 0035): the person the shift covers. Never why they're away. */
 export const coveringLine = (name: string) => `Covering ${name}`;
 

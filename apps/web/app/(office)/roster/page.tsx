@@ -329,6 +329,8 @@ export default async function RosterPage({ searchParams }: {
     href: url({ shift: s.id }), 'data-shift': s.id,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
+    // For dropping an item: who it goes to (the person on the shift), as the panel's "Give to" does.
+    'data-worker': s.workerId ?? '', 'data-worker-name': s.workerName ?? '', 'data-equipment-only': s.equipmentOnly ? '1' : '0',
     title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
   });
   // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
