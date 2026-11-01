@@ -9,7 +9,7 @@ import { T, words } from '../../../lib/terms';
 import { addedMessage } from '../../../lib/outside-agency';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen } from './view';
+import { ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen, itemDrop, itemDropMessage, withShift } from './view';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -214,13 +214,20 @@ export async function fillWeekDemo(f: FormData) {
 }
 
 /** From the ribbon strip: a person or piece of equipment dropped onto a shift card. */
-export async function dropOnShift(kind: 'person' | 'equipment', shiftId: string, id: string, backTo: string) {
+export type DropTarget = { workerId?: string | null; workerName?: string | null; equipmentOnly?: boolean; itemName?: string; itemUnit?: string };
+
+export async function dropOnShift(kind: 'person' | 'equipment' | 'item', shiftId: string, id: string, backTo: string, target: DropTarget = {}) {
   const to = backTo.startsWith('/roster') ? backTo : '/roster';
   const tw = await words();
   if (kind === 'person') {
     await attempt(to, () => api(`/shifts/${shiftId}/assign`, { method: 'POST', body: { workerId: id } }), 'Assigned. Confirm once they have agreed.');
-  } else {
+  } else if (kind === 'equipment') {
     await attempt(to, () => api(`/shifts/${shiftId}/equipment`, { method: 'POST', body: { equipmentId: id } }), `${tw.one(T.equipment)} booked.`);
+  } else {
+    // Items (backlog item 5): one of it, to the person on the shift or used on it; the shift's panel opens to adjust.
+    const drop = itemDrop(target.workerId, !!target.equipmentOnly);
+    await attempt(withShift(to, shiftId), () => api(`/items/${id}/issue`, { method: 'POST', body: { shiftId, ...drop } }),
+      itemDropMessage(target.itemName ?? tw.one(T.item), target.itemUnit, drop.workerId ? target.workerName : null, tw.lower(T.shift)));
   }
 }
 

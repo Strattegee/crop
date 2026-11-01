@@ -468,3 +468,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
 - Next: other agency follow-ups (limiting a link to some roles or sites; sharing documents by agreement) and the remaining onboarding pieces.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.
+
+## 2026-11-01 afternoon, 12:15pm Melbourne (scheduled run)
+
+- Shipped: items can be dragged from the roster's left strip onto a shift, like people and equipment. Dropping one adds one of that item: given to the person on the shift when there is one, otherwise recorded as used on the shift. The shift's panel then opens with a message saying what happened, so the office can change how many or return it. Counted items the business has none of are greyed out and can't be dragged; the usual stock check at the shift's site still applies.
+- Not checked in a browser (no local sign-in in this run); the page builds and the new helpers are tested.
+- Next: the roster's remaining design pieces (Template stage, app requests panel) wait on Steve's answer; next unheld items are the agency follow-ups (limiting a link to some roles or sites) and a shorter link for offer texts.
+- Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT.

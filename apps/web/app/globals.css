@@ -197,7 +197,7 @@ label.inline input[type='checkbox'] { margin: 0; }
 .strip-row.warn { border-left-color: var(--warn); }
 .strip-row.blocked { opacity: 0.5; }
 .strip-help { margin: 0; }
-body[data-dragging='person'] .rcard[data-needs-person='1'], body[data-dragging='equipment'] .rcard[data-takes-equipment='1'] { outline: 2px dashed var(--brand); outline-offset: -2px; }
+body[data-dragging='person'] .rcard[data-needs-person='1'], body[data-dragging='equipment'] .rcard[data-takes-equipment='1'], body[data-dragging='item'] .rcard[data-takes-equipment='1'] { outline: 2px dashed var(--brand); outline-offset: -2px; }
 .rcard.drop { background: #e6f3ec; outline: 2px solid var(--ok) !important; }
 .roster-scroll.busy { opacity: 0.6; pointer-events: none; }
 
