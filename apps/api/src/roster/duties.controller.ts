@@ -125,13 +125,13 @@ export class ShiftDutiesController {
   @HttpCode(200)
   setForShift(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const v = body?.dutyIds;
-    if (!Array.isArray(v) || v.some(x => typeof x !== 'string' || !UUID.test(x))) throw new BadRequestException('Choose the duties for this shift');
+    if (!Array.isArray(v) || v.some(x => typeof x !== 'string' || !UUID.test(x))) throw new BadRequestException('Choose the duties for this {shift}');
     const dutyIds = [...new Set(v as string[])];
     if (dutyIds.length > MAX_DUTIES_PER_SHIFT) throw new BadRequestException(`Choose ${MAX_DUTIES_PER_SHIFT} duties or fewer`);
     return withTenant(this.pool, t.tenantId, async db => {
       const shift = (await db.query<{ status: string }>('select status from shifts where id = $1 for update', [id])).rows[0];
-      if (!shift) throw new NotFoundException('Shift not found');
-      if (shift.status === 'cancelled') throw new BadRequestException('This shift is cancelled');
+      if (!shift) throw new NotFoundException('{Shift} not found');
+      if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
       const current = (await db.query<{ duty_id: string }>('select duty_id from shift_duty_links where shift_id = $1', [id])).rows.map(r => r.duty_id);
       const adding = dutyIds.filter(d => !current.includes(d));
       if (adding.length) {

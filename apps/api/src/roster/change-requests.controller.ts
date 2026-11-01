@@ -104,9 +104,9 @@ export class ChangeRequestsController {
                 to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
                 exists (select 1 from shift_assignments sa where sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')) as has_person
            from shifts s join facilities f on f.id = s.facility_id where s.id = $1 for update of s`, [id])).rows[0];
-      if (!s) throw new NotFoundException('Shift not found');
+      if (!s) throw new NotFoundException('{Shift} not found');
       const week = mondayOf(s.local_date);
-      if (weekState(week, true, todayIn(s.timezone)) === 'history') throw new ConflictException('This week is over, so its roster can no longer be changed');
+      if (weekState(week, true, todayIn(s.timezone)) === 'history') throw new ConflictException('This week is over, so its {roster} can no longer be changed');
       const refusal = await rosterChangeRefusal(db, id);
       if (!refusal) throw new ConflictException('You can make this change yourself.');
       const problem = requestProblem(kind, { status: s.status, equipmentOnly: !s.needs_person, hasPerson: s.has_person }, await wordsFor(db));
@@ -137,7 +137,7 @@ export class ChangeRequestsController {
         }
         return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [newId])).rows, auth, await wordsFor(db))[0];
       } catch (e) {
-        if ((e as { code?: string }).code === '23505') throw new ConflictException('A change to this shift is already waiting for approval');
+        if ((e as { code?: string }).code === '23505') throw new ConflictException('A change to this {shift} is already waiting for approval');
         throw e;
       }
     }, actor);

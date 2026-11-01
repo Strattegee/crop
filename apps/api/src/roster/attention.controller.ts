@@ -44,7 +44,7 @@ export class AttentionController {
   attention(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const days = q.days === undefined || q.days === '' ? DEFAULT_DAYS : Number(q.days);
     if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) throw new BadRequestException(`Days must be a whole number from 1 to ${MAX_DAYS}`);
-    if (q.facilityId && !UUID.test(q.facilityId)) throw new BadRequestException('Choose a site');
+    if (q.facilityId && !UUID.test(q.facilityId)) throw new BadRequestException('Choose {a site}');
     const facilityId = q.facilityId || null;
     return withTenant(this.pool, t.tenantId, async db => {
       const now = (await db.query<{ now: Date }>('select now()')).rows[0].now;

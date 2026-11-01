@@ -304,7 +304,7 @@ export class WorkerOnboardingController {
   @Get('workers/:id/onboarding')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) workerId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('Worker not found');
+      if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new NotFoundException('{Worker} not found');
       const live = (await db.query<{ id: string }>('select id from worker_onboardings where worker_id = $1 and finished_at is null', [workerId])).rows[0];
       const history = (await db.query(
         `select o.id, c.name as "checklistName", o.started_at as "startedAt", o.finished_at as "finishedAt", o.finished_by_name as "finishedByName",
@@ -327,7 +327,7 @@ export class WorkerOnboardingController {
     const hold = bool(body, 'hold') ?? true;
     return withTenant(this.pool, t.tenantId, async db => {
       const w = (await db.query<{ status: string }>('select status from workers where id = $1 for update', [workerId])).rows[0];
-      if (!w) throw new NotFoundException('Worker not found');
+      if (!w) throw new NotFoundException('{Worker} not found');
       if (w.status === 'offboarded') throw new BadRequestException('This person has been offboarded; change their status first');
       const id = await beginOnboarding(db, t.tenantId, auth, workerId, checklistId, hold);
       return onboardingProgress(db, t.tenantId, id);

@@ -198,7 +198,7 @@ export class OutsideAgenciesController {
     return withTenant(this.pool, t.tenantId, async db => {
       const shift = (await db.query<{ status: string; needs_person: boolean; starts_at: Date; ends_at: Date }>(
         'select status, needs_person, starts_at, ends_at from shifts where id = $1 for update', [id])).rows[0];
-      if (!shift) throw new NotFoundException('Shift not found');
+      if (!shift) throw new NotFoundException('{Shift} not found');
       const w = await wordsFor(db);
       const problem = outsideProblem({ status: shift.status, equipmentOnly: !shift.needs_person, startsAt: shift.starts_at }, 1, new Date(), w);
       if (problem) throw new ConflictException(problem);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { DbRulesInterceptor } from './common/db-rules.interceptor.js';
+import { WordsInErrorsInterceptor } from './terms/words-in-errors.interceptor.js';
 import { AgencyLinksController } from './agencies/agency-links.controller.js';
 import { AgencyEscalator, AgencyFillController } from './agencies/agency-fill.controller.js';
 import { OutsideAgenciesController } from './agencies/outside-agencies.controller.js';
@@ -49,6 +50,6 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
     OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController, OutsideAgenciesController, AgencyAttentionController, AgencyOffersController, AgencyOfferLinksController,
     AppAccessController, MyController, MyAvailabilityController,
   ],
-  providers: [{ provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: WordsInErrorsInterceptor }, { provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator],
 })
 export class AppModule {}

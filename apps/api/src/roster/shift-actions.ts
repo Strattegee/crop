@@ -14,10 +14,10 @@ import { closePendingOffers } from './offers-data.js';
  */
 export async function assignWorker(db: PoolClient, tenantId: string, by: string | null, shiftId: string, workerId: string): Promise<string[]> {
   const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [shiftId])).rows[0];
-  if (!shift) throw new NotFoundException('Shift not found');
-  if (shift.status === 'cancelled') throw new ConflictException('This shift is cancelled');
-  if (!shift.needs_person) throw new ConflictException('This shift is for equipment only, so nobody can be put on it');
-  if (shift.status !== 'open') throw new ConflictException('Someone is already on this shift. Remove them first.');
+  if (!shift) throw new NotFoundException('{Shift} not found');
+  if (shift.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
+  if (!shift.needs_person) throw new ConflictException('This {shift} is for equipment only, so nobody can be put on it');
+  if (shift.status !== 'open') throw new ConflictException('Someone is already on this {shift}. Remove them first.');
   // Locking the worker serialises assignments for one person, so two shifts can't be given to them at once.
   const worker = (await db.query<{ status: string; name: string }>(
     `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`,
@@ -38,7 +38,7 @@ export async function assignWorker(db: PoolClient, tenantId: string, by: string 
 export async function confirmWorker(db: PoolClient, shiftId: string): Promise<void> {
   const r = await db.query(
     `update shift_assignments set status = 'confirmed' where shift_id = $1 and resource_kind = 'worker' and status = 'assigned'`, [shiftId]);
-  if (!r.rowCount) throw new ConflictException('There is nobody waiting to confirm on this shift');
+  if (!r.rowCount) throw new ConflictException('There is nobody waiting to confirm on this {shift}');
   await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [shiftId]);
 }
 
@@ -47,7 +47,7 @@ export async function removeWorker(db: PoolClient, shiftId: string, pulledOut: b
   const r = await db.query(
     `update shift_assignments set status = 'removed', ended_at = now(), removed_reason = $2
       where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [shiftId, pulledOut ? 'pulled_out' : 'office']);
-  if (!r.rowCount) throw new ConflictException('Nobody is on this shift');
+  if (!r.rowCount) throw new ConflictException('Nobody is on this {shift}');
   await db.query(`update shifts set status = 'open', updated_at = now() where id = $1 and status <> 'cancelled'`, [shiftId]);
 }
 
@@ -56,8 +56,8 @@ export async function cancelShift(db: PoolClient, by: string | null, shiftId: st
   const r = await db.query(
     `update shifts set status = 'cancelled', cancelled_reason = $2, updated_at = now() where id = $1 and status <> 'cancelled'`, [shiftId, reason]);
   if (!r.rowCount) {
-    if (!(await db.query('select 1 from shifts where id = $1', [shiftId])).rowCount) throw new NotFoundException('Shift not found');
-    throw new ConflictException('This shift is already cancelled');
+    if (!(await db.query('select 1 from shifts where id = $1', [shiftId])).rowCount) throw new NotFoundException('{Shift} not found');
+    throw new ConflictException('This {shift} is already cancelled');
   }
   await db.query(`update shift_assignments set status = 'removed', ended_at = now() where shift_id = $1 and status in ('assigned', 'confirmed')`, [shiftId]);
   await closePendingOffers(db, shiftId, 'withdrawn', by);

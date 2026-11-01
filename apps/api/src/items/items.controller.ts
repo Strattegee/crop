@@ -62,14 +62,14 @@ async function onHand(db: PoolClient, itemId: string, facilityId: string): Promi
 async function siteName(db: PoolClient, facilityId: string | null): Promise<string | null> {
   if (!facilityId) return null;
   const f = (await db.query<{ name: string }>('select name from facilities where id = $1', [facilityId])).rows[0];
-  if (!f) throw new BadRequestException('Choose a site');
+  if (!f) throw new BadRequestException('Choose {a site}');
   return f.name;
 }
 
 async function shiftFor(db: PoolClient, shiftId: string | null) {
   if (!shiftId) return null;
   const s = (await db.query<{ facility_id: string; status: string }>('select facility_id, status from shifts where id = $1', [shiftId])).rows[0];
-  if (!s) throw new BadRequestException('Choose a shift');
+  if (!s) throw new BadRequestException('Choose {a shift}');
   return s;
 }
 
@@ -199,13 +199,13 @@ export class ItemsController {
   @Post(':id/receive')
   receive(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const facilityId = uuidOrNull(body, 'facilityId', 'a site');
-    if (!facilityId) throw new BadRequestException('Choose a site');
+    if (!facilityId) throw new BadRequestException('Choose {a site}');
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
     const unitCostCents = int(body, 'unitCostCents', 0, MAX_CENTS);
     const notes = text(body, 'notes', { max: 500 });
     return withTenant(this.pool, t.tenantId, async db => {
       const item = await lockItem(db, id);
-      if (!item.tracksStock) throw new BadRequestException(`Stock isn't counted for ${item.name}; record its use on a shift or person instead`);
+      if (!item.tracksStock) throw new BadRequestException(`Stock isn't counted for ${item.name}; record its use on {a shift} or person instead`);
       await siteName(db, facilityId);
       if (unitCostCents !== null && unitCostCents !== item.unitCostCents) {
         await db.query('update items set unit_cost_cents = $2, updated_at = now() where id = $1', [id, unitCostCents]);
@@ -227,15 +227,15 @@ export class ItemsController {
     const shiftId = uuidOrNull(body, 'shiftId', 'a shift') ?? null;
     const given = uuidOrNull(body, 'facilityId', 'a site') ?? null;
     const notes = text(body, 'notes', { max: 500 });
-    if (!workerId && !shiftId) throw new BadRequestException('Choose a person or a shift');
+    if (!workerId && !shiftId) throw new BadRequestException('Choose a person or {a shift}');
     return withTenant(this.pool, t.tenantId, async db => {
       const item = await lockItem(db, id);
       if (!item.active) throw new ConflictException(`${item.name} is no longer in use`);
       await workerName(db, workerId);
       const shift = await shiftFor(db, shiftId);
-      if (shift?.status === 'cancelled') throw new ConflictException('This shift is cancelled');
+      if (shift?.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
       const facilityId = given ?? shift?.facility_id ?? null;
-      if (item.tracksStock && !facilityId) throw new BadRequestException('Choose the site the stock comes from');
+      if (item.tracksStock && !facilityId) throw new BadRequestException('Choose the {site} the stock comes from');
       const site = await siteName(db, facilityId);
       const block = takeBlock({
         itemName: item.name, unit: item.unit, tracksStock: item.tracksStock, siteName: site, quantity: qty,
@@ -257,7 +257,7 @@ export class ItemsController {
     const shiftId = uuidOrNull(body, 'shiftId', 'a shift') ?? null;
     const given = uuidOrNull(body, 'facilityId', 'a site') ?? null;
     const notes = text(body, 'notes', { max: 500 });
-    if (!workerId && !shiftId) throw new BadRequestException('Choose a person or a shift');
+    if (!workerId && !shiftId) throw new BadRequestException('Choose a person or {a shift}');
     return withTenant(this.pool, t.tenantId, async db => {
       const item = await lockItem(db, id);
       const who = (await workerName(db, workerId)) ?? 'this shift';
@@ -276,7 +276,7 @@ export class ItemsController {
       if (block) throw new ConflictException(block);
       const facilityId = given ?? shift?.facility_id ?? out.facility;
       await siteName(db, facilityId);
-      if (item.tracksStock && !facilityId) throw new BadRequestException('Choose the site it is returned to');
+      if (item.tracksStock && !facilityId) throw new BadRequestException('Choose the {site} it is returned to');
       // Returns are valued at what was charged going out, so a shift's net cost comes back to what was kept.
       return this.record(db, t.tenantId, auth.userId, item, {
         kind: 'returned', quantity: qty, facilityId, workerId, shiftId, notes,
@@ -294,8 +294,8 @@ export class ItemsController {
   transfer(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const fromId = uuidOrNull(body, 'fromFacilityId', 'the site it leaves');
     const toId = uuidOrNull(body, 'toFacilityId', 'the site it goes to');
-    if (!fromId) throw new BadRequestException('Choose the site the stock leaves');
-    if (!toId) throw new BadRequestException('Choose the site the stock goes to');
+    if (!fromId) throw new BadRequestException('Choose the {site} the stock leaves');
+    if (!toId) throw new BadRequestException('Choose the {site} the stock goes to');
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
     const notes = text(body, 'notes', { max: 500 });
     return withTenant(this.pool, t.tenantId, async db => {
@@ -320,7 +320,7 @@ export class ItemsController {
   @Post(':id/count')
   count(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const facilityId = uuidOrNull(body, 'facilityId', 'a site');
-    if (!facilityId) throw new BadRequestException('Choose a site');
+    if (!facilityId) throw new BadRequestException('Choose {a site}');
     const counted = quantity(body, 'quantity', 'Quantity', { required: true, allowZero: true })!;
     const notes = text(body, 'notes', { max: 500 });
     return withTenant(this.pool, t.tenantId, async db => {
@@ -344,7 +344,7 @@ export class StockController {
   @Roles(...OFFICE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query('facilityId') facilityId?: string) {
-    if (facilityId && !UUID.test(facilityId)) throw new BadRequestException('Choose a site');
+    if (facilityId && !UUID.test(facilityId)) throw new BadRequestException('Choose {a site}');
     return withTenant(this.pool, t.tenantId, async db => {
       const rows = (await db.query<{ itemId: string; name: string; category: string; unit: string; facilityId: string; facilityName: string; onHand: number; reorderLevel: number | null }>(
         `select i.id as "itemId", i.name, i.category, i.unit, f.id as "facilityId", f.name as "facilityName",
@@ -380,7 +380,7 @@ export class ShiftItemsController {
   @Get()
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('byPerson') byPerson?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from shifts where id = $1', [id])).rowCount) throw new NotFoundException('Shift not found');
+      if (!(await db.query('select 1 from shifts where id = $1', [id])).rowCount) throw new NotFoundException('{Shift} not found');
       // byPerson=true splits each item by who holds it (the shift panel uses it to offer returns).
       return usage(db, 'm.shift_id', id, byPerson === 'true');
     });
