@@ -1,6 +1,8 @@
+import Link from 'next/link';
+import { noticeLine, type NoticeSeen } from '../../../../lib/worker-notice';
 import { giveAppAccess, removeAppAccess } from './app-access-actions';
 
-export type AppAccess = { state: 'none' | 'invited' | 'active'; email: string | null; invitedAt: string | null; refusal: string | null };
+export type AppAccess = { state: 'none' | 'invited' | 'active'; email: string | null; invitedAt: string | null; refusal: string | null; notice?: NoticeSeen };
 
 /** The worker app (backlog item 9): whether this person can sign in to see their shifts and answer offers. */
 export function AppAccessCard({ workerId, a, first, canGive, timeZone }: {
@@ -12,6 +14,11 @@ export function AppAccessCard({ workerId, a, first, canGive, timeZone }: {
     <div className="card">
       <h2>Worker app</h2>
       {a.state === 'active' && <p style={{ margin: 0 }}>{first} can sign in to the app with {a.email ?? 'their email'} to see their shifts and answer offers.</p>}
+      {a.state === 'active' && (
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          {noticeLine(first, a.notice ?? null, day)} <Link href="/legal/worker-notice" target="_blank">Read the notice</Link>
+        </p>
+      )}
       {a.state === 'invited' && (
         <p style={{ margin: 0 }}>
           Invited{a.invitedAt && ` on ${day(a.invitedAt)}`}. {first} gets in the first time they sign in with {a.email} (the email must be verified when they sign in).

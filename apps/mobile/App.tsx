@@ -12,8 +12,8 @@ import { ManagerHome } from './src/ManagerHome';
 import { roleOf, startMode, type Mode } from './src/manager';
 import { styles } from './src/styles';
 import {
-  businessesOf, byDay, dayLabel, hasStepsForMe, noShiftsLine, offerCloses, roleLine, STATE_LABEL, STEP_MARK, timeRange,
-  type MyOffer, type MyOnboarding, type MyShift,
+  businessesOf, byDay, dayLabel, hasStepsForMe, needsNotice, noShiftsLine, noticeText, offerCloses, roleLine, STATE_LABEL, STEP_MARK, timeRange,
+  type MyNotice, type MyOffer, type MyOnboarding, type MyShift,
 } from './src/format';
 
 // Closes the sign-in browser window when it returns to the app.
@@ -21,7 +21,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 type Me = { email: string; memberships: { tenantSlug: string; tenantName: string; role: string }[] };
 type Word = { one: string; many: string; lower: string; lowerMany: string };
-type My = { business: string; firstName: string; today: string; word: Word; credentialWord?: Word };
+type My = { business: string; firstName: string; today: string; word: Word; credentialWord?: Word; notice?: MyNotice };
 type Phase = 'loading' | 'signedOut' | 'choose' | 'ready';
 
 export default function App() {
@@ -194,6 +194,10 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
   };
 
   const word = my?.word ?? { one: 'Shift', many: 'Shifts', lower: 'shift', lowerMany: 'shifts' };
+  if (my?.notice && needsNotice(my.notice)) {
+    return <NoticeScreen tenant={tenant} business={my.business} notice={my.notice} onSignedOut={onSignedOut}
+      onDone={notice => setMy({ ...my, notice })} />;
+  }
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
@@ -287,4 +291,42 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
 
 function SignOutLink({ onPress }: { onPress: () => void }) {
   return <Pressable onPress={onPress} style={{ marginTop: 24, alignSelf: 'center' }}><Text style={styles.link}>Sign out</Text></Pressable>;
+}
+
+/**
+ * The worker privacy notice (legal documents follow-up): shown the first time someone opens the app for a business,
+ * and again when the notice changes, until they confirm they've read it (POST /my/notice). The notice itself is the
+ * public legal page on the web, opened in the phone's browser.
+ */
+function NoticeScreen({ tenant, business, notice, onDone, onSignedOut }: {
+  tenant: string; business: string; notice: MyNotice; onDone: (n: MyNotice) => void; onSignedOut: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const text = noticeText(notice, business);
+  const confirm = async () => {
+    setBusy(true);
+    try {
+      onDone(await api<MyNotice>('/my/notice', { method: 'POST', tenant, body: { version: notice.version } }));
+    } catch (e) {
+      if (e instanceof SignedOut) return onSignedOut();
+      Alert.alert('Not done', e instanceof Error ? e.message : 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <Text style={styles.heading}>{text.heading}</Text>
+      <Text style={{ marginTop: 12, fontSize: 16, lineHeight: 22 }}>{text.body}</Text>
+      {notice.url && (
+        <Pressable style={[styles.button, styles.secondary]} onPress={() => WebBrowser.openBrowserAsync(notice.url!)} accessibilityRole="link">
+          <Text style={[styles.buttonText, styles.secondaryText]}>Read the worker privacy notice</Text>
+        </Pressable>
+      )}
+      <Pressable style={[styles.button, busy && styles.disabled]} onPress={confirm} disabled={busy} accessibilityRole="button">
+        <Text style={styles.buttonText}>I've read it</Text>
+      </Pressable>
+      <Text style={[styles.muted, { marginTop: 16 }]}>Version {notice.version}</Text>
+    </ScrollView>
+  );
 }

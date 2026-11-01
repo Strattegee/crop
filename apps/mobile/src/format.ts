@@ -240,3 +240,24 @@ export function noShiftsLine(word: { lowerMany: string }, onboarding: MyOnboardi
   if (onboarding) return `Your ${word.lowerMany} show here once the office has finished getting you started.`;
   return `No ${word.lowerMany} in the next four weeks yet. New ones show here once the roster is published.`;
 }
+
+/** The worker privacy notice (GET /my `notice`): shown the first time and whenever it changes, until confirmed. */
+export interface MyNotice { version: string; url: string | null; state: 'new' | 'changed' | 'seen'; acknowledgedAt: string | null }
+
+export function needsNotice(n: MyNotice | null | undefined): boolean {
+  return !!n && n.state !== 'seen';
+}
+
+export function noticeText(n: MyNotice, business: string): { heading: string; body: string } {
+  if (n.state === 'changed') {
+    return {
+      heading: 'Our privacy notice has changed',
+      body: 'The worker privacy notice for the CROP app has been updated. Please read the new version before you carry on.',
+    };
+  }
+  return {
+    heading: 'Before you start',
+    body: `CROP is provided by Strattegee Pty Ltd. ${business || 'Your employer'} uses it for your shifts and work records. `
+      + 'Please read how your information is handled.',
+  };
+}

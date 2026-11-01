@@ -1,5 +1,5 @@
 import {
-  BadRequestException, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
@@ -15,6 +15,7 @@ import { addDays, rightToWorkIssue, todayIn } from '../workforce/compliance.js';
 import { rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { loadSettings } from '../workforce/settings.js';
 import { onboardingProgress } from '../workforce/onboarding.controller.js';
+import { NOTICE_VERSION, noticeRefusal, noticeState, noticeUrl } from './notice.js';
 import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myRightToWork, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
@@ -37,6 +38,23 @@ export async function linkedWorker(db: PoolClient, userId: string): Promise<Link
   if (!inv) return null;
   await db.query('update workers set user_id = $1, updated_at = now() where id = $2 and user_id is null', [userId, inv.worker_id]);
   return (await db.query<LinkedWorker>(`select ${cols} from workers where id = $1 and user_id = $2`, [inv.worker_id, userId])).rows[0] ?? null;
+}
+
+/** The last worker privacy notice this person confirmed here (null = never). */
+async function latestNotice(db: PoolClient, workerId: string) {
+  return (await db.query<{ version: string; at: Date }>(
+    `select notice_version as version, acknowledged_at as at from worker_notice_acknowledgements
+      where worker_id = $1 order by acknowledged_at desc limit 1`, [workerId])).rows[0] ?? null;
+}
+
+/** The worker privacy notice as the app needs it: which version to show, and whether this person has confirmed it. */
+export async function myNotice(db: PoolClient, workerId: string) {
+  const last = await latestNotice(db, workerId);
+  const seenNow = last?.version === NOTICE_VERSION;
+  return {
+    version: NOTICE_VERSION, url: noticeUrl(process.env.APP_URL), state: noticeState(last?.version ?? null),
+    acknowledgedAt: last && seenNow ? last.at : null,
+  };
 }
 
 export async function requireLinked(db: PoolClient, auth: AuthContext): Promise<LinkedWorker> {
@@ -78,8 +96,11 @@ export class AppAccessController {
     const member = !!memberRole;
     const pending = (await db.query<{ email: string; created_at: Date }>(
       `select email, created_at from invitations where worker_id = $1 and accepted_at is null order by created_at desc limit 1`, [workerId])).rows[0];
+    const notice = await latestNotice(db, workerId);
     return {
       state: appAccessState({ member, pendingInvite: !!pending }),
+      // When they last confirmed the worker privacy notice in the app, and whether that was the current version.
+      notice: notice ? { version: notice.version, acknowledgedAt: notice.at, current: notice.version === NOTICE_VERSION } : null,
       email: pending?.email ?? w.email,
       invitedAt: pending?.created_at ?? null,
       refusal: member || pending ? null : appAccessRefusal(w),
@@ -191,7 +212,26 @@ export class MyController {
         business: t.tenantName, firstName: w.firstName, name: w.name, today: todayIn(settings.timezone),
         word: { one: words.one(T.shift), many: words.many(T.shift), lower: words.lower(T.shift), lowerMany: words.lower(T.shift, true) },
         credentialWord: { one: words.one(T.credential), many: words.many(T.credential), lower: words.lower(T.credential), lowerMany: words.lower(T.credential, true) },
+        notice: await myNotice(db, w.id),
       };
+    });
+  }
+
+  /**
+   * The person confirms they've read the worker privacy notice (the version the app showed). Pressing it again for
+   * the same version changes nothing.
+   */
+  @Post('notice')
+  @HttpCode(200)
+  readNotice(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const w = await requireLinked(db, auth);
+      const refusal = noticeRefusal(body?.version);
+      if (refusal) throw new ConflictException(refusal);
+      await db.query(
+        `insert into worker_notice_acknowledgements(tenant_id, worker_id, notice_version, user_id) values ($1, $2, $3, $4)
+         on conflict (tenant_id, worker_id, notice_version) do nothing`, [t.tenantId, w.id, NOTICE_VERSION, auth.userId]);
+      return myNotice(db, w.id);
     });
   }
 
