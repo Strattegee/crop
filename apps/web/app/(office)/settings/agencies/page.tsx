@@ -264,11 +264,12 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           <h2>Businesses we supply</h2>
           <p className="muted small" style={{ marginTop: 0 }}>Businesses that have linked with you as {art(anAgency)}.</p>
           <table>
-            <thead><tr><th>Business</th><th>State</th><th /></tr></thead>
+            <thead><tr><th>Business</th><th>{tw.many(T.site)} you fill</th><th>State</th><th /></tr></thead>
             <tbody>
               {weSupply.map(l => (
                 <tr key={l.connectionId}>
                   <td><b>{l.otherName}</b><div className="muted small">Linked {when(l.createdAt)}</div></td>
+                  <td className="small">{l.sitesWords ?? '–'}</td>
                   <td className="small">
                     {l.statusWords}
                     <div><Link href={`/settings/agencies/${l.connectionId}`} className="btn small secondary" style={{ marginTop: 4 }}>

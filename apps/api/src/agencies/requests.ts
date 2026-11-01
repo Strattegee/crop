@@ -342,3 +342,15 @@ export function sitesWords(names: string[] | null, w: Words = DEFAULT_WORDS): st
   const list = sorted.length <= 1 ? (sorted[0] ?? '') : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
   return sorted.length > 2 ? `${w.count(sorted.length, T.site)}: ${list}` : list;
 }
+
+/**
+ * The agency's view of a link's sites (from `app_agency_link_sites`): "Every site (A and B)" when the employer
+ * hasn't limited it (new sites included), else the sites by name; "No sites yet" when the employer has none.
+ */
+export function agencySitesWords(names: string[], everySite: boolean, w: Words = DEFAULT_WORDS): string {
+  if (names.length === 0) return `No ${w.lower(T.site, true)} yet`;
+  if (!everySite) return sitesWords(names, w);
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  const list = sorted.length <= 1 ? sorted[0] : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
+  return `Every ${w.lower(T.site)} (${list})`;
+}

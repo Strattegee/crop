@@ -9,7 +9,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { actorOf } from '../roster/publishing.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { EMPLOYED_ON } from '../roster/eligibility-data.js';
-import { sitesChoice, sitesWords } from './requests.js';
+import { agencySitesWords, sitesChoice, sitesWords } from './requests.js';
 import { T, wordsFor, type Words } from '../terms/words.js';
 import { groupSummary, personReadiness, rankReadiness, readinessGroups, type RequirementLevel } from './readiness.js';
 import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, matchesProblem, newInviteLink, orderProblem, type LinkStatus } from './links.js';
@@ -29,12 +29,23 @@ const LINK_COLS = `connection_id as "connectionId", side, other_name as "otherNa
   case when facility_ids is null then null else
     coalesce((select array_agg(f.name order by f.name) from facilities f where f.id = any(facility_ids)), '{}') end as "siteNames"`;
 
-const withWords = (r: LinkRow, w?: Words) => ({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName), sitesWords: r.side === 'employer' ? sitesWords(r.siteNames, w) : null });
+/**
+ * Which sites the link covers, in words. Employer side: from its own row. Agency side (live links): the employer's
+ * sites it fills, by name, through the checked `app_agency_link_sites` (migration 0064); `siteNames` lists them.
+ */
+async function siteFacts(db: PoolClient, r: LinkRow, w: Words): Promise<{ siteNames: string[] | null; sitesWords: string | null }> {
+  if (r.side === 'employer') return { siteNames: r.siteNames, sitesWords: sitesWords(r.siteNames, w) };
+  if (r.status === 'ended') return { siteNames: null, sitesWords: null };
+  const rows = (await db.query<{ site_name: string; every_site: boolean }>('select * from app_agency_link_sites($1)', [r.connectionId])).rows;
+  const names = rows.map(x => x.site_name);
+  return { siteNames: names, sitesWords: agencySitesWords(names, rows[0]?.every_site ?? true, w) };
+}
 
 async function linkById(db: PoolClient, connectionId: string, w?: Words) {
   const row = (await db.query<LinkRow>(`select ${LINK_COLS} from agency_connections where connection_id = $1`, [connectionId])).rows[0];
   if (!row) throw new NotFoundException('Link not found');
-  return withWords(row, w ?? await wordsFor(db));
+  const words = w ?? await wordsFor(db);
+  return { ...row, statusWords: linkStatusWords(row.status, row.side, row.otherName), ...await siteFacts(db, row, words) };
 }
 
 type Requirement = {
@@ -96,12 +107,14 @@ export class AgencyLinksController {
         unmatched.set(l.connection_id, (await db.query<{ n: number }>('select app_agency_unmatched($1) as n', [l.connection_id])).rows[0].n);
       }
       const w = await wordsFor(db);
-      const links = (await db.query<LinkRow>(
+      const rows = (await db.query<LinkRow>(
         `select ${LINK_COLS} from agency_connections
-          order by status = 'ended', side, preference nulls last, other_name`)).rows.map(r => {
-          const n = unmatched.get(r.connectionId) ?? 0;
-          return { ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), sitesWords: r.side === 'employer' ? sitesWords(r.siteNames, w) : null, unmatched: n };
-        });
+          order by status = 'ended', side, preference nulls last, other_name`)).rows;
+      const links = [];
+      for (const r of rows) {
+        const n = unmatched.get(r.connectionId) ?? 0;
+        links.push({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), ...await siteFacts(db, r, w), unmatched: n });
+      }
       const invitations = (await db.query<{ id: string; forName: string | null; createdByName: string | null; createdAt: Date; expiresAt: Date; acceptedAt: Date | null; cancelledAt: Date | null; acceptedBy: string | null }>(
         `select i.id, i.for_name as "forName", i.created_by_name as "createdByName", i.created_at as "createdAt", i.expires_at as "expiresAt",
                 i.accepted_at as "acceptedAt", i.cancelled_at as "cancelledAt", c.other_name as "acceptedBy"
