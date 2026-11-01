@@ -506,3 +506,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the pages build and the API is tested, including that the employer side and a business not on the link can't ask.
 - Next: not making an agency match requirements that only apply to roles it doesn't fill; sharing documents by agreement (needs the document list agreed with Steve); other unheld items.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 early, 3:15am Melbourne (scheduled run)
+
+- Shipped: an agency that fills only some of an employer's roles no longer has to match requirements for the other roles. Its Matches page lists only what its roles need, plus what the employer asks of everyone and for its duties; its "who is ready" list follows; and when the employer changes the roles, the link becomes ready for requests (or needs matching again) straight away, logged on both sides.
+- Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
+- Next: sharing documents by agreement waits on the document list with Steve; other unheld items (shift duties follow-ups, words in API errors and the worker app).
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

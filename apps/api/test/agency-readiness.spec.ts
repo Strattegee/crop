@@ -171,6 +171,37 @@ describe('agency readiness: API', () => {
     expect(JSON.stringify(v)).not.toContain('Dan Example');
   });
 
+  it('a link limited to some roles only needs the requirements for those roles (plus everyone and duties)', async () => {
+    await owner.query(`insert into business_roles(tenant_id, name) values ($1, 'Bartender'), ($1, 'Nurse')`, [ids.bayside]);
+    const reqNames = async () => ((await http().get(`/agency-links/${link}/requirements`).set(as('ag')).expect(200)).body as {
+      link: { unmatched: number; status: string }; requirements: Array<{ name: string; neededFor: string[] }> });
+    let r = await reqNames();
+    expect(r.link).toMatchObject({ unmatched: 1, status: 'matching' });
+    expect(r.requirements.map(q => q.name)).toContain('Ward orientation');
+
+    // Only Bartender: Ward orientation (Nurse only) drops out, so the link is ready straight away.
+    const patched = (await http().patch(`/agency-links/${link}`).set(as('emp')).send({ roles: ['Bartender'] }).expect(200)).body;
+    expect(patched.status).toBe('active');
+    r = await reqNames();
+    expect(r.link).toMatchObject({ unmatched: 0, status: 'active' });
+    expect(r.requirements.map(q => q.name)).toEqual(['First aid', 'RSA']);
+    expect(r.requirements.find(q => q.name === 'RSA')!.neededFor).toEqual(['Bartender', 'Serves alcohol (duty)']);
+    const v = await view();
+    expect(v.groups.map((g: { label: string }) => g.label)).toEqual(['Bartender', 'Serves alcohol']);
+
+    // Only Nurse: RSA is still needed for the duty; First aid for everyone.
+    await http().patch(`/agency-links/${link}`).set(as('emp')).send({ roles: ['Nurse'] }).expect(200);
+    r = await reqNames();
+    expect(r.requirements.find(q => q.name === 'RSA')!.neededFor).toEqual(['Serves alcohol (duty)']);
+    expect(r.link).toMatchObject({ unmatched: 1, status: 'matching' });
+
+    // Every role again: back to needing Ward orientation.
+    const back = (await http().patch(`/agency-links/${link}`).set(as('emp')).send({ roles: null }).expect(200)).body;
+    expect(back.status).toBe('matching');
+    const events = (await http().get(`/agency-links/${link}/events`).set(as('ag')).expect(200)).body as Array<{ action: string }>;
+    expect(events.filter(e => e.action === 'matched').length).toBeGreaterThan(0);
+  });
+
   it('only the agency side of the link; another business sees nothing', async () => {
     expect((await http().get(`/agency-links/${link}/people`).set(as('emp')).expect(400)).body.message).toMatch(/Only the agency/);
     await http().get(`/agency-links/${link}/people`).set(as('nosy')).expect(404);
