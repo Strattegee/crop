@@ -9,6 +9,8 @@ import { APP_POOL } from '../database/database.module.js';
 import { actorOf } from '../roster/publishing.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { EMPLOYED_ON } from '../roster/eligibility-data.js';
+import { sitesChoice, sitesWords } from './requests.js';
+import { T, wordsFor, type Words } from '../terms/words.js';
 import { groupSummary, personReadiness, rankReadiness, readinessGroups, type RequirementLevel } from './readiness.js';
 import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, matchesProblem, newInviteLink, orderProblem, type LinkStatus } from './links.js';
 
@@ -18,16 +20,21 @@ type LinkRow = {
   connectionId: string; side: 'employer' | 'agency'; otherName: string; status: LinkStatus; preference: number | null;
   bookMode: 'automatic' | 'approve_first'; createdAt: Date; endedAt: Date | null; endedByName: string | null;
   endedBySide: 'employer' | 'agency' | null; endReason: string | null;
+  /** Employer side: the sites this agency fills (null = every site), with their names. */
+  facilityIds: string[] | null; siteNames: string[] | null;
 };
 const LINK_COLS = `connection_id as "connectionId", side, other_name as "otherName", status, preference, book_mode as "bookMode",
-  created_at as "createdAt", ended_at as "endedAt", ended_by_name as "endedByName", ended_by_side as "endedBySide", end_reason as "endReason"`;
+  created_at as "createdAt", ended_at as "endedAt", ended_by_name as "endedByName", ended_by_side as "endedBySide", end_reason as "endReason",
+  facility_ids as "facilityIds",
+  case when facility_ids is null then null else
+    coalesce((select array_agg(f.name order by f.name) from facilities f where f.id = any(facility_ids)), '{}') end as "siteNames"`;
 
-const withWords = (r: LinkRow) => ({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName) });
+const withWords = (r: LinkRow, w?: Words) => ({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName), sitesWords: r.side === 'employer' ? sitesWords(r.siteNames, w) : null });
 
-async function linkById(db: PoolClient, connectionId: string) {
+async function linkById(db: PoolClient, connectionId: string, w?: Words) {
   const row = (await db.query<LinkRow>(`select ${LINK_COLS} from agency_connections where connection_id = $1`, [connectionId])).rows[0];
   if (!row) throw new NotFoundException('Link not found');
-  return withWords(row);
+  return withWords(row, w ?? await wordsFor(db));
 }
 
 type Requirement = {
@@ -88,11 +95,12 @@ export class AgencyLinksController {
         await db.query('select app_agency_refresh($1)', [l.connection_id]);
         unmatched.set(l.connection_id, (await db.query<{ n: number }>('select app_agency_unmatched($1) as n', [l.connection_id])).rows[0].n);
       }
+      const w = await wordsFor(db);
       const links = (await db.query<LinkRow>(
         `select ${LINK_COLS} from agency_connections
           order by status = 'ended', side, preference nulls last, other_name`)).rows.map(r => {
           const n = unmatched.get(r.connectionId) ?? 0;
-          return { ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), unmatched: n };
+          return { ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), sitesWords: r.side === 'employer' ? sitesWords(r.siteNames, w) : null, unmatched: n };
         });
       const invitations = (await db.query<{ id: string; forName: string | null; createdByName: string | null; createdAt: Date; expiresAt: Date; acceptedAt: Date | null; cancelledAt: Date | null; acceptedBy: string | null }>(
         `select i.id, i.for_name as "forName", i.created_by_name as "createdByName", i.created_at as "createdAt", i.expires_at as "expiresAt",
@@ -166,26 +174,46 @@ export class AgencyLinksController {
     return this.list(t);
   }
 
-  /** Employer side: `{ bookMode: 'automatic' | 'approve_first' }`, whether people this agency puts forward are booked straight away. */
+  /**
+   * Employer side: `{ bookMode?: 'automatic' | 'approve_first', facilityIds?: string[] | null }`: whether people this
+   * agency puts forward are booked straight away, and which sites it fills (null, [] or every site = every site, including
+   * sites added later). Requests already waiting for this agency's turn skip it if it no longer fills the shift's site.
+   */
   @Roles('owner', 'admin')
   @Patch('agency-links/:connectionId')
   update(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('connectionId', ParseUUIDPipe) connectionId: string, @Body() body: Record<string, unknown>) {
     const bookMode = body?.bookMode;
-    if (bookMode !== 'automatic' && bookMode !== 'approve_first') throw new BadRequestException('Choose whether to book people straight away or approve them first');
+    const hasSites = body != null && 'facilityIds' in body;
+    if (bookMode === undefined && !hasSites) throw new BadRequestException('Nothing to change');
+    if (bookMode !== undefined && bookMode !== 'automatic' && bookMode !== 'approve_first') throw new BadRequestException('Choose whether to book people straight away or approve them first');
     const actor = actorOf(auth);
     return withTenant(this.pool, t.tenantId, async db => {
-      const row = (await db.query<{ side: string; status: string; book_mode: string }>(
-        'select side, status, book_mode from agency_connections where connection_id = $1 for update', [connectionId])).rows[0];
+      const row = (await db.query<{ side: string; status: string; book_mode: string; facility_ids: string[] | null }>(
+        'select side, status, book_mode, facility_ids from agency_connections where connection_id = $1 for update', [connectionId])).rows[0];
       if (!row) throw new NotFoundException('Link not found');
-      if (row.side !== 'employer') throw new BadRequestException('Only the employer chooses how people are booked');
+      const w = await wordsFor(db);
+      if (row.side !== 'employer') throw new BadRequestException(bookMode !== undefined ? 'Only the employer chooses how people are booked' : `Only the employer chooses which ${w.lower(T.site, true)} an agency fills`);
       if (row.status === 'ended') throw new BadRequestException('This link has ended');
-      if (row.book_mode !== bookMode) {
+      const business = await businessName(db, t.tenantId);
+      if (bookMode !== undefined && row.book_mode !== bookMode) {
         await db.query('update agency_connections set book_mode = $2 where connection_id = $1', [connectionId, bookMode]);
         await db.query(`insert into agency_events(tenant_id, connection_id, action, actor_name, actor_business, detail) values ($1,$2,'book_mode_changed',$3,$4,$5)`,
-          [t.tenantId, connectionId, actor.name ?? null, await businessName(db, t.tenantId),
+          [t.tenantId, connectionId, actor.name ?? null, business,
             bookMode === 'automatic' ? 'People put forward are booked straight away' : 'People put forward wait for approval']);
       }
-      return linkById(db, connectionId);
+      if (hasSites) {
+        const sites = (await db.query<{ id: string; name: string }>('select id, name from facilities order by name')).rows;
+        const choice = sitesChoice(body.facilityIds, sites.map(f => f.id), w);
+        if ('problem' in choice) throw new BadRequestException(choice.problem);
+        const before = row.facility_ids ? [...row.facility_ids].sort() : null;
+        if (JSON.stringify(before) !== JSON.stringify(choice.facilityIds)) {
+          await db.query('update agency_connections set facility_ids = $2 where connection_id = $1 and side = $3', [connectionId, choice.facilityIds, 'employer']);
+          const names = choice.facilityIds ? sites.filter(f => choice.facilityIds!.includes(f.id)).map(f => f.name) : null;
+          await db.query(`insert into agency_events(tenant_id, connection_id, action, actor_name, actor_business, detail) values ($1,$2,'sites_changed',$3,$4,$5)`,
+            [t.tenantId, connectionId, actor.name ?? null, business, `Fills: ${sitesWords(names, w)}`]);
+        }
+      }
+      return linkById(db, connectionId, w);
     }, actor);
   }
 

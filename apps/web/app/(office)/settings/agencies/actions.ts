@@ -37,6 +37,11 @@ export async function setBookMode(connectionId: string, f: FormData) {
   await attempt(BACK, () => api(`/agency-links/${connectionId}`, { method: 'PATCH', body: { bookMode: str(f, 'bookMode') } }), 'Saved.');
 }
 
+export async function setSites(connectionId: string, f: FormData) {
+  const facilityIds = f.getAll('facilityIds').filter((v): v is string => typeof v === 'string');
+  await attempt(BACK, () => api(`/agency-links/${connectionId}`, { method: 'PATCH', body: { facilityIds } }), 'Saved.');
+}
+
 export async function endLink(connectionId: string, f: FormData) {
   await attempt(BACK, () => api(`/agency-links/${connectionId}/end`, { method: 'POST', body: { reason: str(f, 'reason') ?? null } }),
     'Link ended. Both businesses keep its history.');

@@ -5,7 +5,7 @@ import { whenIn, businessZone } from '../../../../lib/business';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
-import { addOutsideAgency, cancelInvite, createInvite, endLink, moveAgency, saveOutsideAgency, setBookMode, setTiming, switchOutsideAgency } from './actions';
+import { addOutsideAgency, cancelInvite, createInvite, endLink, moveAgency, saveOutsideAgency, setBookMode, setSites, setTiming, switchOutsideAgency } from './actions';
 import { TIMING_BANDS, minutesWords, stepChoices, type AgencyTiming } from '../../../../lib/agency-timing';
 import { NEW_LINK_COOKIE } from './invite-cookie';
 
@@ -15,7 +15,9 @@ type LinkRow = {
   connectionId: string; side: 'employer' | 'agency'; otherName: string; status: 'matching' | 'active' | 'ended'; statusWords: string;
   preference: number | null; bookMode: 'automatic' | 'approve_first'; createdAt: string; endedAt: string | null;
   endedByName: string | null; endedBySide: 'employer' | 'agency' | null; endReason: string | null;
+  facilityIds: string[] | null; sitesWords: string | null;
 };
+type Site = { id: string; name: string };
 type Outside = { id: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean; emailsSent: number; lastSentAt: string | null };
 type Invite = { id: string; forName: string | null; createdByName: string | null; createdAt: string; expiresAt: string; state: 'pending' | 'used' | 'cancelled' | 'expired'; acceptedBy: string | null };
 
@@ -30,11 +32,13 @@ const INVITE_STATE: Record<Invite['state'], string> = { pending: 'Waiting', used
  */
 export default async function AgenciesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [data, agency, sp, zone, settings, outside] = await Promise.all([
+  const [data, agency, sp, zone, settings, outside, sites] = await Promise.all([
     api<{ links: LinkRow[]; invitations: Invite[] }>('/agency-links'), currentAgency(), searchParams, businessZone(),
     api<{ agencyTiming: AgencyTiming }>('/settings'),
     api<Outside[]>('/outside-agencies').catch(() => [] as Outside[]),
+    api<Site[]>('/facilities').catch(() => [] as Site[]),
   ]);
+  const manySites = sites.length > 1;
   const timing = settings.agencyTiming;
   const newLink = (await cookies()).get(NEW_LINK_COOKIE)?.value;
   const when = whenIn(zone);
@@ -75,9 +79,9 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
           <p className="muted">No {agencies} linked yet.{canEdit && ' Make an invitation link below.'}</p>
         ) : (
           <>
-            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency} straight away, then to each next one in this order on the timer below, until someone is put forward.</p>
+            <p className="muted small" style={{ marginTop: 0 }}>Requests go to the first {anAgency} straight away, then to each next one in this order on the timer below, until someone is put forward.{manySites && ` ${art(anAgency).replace(/^a/, "A")} only gets ${shifts} at the ${tw.lower(T.site, true)} it fills.`}</p>
             <table>
-              <thead><tr><th>Order</th><th>{tw.one(T.agency)}</th><th>State</th><th>People they put forward</th><th /></tr></thead>
+              <thead><tr><th>Order</th><th>{tw.one(T.agency)}</th><th>State</th><th>People they put forward</th>{manySites && <th>{tw.many(T.site)} they fill</th>}<th /></tr></thead>
               <tbody>
                 {weUse.map((l, i) => (
                   <tr key={l.connectionId}>
@@ -103,6 +107,24 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
                         </form>
                       ) : (l.bookMode === 'automatic' ? 'Booked straight away' : 'We approve first')}
                     </td>
+                    {manySites && (
+                      <td className="small">
+                        {canEdit ? (
+                          <details>
+                            <summary>{l.sitesWords}</summary>
+                            <form action={setSites.bind(null, l.connectionId)} style={{ marginTop: 6 }}>
+                              {sites.map(f => (
+                                <label key={f.id} style={{ display: 'block' }}>
+                                  <input type="checkbox" name="facilityIds" value={f.id} defaultChecked={l.facilityIds === null || l.facilityIds.includes(f.id)} /> {f.name}
+                                </label>
+                              ))}
+                              <p className="muted small" style={{ margin: '4px 0' }}>All ticked (or none) means every {tw.lower(T.site)}, including new ones.</p>
+                              <button className="btn small secondary" type="submit">Save</button>
+                            </form>
+                          </details>
+                        ) : l.sitesWords}
+                      </td>
+                    )}
                     <td>{canEdit && <EndForm link={l} />}</td>
                   </tr>
                 ))}

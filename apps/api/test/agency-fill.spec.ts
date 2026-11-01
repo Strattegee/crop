@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { AgencyEscalator } from '../src/agencies/agency-fill.controller.js';
-import { agencyFillProblem, agencyRules, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
+import { agencyFillProblem, agencyRules, linkCoversSite, sitesChoice, sitesWords, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('agency fill: rules', () => {
@@ -41,6 +41,7 @@ describe('agency fill: rules', () => {
     expect(agencyFillProblem({ ...open, status: 'cancelled' }, 1, false, now)).toMatch(/cancelled/);
     expect(agencyFillProblem({ ...open, equipmentOnly: true }, 1, false, now)).toMatch(/equipment-only/);
     expect(agencyFillProblem({ ...open, startsAt: now }, 1, false, now)).toMatch(/already started/);
+    expect(agencyFillProblem(open, 0, false, now, undefined, 2)).toMatch(/None of your agencies fills shifts at this site/);
     expect(inWords(0)).toBe('now');
     expect(inWords(10 * 60_000)).toBe('in 10 minutes');
     expect(inWords(90 * 60_000)).toBe('in 1 hour 30 minutes');
@@ -48,6 +49,22 @@ describe('agency fill: rules', () => {
     expect(inWords(29.5 * 3600_000)).toBe('in 1 day 6 hours');
     expect(inWords(24 * 3600_000)).toBe('in 1 day');
     expect(inWords(80 * 3600_000)).toBe('in 3 days');
+  });
+
+  it('reads and checks the sites an agency fills', () => {
+    expect(linkCoversSite(null, 'a')).toBe(true);
+    expect(linkCoversSite(['a'], 'a')).toBe(true);
+    expect(linkCoversSite(['b'], 'a')).toBe(false);
+    expect(sitesChoice(null, ['a', 'b'])).toEqual({ facilityIds: null });
+    expect(sitesChoice([], ['a', 'b'])).toEqual({ facilityIds: null });
+    expect(sitesChoice(['b', 'a'], ['a', 'b'])).toEqual({ facilityIds: null });
+    expect(sitesChoice(['b', 'b'], ['a', 'b', 'c'])).toEqual({ facilityIds: ['b'] });
+    expect(sitesChoice(['z'], ['a'])).toEqual({ problem: "One of those sites isn't yours" });
+    expect(sitesChoice('a', ['a'])).toEqual({ problem: 'Choose the sites from the list' });
+    expect(sitesWords(null)).toBe('Every site');
+    expect(sitesWords(['B'])).toBe('B');
+    expect(sitesWords(['B', 'A'])).toBe('A and B');
+    expect(sitesWords(['C', 'A', 'B'])).toBe('3 sites: A, B and C');
   });
 
   it('writes the agency’s email with the shift and requirements, no people', () => {
@@ -397,5 +414,67 @@ describe('agency fill: API', () => {
       await c.end();
     }
     expect((await owner.query(`select count(*)::int as n from agency_inbox where tenant_id = $1 and request_ref in (select id from agency_requests where tenant_id = $2)`, [ids.metro, ids.nosy])).rows[0].n).toBe(0);
+  });
+
+  it('an agency can be limited to some sites; waiting turns for other sites are skipped', async () => {
+    // Both earlier links have ended: link again, matched.
+    for (const [slug, name, pref] of [['cfy', 'Caring For You', 1], ['metro', 'Metro Nurses', 2]] as const) {
+      const c = (await owner.query<{ id: string }>('select gen_random_uuid() as id')).rows[0].id;
+      conn[slug] = c;
+      await owner.query(
+        `insert into agency_connections(tenant_id, connection_id, side, other_tenant_id, other_name, status, preference) values
+           ($1,$3,'employer',$2,$4,'active',$5), ($2,$3,'agency',$1,'Bayside Hospital','active',null)`, [ids.bayside, ids[slug], c, name, pref]);
+      await owner.query(
+        `insert into agency_credential_maps(tenant_id, connection_id, employer_credential_type_id, employer_type_name, credential_type_id, matched_by)
+         select $1, $2, ct.id, ct.name, $3, 'hand' from credential_types ct where ct.tenant_id = $4 and ct.name = 'Nursing registration'`,
+        [ids[slug], c, ids[`reg:${slug}`], ids.bayside]);
+    }
+    const dock = (await owner.query<{ id: string }>(`insert into facilities(tenant_id, name, timezone) values ($1, 'Docklands', 'Australia/Melbourne') returning id`, [ids.bayside])).rows[0].id;
+    const atDock = (await owner.query<{ id: string }>(
+      `insert into shifts(tenant_id, facility_id, role, starts_at, ends_at) values ($1,$2,'Nurse', now() + interval '70 hours', now() + interval '78 hours') returning id`,
+      [ids.bayside, dock])).rows[0].id;
+    // Only owners and admins of the employer choose; another business's site is refused.
+    await http().patch(`/agency-links/${conn.cfy}`).set(as('empalloc')).send({ facilityIds: [dock] }).expect(403);
+    await http().patch(`/agency-links/${conn.cfy}`).set(as('ag')).send({ facilityIds: [dock] }).expect(400);
+    await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({}).expect(400);
+    const nosySite = (await owner.query<{ id: string }>(`insert into facilities(tenant_id, name, timezone) values ($1, 'Nosy HQ', 'Australia/Melbourne') returning id`, [ids.nosy])).rows[0].id;
+    expect((await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ facilityIds: [nosySite] }).expect(400)).body.message).toMatch(/isn't yours/);
+
+    const link = (await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ facilityIds: [dock] }).expect(200)).body;
+    expect(link).toMatchObject({ facilityIds: [dock], siteNames: ['Docklands'], sitesWords: 'Docklands', bookMode: 'automatic' });
+    const listed = (await http().get('/agency-links').set(as('emp')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === conn.cfy);
+    expect(listed.sitesWords).toBe('Docklands');
+    expect((await http().get('/agency-links').set(as('ag')).expect(200)).body.links[0].sitesWords).toBeNull();
+    expect((await owner.query(`select detail from agency_events where action = 'sites_changed'`)).rows.map(r => r.detail)).toEqual(['Fills: Docklands']);
+
+    // A shift at Bayside Campus goes to Metro only; one at Docklands goes to both.
+    const atCampus = await newShift(72);
+    let st = (await http().get(`/shifts/${atCampus}/agency-fill`).set(as('emp')).expect(200)).body;
+    expect(st.activeAgencies).toBe(1);
+    st = (await http().post(`/shifts/${atCampus}/agency-fill`).set(as('emp')).send({}).expect(201)).body;
+    expect(st.rounds.map((r: { agencyName: string }) => r.agencyName)).toEqual(['Metro Nurses']);
+    st = (await http().post(`/shifts/${atDock}/agency-fill`).set(as('emp')).send({}).expect(201)).body;
+    expect(st.rounds.map((r: { agencyName: string; state: string }) => [r.agencyName, r.state])).toEqual([['Caring For You', 'sent'], ['Metro Nurses', 'waiting']]);
+
+    // Metro is then limited to Bayside Campus: its waiting turn for the Docklands shift is skipped, not sent.
+    await http().patch(`/agency-links/${conn.metro}`).set(as('emp')).send({ facilityIds: [site] }).expect(200);
+    await owner.query(`update agency_request_rounds r set due_at = now() - interval '1 minute' from agency_requests q where q.id = r.request_id and q.shift_id = $1`, [atDock]);
+    await timer.runOnce();
+    st = (await http().get(`/shifts/${atDock}/agency-fill`).set(as('emp')).expect(200)).body;
+    expect(st.rounds.map((r: { state: string; skippedReason: string | null }) => [r.state, r.skippedReason])).toEqual([['sent', null], ['skipped', "Doesn't fill this site"]]);
+
+    // Nobody fills a site: the office is told why.
+    await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ facilityIds: [site] }).expect(200);
+    const another = (await owner.query<{ id: string }>(
+      `insert into shifts(tenant_id, facility_id, role, starts_at, ends_at) values ($1,$2,'Nurse', now() + interval '80 hours', now() + interval '88 hours') returning id`,
+      [ids.bayside, dock])).rows[0].id;
+    st = (await http().get(`/shifts/${another}/agency-fill`).set(as('emp')).expect(200)).body;
+    expect(st).toMatchObject({ activeAgencies: 0, canRequest: false });
+    expect(st.problem).toMatch(/None of your agencies fills shifts at this site/);
+
+    // Every site ticked (or none) means every site, including ones added later.
+    const all = (await http().patch(`/agency-links/${conn.cfy}`).set(as('emp')).send({ facilityIds: [site, dock] }).expect(200)).body;
+    expect(all).toMatchObject({ facilityIds: null, sitesWords: 'Every site' });
+    await http().patch(`/agency-links/${conn.metro}`).set(as('emp')).send({ facilityIds: null }).expect(200);
   });
 });
