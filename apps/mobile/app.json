@@ -33,6 +33,12 @@
           "microphonePermission": false
         }
       ]
-    ]
+    ],
+    "owner": "strattegee",
+    "extra": {
+      "eas": {
+        "projectId": "3db5cc93-d056-4fb3-bc79-db83344ae65d"
+      }
+    }
   }
 }
