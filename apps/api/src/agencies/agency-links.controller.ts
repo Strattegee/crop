@@ -259,6 +259,9 @@ export class AgencyLinksController {
           await db.query('update agency_connections set roles = $2 where connection_id = $1 and side = $3', [connectionId, choice.roles, 'employer']);
           await db.query(`insert into agency_events(tenant_id, connection_id, action, actor_name, actor_business, detail) values ($1,$2,'roles_changed',$3,$4,$5)`,
             [t.tenantId, connectionId, actor.name ?? null, business, `Fills ${w.lower(T.role, true)}: ${rolesWords(choice.roles, w)}`]);
+          // Requirements for roles the link doesn't fill don't need matching (migration 0066), so the link may now be
+          // ready for requests, or need matching again.
+          await db.query('select app_agency_refresh($1)', [connectionId]);
         }
       }
       return linkById(db, connectionId, w);
