@@ -51,19 +51,27 @@ export type FillShift = {
   status: 'open' | 'assigned' | 'booked' | 'cancelled'; equipmentOnly: boolean; startsAt: Date;
 };
 
-/** Why this shift can't be sent to agencies now, in plain words, or null when it can. */
+/** Active links that fill a shift's site (whatever the role) and its role (whatever the site), to say why none fills it. */
+export type FillLimits = { forSite: number; forRole: number; role: string };
+
 /**
- * Why a shift can't go to agencies now, or null. `activeAgencies` counts active links that fill the shift's site;
- * `activeAnywhere` (all active links) tells "none for this site" apart from "none at all".
+ * Why a shift can't go to agencies now, in plain words, or null. `activeAgencies` counts active links that fill the
+ * shift's site and role; `activeAnywhere` (all active links) tells "none for this shift" apart from "none at all", and
+ * `limits` says whether it's the site, the role or the two together.
  */
-export function agencyFillProblem(shift: FillShift, activeAgencies: number, hasOpenRequest: boolean, now: Date, w: Words = DEFAULT_WORDS, activeAnywhere = activeAgencies): string | null {
+export function agencyFillProblem(shift: FillShift, activeAgencies: number, hasOpenRequest: boolean, now: Date, w: Words = DEFAULT_WORDS, activeAnywhere = activeAgencies, limits?: FillLimits): string | null {
   const shiftWord = w.lower(T.shift);
   if (shift.status === 'cancelled') return `This ${shiftWord} has been cancelled`;
   if (shift.equipmentOnly) return `Nobody works an equipment-only ${shiftWord}, so it can't go to agencies`;
   if (shift.status !== 'open') return `Someone is already on this ${shiftWord}`;
   if (shift.startsAt.getTime() <= now.getTime()) return `This ${shiftWord} has already started`;
   if (hasOpenRequest) return `This ${shiftWord} has already been sent to agencies`;
-  if (activeAgencies === 0 && activeAnywhere > 0) return `None of your agencies fills ${w.lower(T.shift, true)} at this ${w.lower(T.site)}. Choose which ${w.lower(T.site, true)} each agency fills in Settings → Agencies.`;
+  if (activeAgencies === 0 && activeAnywhere > 0) {
+    const sites = w.lower(T.site, true), roles = w.lower(T.role, true);
+    if (limits && limits.forSite > 0 && limits.forRole === 0) return `None of your agencies fills ${limits.role} ${w.lower(T.shift, true)}. Choose which ${roles} each agency fills in Settings → Agencies.`;
+    if (limits && limits.forSite > 0) return `None of your agencies fills ${limits.role} ${w.lower(T.shift, true)} at this ${w.lower(T.site)}. Choose which ${sites} and ${roles} each agency fills in Settings → Agencies.`;
+    return `None of your agencies fills ${w.lower(T.shift, true)} at this ${w.lower(T.site)}. Choose which ${sites} each agency fills in Settings → Agencies.`;
+  }
   if (activeAgencies === 0) return 'No agency can be sent requests yet. Link an agency in Settings → Agencies; it can take requests once it has matched your requirements.';
   return null;
 }
@@ -353,4 +361,31 @@ export function agencySitesWords(names: string[], everySite: boolean, w: Words =
   const sorted = [...names].sort((a, b) => a.localeCompare(b));
   const list = sorted.length <= 1 ? sorted[0] : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
   return `Every ${w.lower(T.site)} (${list})`;
+}
+
+/** Whether a link fills a role: no list means every role. Roles match exactly, as credential rules do. */
+export function linkCoversRole(roles: string[] | null, role: string): boolean {
+  return roles === null || roles.includes(role);
+}
+
+/**
+ * The roles an agency may fill, from the request body (`roles`: null or [] = every role). Returns the list to store
+ * (null = every role, also when every role the business has is ticked, so new roles are included) or a problem.
+ * `known` are the business's role names (its role list and roles its people have).
+ */
+export function rolesChoice(value: unknown, known: string[], w: Words = DEFAULT_WORDS): { roles: string[] | null } | { problem: string } {
+  if (value === null || value === undefined) return { roles: null };
+  if (!Array.isArray(value) || value.some(v => typeof v !== 'string')) return { problem: `Choose the ${w.lower(T.role, true)} from the list` };
+  const names = [...new Set((value as string[]).map(v => v.trim()).filter(Boolean))];
+  if (names.some(n => !known.includes(n))) return { problem: `One of those ${w.lower(T.role, true)} isn't on your list` };
+  if (names.length === 0 || known.every(k => names.includes(k))) return { roles: null };
+  return { roles: names.sort((a, b) => a.localeCompare(b)) };
+}
+
+/** "Every role", "Nurse", "Nurse and Carer", "3 roles: A, B and C". */
+export function rolesWords(names: string[] | null, w: Words = DEFAULT_WORDS): string {
+  if (names === null) return `Every ${w.lower(T.role)}`;
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  const list = sorted.length <= 1 ? (sorted[0] ?? '') : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
+  return sorted.length > 2 ? `${w.count(sorted.length, T.role)}: ${list}` : list;
 }

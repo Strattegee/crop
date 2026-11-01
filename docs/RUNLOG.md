@@ -499,3 +499,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the pages build and the API is tested, including that the employer side and a business not on the link can't ask.
 - Next: limiting a link to some roles, sharing documents by agreement, and other unheld items.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 early, 12:15am Melbourne (scheduled run)
+
+- Shipped: agencies limited to some roles, alongside the sites from earlier today. In Settings › Agencies, a business with more than one role chooses, for each agency, which roles it fills (all or none ticked means every role, including ones added later). A shift only goes to the agencies that fill both its site and its role; a waiting turn is skipped if the choice changes; when no agency fills a role, the shift panel says so. The agency sees "Roles you fill" (only the names chosen, otherwise "Every role"), and its "who is ready" list shows just those roles. Each change is logged.
+- Not checked in a browser (no local sign-in in this run); the pages build and the API is tested, including that the employer side and a business not on the link can't ask.
+- Next: not making an agency match requirements that only apply to roles it doesn't fill; sharing documents by agreement (needs the document list agreed with Steve); other unheld items.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

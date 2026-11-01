@@ -23,6 +23,7 @@ export type ReadinessGroup = {
  */
 export function readinessGroups(
   levels: RequirementLevel[], liveMatch: Map<string, string>, ownTypeNames: Map<string, string>, employerTypeNames: Map<string, string>,
+  onlyRoles: string[] | null = null,
 ): ReadinessGroup[] {
   const build = (kind: ReadinessGroup['kind'], label: string, list: RequirementLevel[]): ReadinessGroup => {
     const rules: RequirementRule[] = [];
@@ -45,7 +46,8 @@ export function readinessGroups(
     return { kind, label, rules, unmatched: um };
   };
   const everyone = levels.filter(l => l.kind === 'everyone');
-  const roles = [...new Set(levels.filter(l => l.kind === 'role').map(l => l.label))].sort((a, b) => a.localeCompare(b));
+  // A link limited to some roles (migration 0065) shows just those, each with its own rules (if any) and everyone's.
+  const roles = [...new Set(onlyRoles ?? levels.filter(l => l.kind === 'role').map(l => l.label))].sort((a, b) => a.localeCompare(b));
   const duties = [...new Set(levels.filter(l => l.kind === 'duty').map(l => l.label))].sort((a, b) => a.localeCompare(b));
   const groups = roles.length
     ? roles.map(r => build('role', r, [...levels.filter(l => l.kind === 'role' && l.label === r), ...everyone]))

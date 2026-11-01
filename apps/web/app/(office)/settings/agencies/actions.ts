@@ -42,6 +42,11 @@ export async function setSites(connectionId: string, f: FormData) {
   await attempt(BACK, () => api(`/agency-links/${connectionId}`, { method: 'PATCH', body: { facilityIds } }), 'Saved.');
 }
 
+export async function setRoles(connectionId: string, f: FormData) {
+  const roles = f.getAll('roles').filter((v): v is string => typeof v === 'string');
+  await attempt(BACK, () => api(`/agency-links/${connectionId}`, { method: 'PATCH', body: { roles } }), 'Saved.');
+}
+
 export async function endLink(connectionId: string, f: FormData) {
   await attempt(BACK, () => api(`/agency-links/${connectionId}/end`, { method: 'POST', body: { reason: str(f, 'reason') ?? null } }),
     'Link ended. Both businesses keep its history.');

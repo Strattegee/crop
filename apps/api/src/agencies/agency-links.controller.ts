@@ -9,7 +9,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { actorOf } from '../roster/publishing.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { EMPLOYED_ON } from '../roster/eligibility-data.js';
-import { agencySitesWords, sitesChoice, sitesWords } from './requests.js';
+import { agencySitesWords, rolesChoice, rolesWords, sitesChoice, sitesWords } from './requests.js';
 import { T, wordsFor, type Words } from '../terms/words.js';
 import { groupSummary, personReadiness, rankReadiness, readinessGroups, type RequirementLevel } from './readiness.js';
 import { hashInviteToken, INVITE_DAYS, INVITE_TOKEN, inviteState, inviteUrl, linkStatusWords, matchesProblem, newInviteLink, orderProblem, type LinkStatus } from './links.js';
@@ -22,10 +22,12 @@ type LinkRow = {
   endedBySide: 'employer' | 'agency' | null; endReason: string | null;
   /** Employer side: the sites this agency fills (null = every site), with their names. */
   facilityIds: string[] | null; siteNames: string[] | null;
+  /** Employer side: the roles this agency fills (null = every role). Agency side: filled in from the employer's choice. */
+  roles: string[] | null;
 };
 const LINK_COLS = `connection_id as "connectionId", side, other_name as "otherName", status, preference, book_mode as "bookMode",
   created_at as "createdAt", ended_at as "endedAt", ended_by_name as "endedByName", ended_by_side as "endedBySide", end_reason as "endReason",
-  facility_ids as "facilityIds",
+  facility_ids as "facilityIds", roles,
   case when facility_ids is null then null else
     coalesce((select array_agg(f.name order by f.name) from facilities f where f.id = any(facility_ids)), '{}') end as "siteNames"`;
 
@@ -41,11 +43,31 @@ async function siteFacts(db: PoolClient, r: LinkRow, w: Words): Promise<{ siteNa
   return { siteNames: names, sitesWords: agencySitesWords(names, rows[0]?.every_site ?? true, w) };
 }
 
+/**
+ * Which roles the link covers. Employer side: its own row. Agency side (live links): the roles the employer chose,
+ * through the checked `app_agency_link_roles` (migration 0065), or every role.
+ */
+async function roleFacts(db: PoolClient, r: LinkRow, w: Words): Promise<{ roles: string[] | null; rolesWords: string | null }> {
+  if (r.side === 'employer') return { roles: r.roles, rolesWords: rolesWords(r.roles, w) };
+  if (r.status === 'ended') return { roles: null, rolesWords: null };
+  const roles = (await db.query<{ roles: string[] | null }>('select app_agency_link_roles($1) as roles', [r.connectionId])).rows[0].roles;
+  return { roles, rolesWords: rolesWords(roles, w) };
+}
+
+/** The business's role names: its role list and roles its own people have (as `GET /roles`). */
+async function knownRoles(db: PoolClient): Promise<string[]> {
+  return (await db.query<{ name: string }>(
+    `select name from business_roles
+     union
+     select x.role from workers w, unnest(w.roles) as x(role) where w.status = 'active' and w.agency_connection_id is null
+     order by 1`)).rows.map(r => r.name);
+}
+
 async function linkById(db: PoolClient, connectionId: string, w?: Words) {
   const row = (await db.query<LinkRow>(`select ${LINK_COLS} from agency_connections where connection_id = $1`, [connectionId])).rows[0];
   if (!row) throw new NotFoundException('Link not found');
   const words = w ?? await wordsFor(db);
-  return { ...row, statusWords: linkStatusWords(row.status, row.side, row.otherName), ...await siteFacts(db, row, words) };
+  return { ...row, statusWords: linkStatusWords(row.status, row.side, row.otherName), ...await siteFacts(db, row, words), ...await roleFacts(db, row, words) };
 }
 
 type Requirement = {
@@ -113,7 +135,7 @@ export class AgencyLinksController {
       const links = [];
       for (const r of rows) {
         const n = unmatched.get(r.connectionId) ?? 0;
-        links.push({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), ...await siteFacts(db, r, w), unmatched: n });
+        links.push({ ...r, statusWords: linkStatusWords(r.status, r.side, r.otherName, n), ...await siteFacts(db, r, w), ...await roleFacts(db, r, w), unmatched: n });
       }
       const invitations = (await db.query<{ id: string; forName: string | null; createdByName: string | null; createdAt: Date; expiresAt: Date; acceptedAt: Date | null; cancelledAt: Date | null; acceptedBy: string | null }>(
         `select i.id, i.for_name as "forName", i.created_by_name as "createdByName", i.created_at as "createdAt", i.expires_at as "expiresAt",
@@ -188,24 +210,27 @@ export class AgencyLinksController {
   }
 
   /**
-   * Employer side: `{ bookMode?: 'automatic' | 'approve_first', facilityIds?: string[] | null }`: whether people this
-   * agency puts forward are booked straight away, and which sites it fills (null, [] or every site = every site, including
-   * sites added later). Requests already waiting for this agency's turn skip it if it no longer fills the shift's site.
+   * Employer side: `{ bookMode?: 'automatic' | 'approve_first', facilityIds?: string[] | null, roles?: string[] | null }`:
+   * whether people this agency puts forward are booked straight away, which sites it fills and which roles (null, [] or
+   * every one = every site or role, including ones added later). Requests already waiting for this agency's turn skip
+   * it if it no longer fills the shift's site or role.
    */
   @Roles('owner', 'admin')
   @Patch('agency-links/:connectionId')
   update(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('connectionId', ParseUUIDPipe) connectionId: string, @Body() body: Record<string, unknown>) {
     const bookMode = body?.bookMode;
     const hasSites = body != null && 'facilityIds' in body;
-    if (bookMode === undefined && !hasSites) throw new BadRequestException('Nothing to change');
+    const hasRoles = body != null && 'roles' in body;
+    if (bookMode === undefined && !hasSites && !hasRoles) throw new BadRequestException('Nothing to change');
     if (bookMode !== undefined && bookMode !== 'automatic' && bookMode !== 'approve_first') throw new BadRequestException('Choose whether to book people straight away or approve them first');
     const actor = actorOf(auth);
     return withTenant(this.pool, t.tenantId, async db => {
-      const row = (await db.query<{ side: string; status: string; book_mode: string; facility_ids: string[] | null }>(
-        'select side, status, book_mode, facility_ids from agency_connections where connection_id = $1 for update', [connectionId])).rows[0];
+      const row = (await db.query<{ side: string; status: string; book_mode: string; facility_ids: string[] | null; roles: string[] | null }>(
+        'select side, status, book_mode, facility_ids, roles from agency_connections where connection_id = $1 for update', [connectionId])).rows[0];
       if (!row) throw new NotFoundException('Link not found');
       const w = await wordsFor(db);
-      if (row.side !== 'employer') throw new BadRequestException(bookMode !== undefined ? 'Only the employer chooses how people are booked' : `Only the employer chooses which ${w.lower(T.site, true)} an agency fills`);
+      if (row.side !== 'employer') throw new BadRequestException(bookMode !== undefined ? 'Only the employer chooses how people are booked'
+        : `Only the employer chooses which ${w.lower(hasSites ? T.site : T.role, true)} an agency fills`);
       if (row.status === 'ended') throw new BadRequestException('This link has ended');
       const business = await businessName(db, t.tenantId);
       if (bookMode !== undefined && row.book_mode !== bookMode) {
@@ -224,6 +249,16 @@ export class AgencyLinksController {
           const names = choice.facilityIds ? sites.filter(f => choice.facilityIds!.includes(f.id)).map(f => f.name) : null;
           await db.query(`insert into agency_events(tenant_id, connection_id, action, actor_name, actor_business, detail) values ($1,$2,'sites_changed',$3,$4,$5)`,
             [t.tenantId, connectionId, actor.name ?? null, business, `Fills: ${sitesWords(names, w)}`]);
+        }
+      }
+      if (hasRoles) {
+        const choice = rolesChoice(body.roles, await knownRoles(db), w);
+        if ('problem' in choice) throw new BadRequestException(choice.problem);
+        const before = row.roles ? [...row.roles].sort((a, b) => a.localeCompare(b)) : null;
+        if (JSON.stringify(before) !== JSON.stringify(choice.roles)) {
+          await db.query('update agency_connections set roles = $2 where connection_id = $1 and side = $3', [connectionId, choice.roles, 'employer']);
+          await db.query(`insert into agency_events(tenant_id, connection_id, action, actor_name, actor_business, detail) values ($1,$2,'roles_changed',$3,$4,$5)`,
+            [t.tenantId, connectionId, actor.name ?? null, business, `Fills ${w.lower(T.role, true)}: ${rolesWords(choice.roles, w)}`]);
         }
       }
       return linkById(db, connectionId, w);
@@ -292,7 +327,7 @@ export class AgencyLinksController {
         'select employer_credential_type_id, credential_type_id from agency_credential_maps where connection_id = $1', [connectionId])).rows
         .map(m => [m.employer_credential_type_id, m.credential_type_id]));
       const own = new Map((await db.query<{ id: string; name: string }>('select id, name from credential_types where active')).rows.map(c => [c.id, c.name]));
-      const groups = readinessGroups(levels, live, own, employerNames);
+      const groups = readinessGroups(levels, live, own, employerNames, link.roles);
 
       const ctx = await complianceContext(db, t.tenantId);
       const workers = (await db.query<{ id: string; name: string; roles: string[] }>(
@@ -302,7 +337,7 @@ export class AgencyLinksController {
       const creds = ids.length ? await credentialFactsByWorker(db, ids) : new Map();
       const rtw = ids.length ? await rightToWorkByWorker(db, ids) : new Map();
       return {
-        link: { connectionId, otherName: link.otherName, status: link.status },
+        link: { connectionId, otherName: link.otherName, status: link.status, rolesWords: link.rolesWords },
         onDate: ctx.today,
         peopleCount: workers.length,
         groups: groups.map(g => {
