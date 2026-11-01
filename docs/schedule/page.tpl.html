@@ -1,0 +1,252 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>CROP Build Schedule</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a project control sheet. Key dates up top, a full-width Gantt with sticky task labels, then the critical path and how to run it. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --sunk:#eceef2; --line:#d6dae1; --grid:#e6e9ee; --wknd:#f0f2f5;
+  --ink:#141a22; --muted:#5d6775; --faint:#8b95a3;
+  --crit:#c8322b; --crit-soft:#fbe5e3;
+  --you:#d98a14; --claude:#3d6fb6; --ext:#6b7a8c; --ms:#141a22;
+  --float:#b9c2ce; --sel:#141a22;
+  --f-ui:"Public Sans","Segoe UI",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1318; --surface:#171c23; --sunk:#1f252e; --line:#2e3640; --grid:#232a33; --wknd:#141920;
+  --ink:#e7ebf0; --muted:#9aa5b3; --faint:#6c7786;
+  --crit:#f0645c; --crit-soft:#3d1c1a; --you:#f0a53a; --claude:#6b9be0; --ext:#8e9cae; --ms:#e7ebf0; --float:#4a5462; --sel:#e7ebf0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1318; --surface:#171c23; --sunk:#1f252e; --line:#2e3640; --grid:#232a33; --wknd:#141920;
+  --ink:#e7ebf0; --muted:#9aa5b3; --faint:#6c7786;
+  --crit:#f0645c; --crit-soft:#3d1c1a; --you:#f0a53a; --claude:#6b9be0; --ext:#8e9cae; --ms:#e7ebf0; --float:#4a5462; --sel:#e7ebf0; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45}
+.wrap{max-width:1500px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+h1{font-size:26px;letter-spacing:-.015em;margin:0;text-wrap:balance}
+h2{font-size:16px;margin:0 0 10px}
+.lede{color:var(--muted);max-width:75ch;margin:6px 0 0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:20px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.tile span{display:block;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.tile b{display:block;font-size:20px;margin-top:4px;font-family:var(--f-mono);font-weight:600}
+.tile small{color:var(--muted);font-size:12px}
+.tile.crit{border-color:var(--crit)} .tile.crit b{color:var(--crit)}
+.bar-ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:18px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+.legend i.fl{height:3px;vertical-align:3px}
+.legend i.dm{width:10px;height:10px;transform:rotate(45deg);border-radius:1px}
+.sw{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:13px;cursor:pointer}
+.sw input{accent-color:var(--crit);width:16px;height:16px}
+.detail{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c, var(--line));border-radius:8px;padding:10px 14px;margin-bottom:12px;min-height:58px;display:flex;flex-wrap:wrap;gap:4px 24px;align-items:baseline}
+.detail h3{margin:0;font-size:15px;flex-basis:100%}
+.detail .kv{font-size:13px;color:var(--muted)} .detail .kv b{color:var(--ink);font-weight:600}
+.chartbox{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:78vh;position:relative}
+.chart{position:relative;width:max-content;min-width:100%}
+.row{display:flex;height:28px;align-items:stretch}
+.lab{position:sticky;left:0;z-index:3;width:var(--labw);flex:none;background:var(--surface);border-right:1px solid var(--line);padding:0 10px;display:flex;align-items:center;gap:8px;font-size:12.5px;white-space:nowrap;overflow:hidden}
+.lab .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lab .who{margin-left:auto;color:var(--faint);font-size:11px;flex:none}
+.trk{position:relative;flex:none}
+.head{position:sticky;top:0;z-index:5;background:var(--surface)}
+.head .row{height:22px}
+.head .lab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);z-index:6}
+.mon{position:absolute;top:0;height:22px;border-left:1px solid var(--line);padding-left:6px;font-size:11.5px;font-weight:700;display:flex;align-items:center}
+.wk{position:absolute;top:0;height:22px;border-left:1px solid var(--grid);padding-left:4px;font-size:10.5px;color:var(--muted);display:flex;align-items:center;font-family:var(--f-mono)}
+.lane .lab{font-weight:700;font-size:12px;letter-spacing:.03em;background:var(--sunk);color:var(--ink)}
+.lane .trk{background:var(--sunk)}
+.lane{height:26px}
+.task:hover .lab,.task:hover .trk{background-image:linear-gradient(var(--sunk),var(--sunk))}
+.gridbg{position:absolute;inset:0;pointer-events:none}
+.bar{position:absolute;top:6px;height:16px;border-radius:3px;background:var(--c);cursor:pointer;border:0;padding:0}
+.bar.crit{background:var(--crit)}
+.bar.ext{background:repeating-linear-gradient(135deg,var(--c) 0 6px,color-mix(in srgb,var(--c) 70%,transparent) 6px 12px)}
+.bar.ext.crit{background:repeating-linear-gradient(135deg,var(--crit) 0 6px,color-mix(in srgb,var(--crit) 70%,transparent) 6px 12px)}
+.flt{position:absolute;top:13px;height:2px;background:var(--float);pointer-events:none}
+.flt::after{content:"";position:absolute;right:-1px;top:-3px;width:2px;height:8px;background:var(--float)}
+.dia{position:absolute;top:7px;width:14px;height:14px;transform:rotate(45deg);background:var(--ms);cursor:pointer;border:0;padding:0}
+.dia.crit{background:var(--crit)}
+.blab{position:absolute;top:6px;font-size:11px;color:var(--muted);white-space:nowrap;pointer-events:none;font-family:var(--f-mono)}
+.task.dim .bar,.task.dim .dia{opacity:.18}
+.task.sel .bar,.task.sel .dia{outline:2px solid var(--sel);outline-offset:2px}
+.task.pre .bar,.task.suc .bar{outline:2px dashed var(--sel);outline-offset:1px}
+.conc .trk{height:56px}
+.conc{height:56px}
+.cbar{position:absolute;bottom:4px;background:var(--claude);opacity:.75}
+.cline{position:absolute;left:0;right:0;border-top:1px dashed var(--crit)}
+.clab{position:absolute;right:6px;font-size:10.5px;color:var(--crit);font-weight:600;background:var(--surface);padding:0 3px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.card p,.card li{color:var(--ink);font-size:13.5px}
+.card ol,.card ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chain span{font-size:12.5px;border:1px solid var(--crit);color:var(--crit);border-radius:4px;padding:2px 7px;background:var(--crit-soft)}
+.chain em{color:var(--faint);font-style:normal}
+.assume{color:var(--muted);font-size:12.5px;margin-top:18px;max-width:100ch}
+button:focus-visible,input:focus-visible{outline:2px solid var(--crit);outline-offset:2px}
+@media (max-width:700px){ :root{--labw:150px} .lab .who{display:none} h1{font-size:22px} }
+@media (min-width:701px){ :root{--labw:330px} }
+</style>
+
+<div class="wrap">
+  <h1>CROP Build Schedule</h1>
+  <p class="lede">Six Claude build streams run in parallel under your control, with Caring For You as the beta client. Release 1 delivers what a nursing agency needs first: roster, allocations and credentialing. Release 2 adds timesheets, pay and invoice export. Red is the critical path: any delay there moves the finish date. Grey tails show how far other tasks can slip without moving it. Click a bar for its details, dependencies and slack.</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="bar-ctl">
+    <label class="sw" for="critOnly"><input type="checkbox" id="critOnly"> Critical path only</label>
+    <div class="legend">
+      <span><i style="--c:var(--crit)"></i>Critical path</span>
+      <span><i style="--c:var(--claude)"></i>Claude stream</span>
+      <span><i style="--c:var(--you)"></i>You and the CFY team</span>
+      <span><i style="--c:var(--ext);background:repeating-linear-gradient(135deg,var(--ext) 0 4px,transparent 4px 8px)"></i>Outside specialist</span>
+      <span><i class="fl" style="--c:var(--float)"></i>Slack before it delays the finish</span>
+      <span><i class="dm" style="--c:var(--ms)"></i>Milestone</span>
+    </div>
+  </div>
+
+  <div class="detail" id="detail"><span class="kv">Select a task to see its dates, owner, slack and what it depends on.</span></div>
+
+  <div class="chartbox" id="chartbox"><div class="chart" id="chart"></div></div>
+
+  <div class="notes">
+    <div class="card">
+      <h2>Critical path</h2>
+      <div class="chain" id="chain"></div>
+      <p style="margin-top:10px;color:var(--muted)">The penetration test sits on this path and falls over the Christmas–New Year period, when testers book out. Book it in the first week. The terms, privacy policy and data agreement have plenty of slack, but must be done before go-live.</p>
+    </div>
+    <div class="card">
+      <h2>How the six streams run</h2>
+      <ul>
+        <li>Each stream is its own Claude Code cloud session on its own branch, working from the shared docs and CLAUDE.md.</li>
+        <li>Streams only touch their own module folders. Shared parts (schema, permissions) change only in Stream 1.</li>
+        <li>Each finished ticket arrives as a pull request with tests passing. You try it on staging and merge.</li>
+        <li>Your review time is the real limit. Six streams peak in early December. If that's too many to review, pause the streams with slack first; the critical ones keep going.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Ways to finish sooner</h2>
+      <ol>
+        <li>Have Caring For You sign off the prototypes in 2 days instead of 5. That brings everything after it forward 3 working days.</li>
+        <li>Book the penetration tester now for 29 December to 8 January. Testers book out over the holidays, and this test sits on the critical path.</li>
+        <li>Start the Caring For You data export early. Your current system's export format sets how long the import takes.</li>
+        <li>Start the Apple and Google developer accounts this week. Apple needs a D-U-N-S number for a company account, and store review slows over Christmas, when the app release falls.</li>
+        <li>Keep the first release to the agreed list. Every addition on the red path moves the finish date.</li>
+      </ol>
+    </div>
+  </div>
+  <p class="assume"><b>Assumptions.</b> Durations are working days and include your review time. Victorian public holidays are excluded. No Christmas shutdown is assumed for the build: a two-week break moves everything after 18 December out by about two weeks. The payroll specialist, penetration tester and the lawyer drafting terms are assumed available when needed. Estimates will tighten after the first two weeks of real build speed.</p>
+</div>
+
+<script>
+const DATA = {"tasks": [{"id": "SCAN", "lane": "c1", "name": "Competitor scan (3\u20134 rivals)", "dur": 2, "deps": [], "who": "Claude", "es": 0, "ef": 2, "float": 78, "crit": false, "start": "2026-10-26", "end": "2026-10-27", "lateEnd": "2027-02-19"}, {"id": "ARCH", "lane": "c1", "name": "Architecture and decision records", "dur": 3, "deps": [], "who": "Claude", "es": 0, "ef": 3, "float": 4, "crit": false, "start": "2026-10-26", "end": "2026-10-28", "lateEnd": "2026-11-04"}, {"id": "SPEC", "lane": "c1", "name": "MVP spec", "dur": 4, "deps": [], "who": "Claude", "es": 0, "ef": 4, "float": 0, "crit": true, "start": "2026-10-26", "end": "2026-10-29", "lateEnd": "2026-10-29"}, {"id": "D2", "lane": "you", "name": "Approve tech decisions 5\u201311", "dur": 1, "deps": ["ARCH"], "who": "You", "es": 3, "ef": 4, "float": 4, "crit": false, "start": "2026-10-29", "end": "2026-10-29", "lateEnd": "2026-11-05"}, {"id": "STORE", "lane": "you", "name": "Apple and Google developer accounts (D-U-N-S number)", "dur": 10, "deps": [], "who": "You", "es": 0, "ef": 10, "float": 19, "crit": false, "start": "2026-10-26", "end": "2026-11-09", "lateEnd": "2026-12-04"}, {"id": "ACC", "lane": "you", "name": "Set up accounts: DigitalOcean (Sydney), GitHub, domain, email/SMS", "dur": 3, "deps": ["D2"], "who": "You", "es": 4, "ef": 7, "float": 4, "crit": false, "start": "2026-10-30", "end": "2026-11-04", "lateEnd": "2026-11-10"}, {"id": "PROTO", "lane": "c2", "name": "Clickable screen prototypes", "dur": 5, "deps": ["SPEC"], "who": "Claude", "es": 4, "ef": 9, "float": 0, "crit": true, "start": "2026-10-30", "end": "2026-11-06", "lateEnd": "2026-11-06"}, {"id": "DM", "lane": "c1", "name": "Data model", "dur": 4, "deps": ["ARCH", "SPEC"], "who": "Claude", "es": 4, "ef": 8, "float": 6, "crit": false, "start": "2026-10-30", "end": "2026-11-05", "lateEnd": "2026-11-13"}, {"id": "D3", "lane": "you", "name": "Caring For You reviews prototypes; MVP signed off", "dur": 5, "deps": ["SPEC", "PROTO"], "who": "You + CFY team", "es": 9, "ef": 14, "float": 0, "crit": true, "start": "2026-11-09", "end": "2026-11-13", "lateEnd": "2026-11-13"}, {"id": "TOS", "lane": "ext", "name": "Terms, privacy policy, data agreement", "dur": 15, "deps": [], "who": "Lawyer", "es": 0, "ef": 15, "float": 40, "crit": false, "start": "2026-10-26", "end": "2026-11-16", "lateEnd": "2027-01-14"}, {"id": "REPO", "lane": "c1", "name": "Repo, CLAUDE.md, CI/CD, staging", "dur": 3, "deps": ["D2", "ACC"], "who": "Claude", "es": 7, "ef": 10, "float": 4, "crit": false, "start": "2026-11-05", "end": "2026-11-09", "lateEnd": "2026-11-13"}, {"id": "SCH", "lane": "c1", "name": "Schema, row-level security, tenants, sites", "dur": 4, "deps": ["REPO", "DM", "D3"], "who": "Claude", "es": 14, "ef": 18, "float": 0, "crit": true, "start": "2026-11-16", "end": "2026-11-19", "lateEnd": "2026-11-19"}, {"id": "AUTH", "lane": "c1", "name": "Sign-in, 2FA, roles and scopes, audit log", "dur": 5, "deps": ["SCH"], "who": "Claude", "es": 18, "ef": 23, "float": 1, "crit": false, "start": "2026-11-20", "end": "2026-11-26", "lateEnd": "2026-11-27"}, {"id": "PPL", "lane": "c2", "name": "Staff profiles and employment records", "dur": 5, "deps": ["SCH"], "who": "Claude", "es": 18, "ef": 23, "float": 0, "crit": true, "start": "2026-11-20", "end": "2026-11-26", "lateEnd": "2026-11-26"}, {"id": "DOC", "lane": "c2", "name": "Secure document storage", "dur": 3, "deps": ["SCH"], "who": "Claude", "es": 18, "ef": 21, "float": 17, "crit": false, "start": "2026-11-20", "end": "2026-11-24", "lateEnd": "2026-12-17"}, {"id": "CRED", "lane": "c2", "name": "Credentials, requirements, expiry reminders", "dur": 5, "deps": ["PPL"], "who": "Claude", "es": 23, "ef": 28, "float": 0, "crit": true, "start": "2026-11-27", "end": "2026-12-03", "lateEnd": "2026-12-03"}, {"id": "ONB", "lane": "c2", "name": "Onboarding: apply, approve, activate", "dur": 5, "deps": ["CRED", "DOC", "AUTH"], "who": "Claude", "es": 28, "ef": 33, "float": 10, "crit": false, "start": "2026-12-04", "end": "2026-12-10", "lateEnd": "2026-12-24"}, {"id": "TPL", "lane": "c3", "name": "Templates and shift requirements", "dur": 5, "deps": ["SCH"], "who": "Claude", "es": 18, "ef": 23, "float": 5, "crit": false, "start": "2026-11-20", "end": "2026-11-26", "lateEnd": "2026-12-03"}, {"id": "GRID", "lane": "c3", "name": "Ribbon roster grid: Draft, Live, History", "dur": 8, "deps": ["TPL"], "who": "Claude", "es": 23, "ef": 31, "float": 7, "crit": false, "start": "2026-11-27", "end": "2026-12-08", "lateEnd": "2026-12-17"}, {"id": "MATCH", "lane": "c3", "name": "Matching, hard blocks, warnings, leave", "dur": 6, "deps": ["TPL", "CRED"], "who": "Claude", "es": 28, "ef": 34, "float": 0, "crit": true, "start": "2026-12-04", "end": "2026-12-11", "lateEnd": "2026-12-11"}, {"id": "NOTE", "lane": "c4", "name": "Notifications: email, SMS, native push", "dur": 5, "deps": ["AUTH", "STORE"], "who": "Claude", "es": 23, "ef": 28, "float": 6, "crit": false, "start": "2026-11-27", "end": "2026-12-03", "lateEnd": "2026-12-11"}, {"id": "PUB", "lane": "c3", "name": "Publish, live updates, change log, cost vs budget", "dur": 5, "deps": ["GRID", "MATCH", "NOTE"], "who": "Claude", "es": 34, "ef": 39, "float": 4, "crit": false, "start": "2026-12-14", "end": "2026-12-18", "lateEnd": "2026-12-24"}, {"id": "APP", "lane": "c4", "name": "Native worker app (iOS, Android): shifts, availability, leave, credentials", "dur": 10, "deps": ["AUTH", "PPL"], "who": "Claude", "es": 23, "ef": 33, "float": 1, "crit": false, "start": "2026-11-27", "end": "2026-12-10", "lateEnd": "2026-12-11"}, {"id": "BCAST", "lane": "c4", "name": "Broadcast open shifts; accept with no double booking", "dur": 4, "deps": ["APP", "MATCH", "NOTE"], "who": "Claude", "es": 34, "ef": 38, "float": 0, "crit": true, "start": "2026-12-14", "end": "2026-12-17", "lateEnd": "2026-12-17"}, {"id": "TS", "lane": "c5", "name": "Timesheets from shifts, approval", "dur": 5, "deps": ["PUB"], "who": "Claude", "es": 39, "ef": 44, "float": 11, "crit": false, "start": "2026-12-21", "end": "2026-12-29", "lateEnd": "2027-01-14"}, {"id": "EXP", "lane": "c5", "name": "Export to payroll system", "dur": 4, "deps": ["TS"], "who": "Claude", "es": 44, "ef": 48, "float": 12, "crit": false, "start": "2026-12-30", "end": "2027-01-05", "lateEnd": "2027-01-21"}, {"id": "REP", "lane": "c5", "name": "Core reports", "dur": 3, "deps": ["PUB"], "who": "Claude", "es": 39, "ef": 42, "float": 20, "crit": false, "start": "2026-12-21", "end": "2026-12-23", "lateEnd": "2027-01-25"}, {"id": "OPS", "lane": "c1", "name": "Backups, restore drill, monitoring, runbooks", "dur": 3, "deps": ["BCAST"], "who": "Claude", "es": 38, "ef": 41, "float": 2, "crit": false, "start": "2026-12-18", "end": "2026-12-22", "lateEnd": "2026-12-24"}, {"id": "STOREREL", "lane": "c4", "name": "App Store and Google Play review and release", "dur": 5, "deps": ["BCAST", "STORE"], "who": "Claude + you", "es": 38, "ef": 43, "float": 0, "crit": true, "start": "2026-12-18", "end": "2026-12-24", "lateEnd": "2026-12-24"}, {"id": "CLI", "lane": "c6", "name": "Clients, facilities, contacts, client compliance rules", "dur": 5, "deps": ["SCH"], "who": "Claude", "es": 18, "ef": 23, "float": 8, "crit": false, "start": "2026-11-20", "end": "2026-11-26", "lateEnd": "2026-12-08"}, {"id": "RATE", "lane": "c6", "name": "Pay and charge rates, effective-dated", "dur": 4, "deps": ["CLI"], "who": "Claude", "es": 23, "ef": 27, "float": 31, "crit": false, "start": "2026-11-27", "end": "2026-12-02", "lateEnd": "2027-01-19"}, {"id": "BOOK", "lane": "c6", "name": "Client bookings create shifts (single and multi-shift)", "dur": 5, "deps": ["CLI", "TPL"], "who": "Claude", "es": 23, "ef": 28, "float": 8, "crit": false, "start": "2026-11-27", "end": "2026-12-03", "lateEnd": "2026-12-15"}, {"id": "CPORT", "lane": "c6", "name": "Client portal: request shifts, preferred and blocked staff", "dur": 7, "deps": ["BOOK", "AUTH"], "who": "Claude", "es": 28, "ef": 35, "float": 8, "crit": false, "start": "2026-12-04", "end": "2026-12-14", "lateEnd": "2026-12-24"}, {"id": "CTS", "lane": "c6", "name": "Client timesheet approval", "dur": 3, "deps": ["CPORT", "TS"], "who": "Claude", "es": 44, "ef": 47, "float": 11, "crit": false, "start": "2026-12-30", "end": "2027-01-04", "lateEnd": "2027-01-19"}, {"id": "INVX", "lane": "c6", "name": "Invoice export to Xero / MYOB", "dur": 4, "deps": ["RATE", "CTS"], "who": "Claude", "es": 47, "ef": 51, "float": 11, "crit": false, "start": "2027-01-05", "end": "2027-01-08", "lateEnd": "2027-01-25"}, {"id": "MIG", "lane": "c1", "name": "Import CFY's staff, clients and templates from current system", "dur": 6, "deps": ["PPL", "CLI", "CRED"], "who": "Claude + you", "es": 28, "ef": 34, "float": 9, "crit": false, "start": "2026-12-04", "end": "2026-12-11", "lateEnd": "2026-12-24"}, {"id": "FC", "lane": "ms", "name": "Release 1 built: roster, allocations, credentialing", "dur": 0, "deps": ["ONB", "PUB", "BCAST", "CPORT", "OPS", "MIG", "STOREREL"], "who": "Milestone", "es": 43, "ef": 43, "float": 0, "crit": true, "start": "2026-12-29", "end": "2026-12-29", "lateEnd": "2026-12-29"}, {"id": "PEN", "lane": "ext", "name": "External penetration test (Release 1)", "dur": 8, "deps": ["FC"], "who": "Security tester", "es": 43, "ef": 51, "float": 0, "crit": true, "start": "2026-12-29", "end": "2027-01-08", "lateEnd": "2027-01-08"}, {"id": "FIX", "lane": "c1", "name": "Fix test findings", "dur": 4, "deps": ["PEN"], "who": "Claude", "es": 51, "ef": 55, "float": 0, "crit": true, "start": "2027-01-11", "end": "2027-01-14", "lateEnd": "2027-01-14"}, {"id": "PIL", "lane": "you", "name": "CFY go-live prep: final import, training", "dur": 5, "deps": ["FIX", "TOS"], "who": "You + CFY team", "es": 55, "ef": 60, "float": 0, "crit": true, "start": "2027-01-15", "end": "2027-01-21", "lateEnd": "2027-01-21"}, {"id": "LIVE", "lane": "you", "name": "CFY live on roster, allocations, credentials", "dur": 20, "deps": ["PIL"], "who": "You + CFY team", "es": 60, "ef": 80, "float": 0, "crit": true, "start": "2027-01-22", "end": "2027-02-19", "lateEnd": "2027-02-19"}, {"id": "R2", "lane": "ms", "name": "Release 2 built: timesheets, pay and invoice export", "dur": 0, "deps": ["EXP", "INVX", "REP"], "who": "Milestone", "es": 51, "ef": 51, "float": 11, "crit": false, "start": "2027-01-11", "end": "2027-01-11", "lateEnd": "2027-01-27"}, {"id": "AWD", "lane": "ext", "name": "Award / payroll specialist check", "dur": 5, "deps": ["EXP"], "who": "Specialist", "es": 48, "ef": 53, "float": 12, "crit": false, "start": "2027-01-06", "end": "2027-01-12", "lateEnd": "2027-01-29"}, {"id": "SEC2", "lane": "ext", "name": "Security retest of Release 2 changes", "dur": 3, "deps": ["R2", "FIX"], "who": "Security tester", "es": 55, "ef": 58, "float": 7, "crit": false, "start": "2027-01-15", "end": "2027-01-19", "lateEnd": "2027-01-29"}, {"id": "GO2", "lane": "you", "name": "Switch timesheets, pay and invoicing to new platform", "dur": 5, "deps": ["SEC2", "AWD", "PIL"], "who": "You + CFY team", "es": 60, "ef": 65, "float": 5, "crit": false, "start": "2027-01-22", "end": "2027-01-29", "lateEnd": "2027-02-05"}, {"id": "CYC", "lane": "you", "name": "Run one full pay and invoice cycle end to end", "dur": 10, "deps": ["GO2"], "who": "You + CFY team", "es": 65, "ef": 75, "float": 5, "crit": false, "start": "2027-02-01", "end": "2027-02-12", "lateEnd": "2027-02-19"}, {"id": "BILL", "lane": "c5", "name": "Subscription billing for paying customers", "dur": 4, "deps": ["R2"], "who": "Claude", "es": 51, "ef": 55, "float": 25, "crit": false, "start": "2027-01-11", "end": "2027-01-14", "lateEnd": "2027-02-19"}, {"id": "INV", "lane": "ms", "name": "Beta signed off: ready to sell", "dur": 0, "deps": ["LIVE", "CYC", "BILL"], "who": "Milestone", "es": 80, "ef": 80, "float": 0, "crit": true, "start": "2027-02-22", "end": "2027-02-22", "lateEnd": "2027-02-22"}], "start": "2026-10-26", "hol": {"2026-11-03": "Melbourne Cup", "2026-12-25": "Christmas", "2026-12-28": "Boxing Day (obs.)", "2027-01-01": "New Year", "2027-01-26": "Australia Day"}, "endDate": "2027-02-19"};
+(() => {
+  const PX = 10, MS = 86400000;
+  const LANES = [
+    ["you","You and the CFY team","var(--you)"],["ext","Outside specialists","var(--ext)"],
+    ["c1","Claude 1 · Design, foundation, ops","var(--claude)"],["c2","Claude 2 · Prototypes, people, compliance","var(--claude)"],
+    ["c3","Claude 3 · Roster","var(--claude)"],["c4","Claude 4 · Worker app (iOS, Android), notifications","var(--claude)"],
+    ["c5","Claude 5 · Timesheets, reports, billing","var(--claude)"],["c6","Claude 6 · Clients, bookings, invoicing","var(--claude)"],
+    ["ms","Milestones","var(--ms)"]
+  ];
+  const $ = s => document.querySelector(s);
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const toD = s => new Date(s + "T00:00:00Z");
+  const origin = toD(DATA.start), last = new Date(toD(DATA.endDate).getTime() + 10*MS);
+  const nDays = Math.round((last - origin)/MS) + 1, W = nDays * PX;
+  const x = s => Math.round((toD(s) - origin)/MS) * PX;
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const fmt = s => { const d = toD(s); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
+  const fmtY = s => { const d = toD(s); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+  const T = DATA.tasks, byId = Object.fromEntries(T.map(t => [t.id, t]));
+  const succ = Object.fromEntries(T.map(t => [t.id, T.filter(u => u.deps.includes(t.id)).map(u => u.id)]));
+  const color = t => t.lane === "you" ? "var(--you)" : t.lane === "ext" ? "var(--ext)" : t.lane === "ms" ? "var(--ms)" : "var(--claude)";
+
+  // tiles
+  const live = byId.LIVE, fc = byId.FC, inv = byId.INV;
+  const critN = T.filter(t => t.crit && t.dur > 0).length;
+  let peak = 0, peakDay = null;
+  for(let i=0;i<nDays;i++){ const n = T.filter(t => t.lane.startsWith("c") && t.dur>0 && x(t.start) <= i*PX && i*PX <= x(t.end)).length; if(n > peak){ peak = n; peakDay = i; } }
+  const peakDate = new Date(origin.getTime() + peakDay*MS).toISOString().slice(0,10);
+  $("#tiles").innerHTML = [
+    ["Build starts", fmtY(DATA.start), "Decisions made 22 Oct"],
+    ["Release 1 built", fmtY(fc.start), "Roster, allocations, credentials"],
+    ["CFY live on Release 1", fmtY(live.start), "After the security test"],
+    ["Timesheets and pay switched", fmtY(byId.GO2.end), "Release 2 in use"],
+    ["Ready to sell", fmtY(inv.start), "Beta signed off", true],
+    ["Peak parallel sessions", String(peak), "Week of " + fmt(peakDate)]
+  ].map(([a,b,c,cr]) => `<div class="tile${cr?" crit":""}"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("");
+
+  // grid background (weekends, holidays, week lines)
+  let bg = "";
+  for(let i=0;i<nDays;i++){ const d = new Date(origin.getTime()+i*MS), iso = d.toISOString().slice(0,10), dw = d.getUTCDay();
+    if(dw===0||dw===6) bg += `<div style="position:absolute;top:0;bottom:0;left:${i*PX}px;width:${PX}px;background:var(--wknd)"></div>`;
+    if(DATA.hol[iso]) bg += `<div title="${esc(DATA.hol[iso])}" style="position:absolute;top:0;bottom:0;left:${i*PX}px;width:${PX}px;background:var(--crit-soft)"></div>`;
+    if(dw===1) bg += `<div style="position:absolute;top:0;bottom:0;left:${i*PX}px;border-left:1px solid var(--grid)"></div>`; }
+  const gridDiv = `<div class="gridbg">${bg}</div>`;
+
+  // header
+  let months = "", weeks = "";
+  for(let i=0;i<nDays;i++){ const d = new Date(origin.getTime()+i*MS);
+    if(d.getUTCDate()===1 || i===0) months += `<div class="mon" style="left:${i*PX}px">${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}</div>`;
+    if(d.getUTCDay()===1) weeks += `<div class="wk" style="left:${i*PX}px">${d.getUTCDate()}</div>`; }
+  const head = `<div class="head"><div class="row"><div class="lab">Task</div><div class="trk" style="width:${W}px">${months}</div></div><div class="row"><div class="lab">Owner</div><div class="trk" style="width:${W}px">${weeks}</div></div></div>`;
+
+  function render(){
+    const critOnly = $("#critOnly").checked;
+    let h = head;
+    for(const [lane, label] of LANES){
+      const ts = T.filter(t => t.lane===lane && (!critOnly || t.crit)).sort((a,b) => a.es-b.es || b.dur-a.dur);
+      if(!ts.length) continue;
+      h += `<div class="row lane"><div class="lab">${esc(label)}</div><div class="trk" style="width:${W}px">${gridDiv}</div></div>`;
+      for(const t of ts){
+        const left = x(t.start), wid = x(t.end) - left + PX;
+        let mark;
+        if(t.dur === 0) mark = `<button class="dia${t.crit?" crit":""}" style="left:${left-2}px" data-id="${t.id}" aria-label="${esc(t.name)}, ${fmt(t.start)}"></button><span class="blab" style="left:${left+18}px">${fmt(t.start)}</span>`;
+        else {
+          const fl = !t.crit && t.lateEnd > t.end ? `<span class="flt" style="left:${left+wid}px;width:${x(t.lateEnd)-x(t.end)}px"></span>` : "";
+          mark = `<button class="bar${t.crit?" crit":""}${t.lane==="ext"?" ext":""}" style="left:${left}px;width:${wid}px;--c:${color(t)}" data-id="${t.id}" aria-label="${esc(t.name)}, ${fmt(t.start)} to ${fmt(t.end)}"></button>${fl}<span class="blab" style="left:${left+wid+(t.crit||t.lateEnd<=t.end?6:x(t.lateEnd)-x(t.end)+10)}px">${t.dur}d</span>`;
+        }
+        h += `<div class="row task" data-id="${t.id}"><div class="lab"><span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="who">${esc(t.who)}</span></div><div class="trk" style="width:${W}px">${gridDiv}${mark}</div></div>`;
+      }
+    }
+    // concurrency strip
+    let cb = "";
+    for(let i=0;i<nDays;i++){ const n = T.filter(t => t.lane.startsWith("c") && t.dur>0 && x(t.start) <= i*PX && i*PX <= x(t.end)).length; if(n) cb += `<div class="cbar" style="left:${i*PX+1}px;width:${PX-2}px;height:${n*7}px" title="${n} sessions"></div>`; }
+    h += `<div class="row lane"><div class="lab">Claude sessions running</div><div class="trk" style="width:${W}px">${gridDiv}</div></div>
+      <div class="row conc"><div class="lab"><span class="nm">Parallel sessions per day (max ${peak})</span></div><div class="trk" style="width:${W}px">${gridDiv}${cb}<div class="cline" style="bottom:${4+4*7}px"></div><span class="clab" style="bottom:${4*7+6}px">4 = comfortable review load</span></div></div>`;
+    $("#chart").innerHTML = h;
+    $("#chart").style.setProperty("--labw", getComputedStyle(document.documentElement).getPropertyValue("--labw"));
+    if(selId) select(selId, false);
+  }
+  let selId = null;
+  function select(id, scroll=true){
+    selId = id; const t = byId[id];
+    const pre = new Set(t.deps), suc = new Set(succ[id]);
+    document.querySelectorAll(".task").forEach(r => { const i = r.dataset.id; r.classList.toggle("sel", i===id); r.classList.toggle("pre", pre.has(i)); r.classList.toggle("suc", suc.has(i)); r.classList.toggle("dim", i!==id && !pre.has(i) && !suc.has(i)); });
+    const d = $("#detail"); d.style.setProperty("--c", t.crit ? "var(--crit)" : color(t));
+    d.innerHTML = `<h3>${esc(t.name)}${t.crit ? ` <span style="color:var(--crit);font-size:12px;font-weight:700;letter-spacing:.06em">CRITICAL PATH</span>` : ""}</h3>
+      <span class="kv">Owner <b>${esc(t.who)}</b></span>
+      <span class="kv">${t.dur ? `Dates <b class="mono">${fmt(t.start)} → ${fmt(t.end)}</b>` : `Date <b class="mono">${fmt(t.start)}</b>`}</span>
+      ${t.dur ? `<span class="kv">Length <b>${t.dur} working days</b></span>` : ""}
+      <span class="kv">Slack <b>${t.crit ? "none" : t.float + " working days"}</b></span>
+      <span class="kv">Needs <b>${t.deps.length ? t.deps.map(x => esc(byId[x].name)).join("; ") : "nothing, starts on day one"}</b></span>
+      <span class="kv">Unlocks <b>${succ[id].length ? succ[id].map(x => esc(byId[x].name)).join("; ") : "—"}</b></span>
+      <button id="clearSel" style="margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer">Clear</button>`;
+    $("#clearSel").onclick = () => { selId = null; document.querySelectorAll(".task").forEach(r => r.classList.remove("sel","pre","suc","dim")); d.style.removeProperty("--c"); d.innerHTML = `<span class="kv">Select a task to see its dates, owner, slack and what it depends on.</span>`; };
+  }
+  $("#chart").addEventListener("click", e => { const b = e.target.closest("[data-id]"); if(b && (b.classList.contains("bar") || b.classList.contains("dia") || b.classList.contains("task"))) select(b.dataset.id); });
+  $("#critOnly").addEventListener("change", render);
+  render();
+  // critical chain
+  const chain = T.filter(t => t.crit).sort((a,b) => a.es-b.es || a.ef-b.ef);
+  $("#chain").innerHTML = chain.map((t,i) => `${i ? "<em>→</em>" : ""}<span>${esc(t.name.split(":")[0])}</span>`).join("");
+})();
+</script>
+
+</body></html>

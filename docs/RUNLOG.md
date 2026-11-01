@@ -483,3 +483,4 @@ Newest first. One entry per working session or scheduled run.
 - Question for David (in the backlog): shorten the links in texts (about 25 characters fewer, often one part less per offer)? Held because the link is the person's only key to the offer.
 - Next: the agency follow-ups (limiting a link to some roles or sites) and other unheld items.
 - Waiting on David: the public apply form's questions; a development build of the app (Expo account); checking the app's Zitadel access token type is JWT; the shorter-link question.
+- (1 Nov, with David) The build schedule is revised (Caring For You live Monday 11 January 2027, after the Christmas quiet period) and its source now lives in `docs/schedule/`. Every scheduled run now updates and republishes it, and ticks off David's "what we need from you" list as items arrive, so the pages match on his phone and his Mac.
