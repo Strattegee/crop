@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { AgencyEscalator } from '../src/agencies/agency-fill.controller.js';
-import { agencyFillProblem, agencyRules, linkCoversSite, sitesChoice, sitesWords, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
+import { agencyFillProblem, agencySitesWords, agencyRules, linkCoversSite, sitesChoice, sitesWords, escalationMinutes, inWords, minutesWords, requestArrivedEmail, roundSchedule, timingBand } from '../src/agencies/requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('agency fill: rules', () => {
@@ -65,6 +65,9 @@ describe('agency fill: rules', () => {
     expect(sitesWords(['B'])).toBe('B');
     expect(sitesWords(['B', 'A'])).toBe('A and B');
     expect(sitesWords(['C', 'A', 'B'])).toBe('3 sites: A, B and C');
+    expect(agencySitesWords([], true)).toBe('No sites yet');
+    expect(agencySitesWords(['B', 'A'], true)).toBe('Every site (A and B)');
+    expect(agencySitesWords(['B'], false)).toBe('B');
   });
 
   it('writes the agency’s email with the shift and requirements, no people', () => {
@@ -444,7 +447,23 @@ describe('agency fill: API', () => {
     expect(link).toMatchObject({ facilityIds: [dock], siteNames: ['Docklands'], sitesWords: 'Docklands', bookMode: 'automatic' });
     const listed = (await http().get('/agency-links').set(as('emp')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === conn.cfy);
     expect(listed.sitesWords).toBe('Docklands');
-    expect((await http().get('/agency-links').set(as('ag')).expect(200)).body.links[0].sitesWords).toBeNull();
+    // The agency sees which of the employer's sites it fills (names only), and nobody else can ask.
+    const agLink = (await http().get('/agency-links').set(as('ag')).expect(200)).body.links.find((l: { connectionId: string }) => l.connectionId === conn.cfy);
+    expect(agLink).toMatchObject({ side: 'agency', siteNames: ['Docklands'], sitesWords: 'Docklands', facilityIds: null });
+    expect((await http().get(`/agency-links/${conn.cfy}/requirements`).set(as('ag')).expect(200)).body.link.sitesWords).toBe('Docklands');
+    const metroLink = (await http().get('/agency-links').set(as('metro')).expect(200)).body.links[0];
+    expect(metroLink.sitesWords).toBe('Every site (Bayside Campus and Docklands)');
+    // The employer side can't call it, and a business that isn't on the link sees nothing.
+    const c = new Client({ connectionString: db.appUrl });
+    await c.connect();
+    try {
+      for (const [tenant, err] of [[ids.bayside, /Only the agency/], [ids.nosy, /Link not found/]] as const) {
+        await c.query('begin');
+        await c.query(`select set_config('app.tenant_id', $1, true)`, [tenant]);
+        await expect(c.query('select * from app_agency_link_sites($1)', [conn.cfy])).rejects.toThrow(err);
+        await c.query('rollback');
+      }
+    } finally { await c.end(); }
     expect((await owner.query(`select detail from agency_events where action = 'sites_changed'`)).rows.map(r => r.detail)).toEqual(['Fills: Docklands']);
 
     // A shift at Bayside Campus goes to Metro only; one at Docklands goes to both.

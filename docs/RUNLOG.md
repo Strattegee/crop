@@ -492,3 +492,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); the page builds and the API is tested.
 - Next: limiting a link to some roles, letting the agency see which sites it fills, and other unheld items.
 - Waiting on David: the public apply form's questions; the Expo token and first app build; checking the app's Zitadel access token type is JWT; the shorter-link question.
+
+## 2026-11-01 night, 9:15pm Melbourne (scheduled run)
+
+- Shipped: agencies can now see which of an employer's sites they fill. In Settings › Agencies, "Businesses we supply" has a "Sites you fill" column ("Every site (Bayside Campus and Docklands)" when the employer hasn't limited it, or just the sites chosen), and the link's Matches page says the same. Only site names cross over, which the agency already gets with each request.
+- Not checked in a browser (no local sign-in in this run); the pages build and the API is tested, including that the employer side and a business not on the link can't ask.
+- Next: limiting a link to some roles, sharing documents by agreement, and other unheld items.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

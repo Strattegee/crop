@@ -12,7 +12,7 @@ type Requirement = {
   match: { credentialTypeId: string; name: string; matchedBy: 'code' | 'hand'; matchedByName: string | null } | null;
   suggestion: { credentialTypeId: string; name: string } | null;
 };
-type View = { link: { otherName: string; status: 'matching' | 'active' | 'ended'; statusWords: string; unmatched: number; side: string }; requirements: Requirement[] };
+type View = { link: { otherName: string; status: 'matching' | 'active' | 'ended'; statusWords: string; unmatched: number; side: string; sitesWords?: string | null }; requirements: Requirement[] };
 type CredentialType = { id: string; name: string; active: boolean };
 type ReadyPerson = { workerId: string; name: string; roles: string[]; ready: boolean; hasRole: boolean; missing: string[]; toCheck: string[] };
 type ReadyGroup = { kind: 'role' | 'any' | 'duty'; label: string; unmatched: Array<{ name: string; severity: 'hard' | 'warning' }>; ready: number; summary: string; people: ReadyPerson[] };
@@ -47,6 +47,7 @@ export default async function MatchPage({ params, searchParams }: { params: Prom
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className={`notice ${view.link.status === 'active' ? 'success' : ''}`}>{view.link.statusWords}</div>
+      {view.link.sitesWords && <p className="small">{tw.many(T.site)} you fill for {employer}: <b>{view.link.sitesWords}</b></p>}
       {!canEdit && <div className="notice error">Only owners and administrators can change matches.</div>}
 
       {view.requirements.length === 0 ? (
