@@ -120,7 +120,9 @@ describe('bank fill: offers, first to accept is booked', () => {
     expect(again.body).toMatchObject({ offered: 0, alreadyOffered: 1, messages: 0 });
     const sent = await messages('shift_offer');
     expect(sent.map(m => [m.channel, m.to_address])).toEqual([['email', 'ana@example.com'], ['email', 'ben@example.com'], ['sms', '+61491570156']]);
-    expect(sent[2].body).toContain('Tue 3 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)');
+    expect(sent[0].body).toContain('Tue 3 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)');
+    // Texts go with plain punctuation (an en dash would make the whole text Unicode, billed as twice the parts).
+    expect(sent[2].body).toContain('Tue 3 Nov, 07:00-15:30, Chef at Harbour Kitchen (Kitchen)');
 
     const list = (await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body;
     expect(list.candidates.find((c: { workerId: string }) => c.workerId === ana).offer.status).toBe('pending');

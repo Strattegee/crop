@@ -3,6 +3,7 @@ import { currentAgency } from '../../../lib/current-user';
 import { Badge } from '../../../lib/format';
 import { businessZone, whenIn } from '../../../lib/business';
 import { Notices } from '../notices';
+import { smsPartsLine, templateName, textsThisMonth } from '../../../lib/messages';
 import { sendTest } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -10,13 +11,13 @@ export const dynamic = 'force-dynamic';
 type Message = {
   id: string; channel: string; to: string; template: string; subject: string | null; body: string; status: string;
   attempts: number; error: string | null; createdAt: string; workerName: string | null;
+  smsParts?: number; smsUnicode?: string[];
 };
-type Log = { messages: Message[]; smsThisMonth: number; smsMonthlyCap: number; emailReady: boolean; smsReady: boolean };
+type Log = { messages: Message[]; smsThisMonth: number; smsPartsThisMonth?: number; smsMonthlyCap: number; emailReady: boolean; smsReady: boolean };
 
 const STATUS: Record<string, [string, 'ok' | 'warn' | 'bad' | 'neutral']> = {
   queued: ['Queued', 'neutral'], sending: ['Sending', 'neutral'], sent: ['Sent', 'ok'], failed: ['Failed', 'bad'], skipped: ['Not sent', 'warn'],
 };
-const TEMPLATE: Record<string, string> = { test: 'Test', credential_expiry: 'Expiry reminder', compliance_expiry: 'Office expiry alert', welcome: 'Welcome', shift_offer: 'Shift offer', shift_booked: 'Shift booked', shift_filled: 'Shift filled', roster_published: 'Roster published', change_request: 'Change request', change_request_decided: 'Change request decided', onboarding_request: 'Onboarding request', app_leave_request: 'Leave asked for in the app', app_credential_added: 'Added in the app' };
 
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
@@ -26,13 +27,13 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <h1>Messages</h1>
-      <p className="muted">Every email and text CROP sends for your business.</p>
+      <p className="muted">Every email and text CROP sends for your business. Texts are billed in parts of up to 160 characters (153 each when a text needs more than one; 70 and 67 when a name or word needs letters outside the plain alphabet).</p>
       <Notices error={sp.error} done={sp.done} />
 
       <div className="grid">
         <div className="card"><div className="muted">Email</div><div className="stat" style={{ fontSize: 20 }}>{log.emailReady ? 'Ready' : 'Not set up'}</div></div>
         <div className="card"><div className="muted">SMS</div><div className="stat" style={{ fontSize: 20 }}>{log.smsReady ? 'Ready' : 'Not set up'}</div></div>
-        <div className="card"><div className="muted">Texts this month</div><div className="stat" style={{ fontSize: 20 }}>{log.smsThisMonth} of {log.smsMonthlyCap}</div></div>
+        <div className="card"><div className="muted">Texts this month</div><div className="stat" style={{ fontSize: 20 }}>{textsThisMonth(log.smsThisMonth, log.smsMonthlyCap, log.smsPartsThisMonth)}</div></div>
       </div>
 
       {canTest && (
@@ -64,9 +65,10 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
               {log.messages.map(m => (
                 <tr key={m.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{when(m.createdAt)}</td>
-                  <td>{m.channel === 'sms' ? 'Text' : 'Email'} · {TEMPLATE[m.template] ?? m.template}</td>
+                  <td>{m.channel === 'sms' ? 'Text' : 'Email'} · {templateName(m.template)}</td>
                   <td>{m.workerName ? <>{m.workerName}<br /></> : null}<span className="muted">{m.to}</span></td>
-                  <td style={{ maxWidth: 360 }}>{m.subject && <strong>{m.subject}<br /></strong>}<span className="muted">{m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body}</span></td>
+                  <td style={{ maxWidth: 360 }}>{m.subject && <strong>{m.subject}<br /></strong>}<span className="muted">{m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body}</span>
+                    {m.smsParts !== undefined && <div className="muted" style={{ fontSize: 12 }}>{smsPartsLine(m.smsParts, m.smsUnicode)}</div>}</td>
                   <td>
                     <Badge label={STATUS[m.status]} />
                     {m.error && <div className="muted" style={{ fontSize: 12 }}>{m.error}{m.status === 'queued' ? ' (will retry)' : ''}</div>}
