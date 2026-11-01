@@ -17,9 +17,11 @@
       "autoIncrement": true
     },
     "simulator": {
-      "extends": "preview",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging.cropwms.com/api"
       }
     }
   },
