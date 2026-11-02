@@ -677,6 +677,7 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .shift-menu-item.blocked:hover { background: none; }
 .shift-menu-item .nm { display: flex; flex-direction: column; min-width: 0; }
 .shift-menu-item .nm small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.shift-menu-item .nm small.here { color: var(--ok); }
 .shift-menu-item.blocked .num { display: block; }
 .shift-menu-item .num { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 .shift-menu-item.plain { font-weight: 600; }

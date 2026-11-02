@@ -3,6 +3,8 @@
  * Pure functions (no React, no API) so they can be unit-tested.
  */
 
+import { hereLine } from '../../../lib/allocation-queue';
+
 export type Span = 'day' | 'week' | 'month';
 
 const DAY = 86_400_000;
@@ -464,15 +466,21 @@ export function multiAssignMessage(name: string, results: AssignOutcome[], count
 }
 
 /** One shift's `GET /shifts/:id/candidates` row, as the right-click menu needs it. */
-export type MenuCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; warnings: { message: string }[]; blocks: { message: string }[] };
-export type BestPerson = { workerId: string; name: string; hours: number; canDo: number; of: number; note: string | null; blocked: boolean };
+export type MenuCandidate = {
+  workerId: string; name: string; weekHours: number; eligible: boolean; warnings: { message: string }[]; blocks: { message: string }[];
+  siteHistory?: { shiftsHere: number; lastHere: string | null };
+};
+/** `here` is the person's past work at the site ("Worked here 3 times · last 22 Sep"), only when every shift is at one site. */
+export type BestPerson = { workerId: string; name: string; hours: number; canDo: number; of: number; note: string | null; blocked: boolean; here: string | null; knowsSite: boolean };
+/** For the past-work line: the business's date and its word for a site (lower case). */
+export type HereWords = { today: string; site: string };
 
 /**
  * The best people for one or more shifts (right-click on a card, David 2 Nov). For one shift this keeps the API's order
  * (ready first, then free, then fewest hours). For several, people who can do the most of them come first, then
  * the API's order on average. Up to `top` who can do at least one, then up to `blockedShown` who can do none, greyed.
  */
-export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3): BestPerson[] {
+export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3, here?: HereWords): BestPerson[] {
   const by = new Map<string, { c: MenuCandidate; canDo: number; rank: number; warn: string | null; block: string | null }>();
   for (const list of lists) {
     list.forEach((c, i) => {
@@ -489,6 +497,8 @@ export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3):
     note: e.canDo === 0 ? (e.block ? reasonFor(e.c.name, e.block) : null)
       : e.canDo < of ? `can do ${e.canDo} of ${of}${e.block ? `; ${reasonFor(e.c.name, e.block)}` : ''}`
       : e.warn ? reasonFor(e.c.name, e.warn) : null,
+    here: here ? hereLine(e.c.siteHistory, here.today, here.site) : null,
+    knowsSite: !!here && (e.c.siteHistory?.shiftsHere ?? 0) > 0,
   });
   return [...all.filter(e => e.canDo > 0).slice(0, top), ...all.filter(e => e.canDo === 0).slice(0, blockedShown)].map(row);
 }

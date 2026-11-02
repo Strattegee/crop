@@ -87,4 +87,21 @@ describe('best people for the right-click menu', () => {
     ]);
     expect(r.map(p => [p.workerId, p.canDo, p.note])).toEqual([['b', 2, null], ['a', 1, 'can do 1 of 2; already rostered 07:00–15:00 at Bay St']]);
   });
+
+  it('adds past work at the site only when asked (every shift at one site)', () => {
+    const a = { ...c('a', 2), siteHistory: { shiftsHere: 3, lastHere: '2026-09-22' } };
+    const b = { ...c('b', 4), siteHistory: { shiftsHere: 0, lastHere: null } };
+    const r = bestPeople([[a, b]], 5, 3, { today: '2026-11-02', site: 'venue' });
+    expect(r.map(p => [p.workerId, p.here, p.knowsSite])).toEqual([
+      ['a', 'Worked here 3 times · last 22 Sep', true], ['b', 'New to this venue', false],
+    ]);
+    expect(bestPeople([[a, b]]).map(p => p.here)).toEqual([null, null]); // several sites: no line
+    expect(bestPeople([[a, b]]).every(p => !p.knowsSite)).toBe(true);
+  });
+
+  it('keeps the order when someone knows the site (display only)', () => {
+    const a = { ...c('a', 2), siteHistory: { shiftsHere: 0, lastHere: null } };
+    const b = { ...c('b', 9), siteHistory: { shiftsHere: 5, lastHere: '2026-10-30' } };
+    expect(bestPeople([[a, b]], 5, 3, { today: '2026-11-02', site: 'site' }).map(p => p.workerId)).toEqual(['a', 'b']);
+  });
 });

@@ -288,8 +288,11 @@ export async function assignToShifts(workerId: string, workerName: string, picks
 /** The right-click menu on a shift card: the best people for it (or for every picked shift), from the candidates list. */
 export async function peopleForShifts(shiftIds: string[]): Promise<{ people: BestPerson[] } | { error: string }> {
   try {
-    const lists = await Promise.all(shiftIds.slice(0, 30).map(id => api<{ candidates: MenuCandidate[] }>(`/shifts/${id}/candidates`).then(r => r.candidates)));
-    return { people: bestPeople(lists) };
+    const res = await Promise.all(shiftIds.slice(0, 30).map(id => api<{ shift: { facilityId: string }; candidates: MenuCandidate[] }>(`/shifts/${id}/candidates`)));
+    // Past work at the site only when every shift is at the same one (each line is about one site).
+    const oneSite = res.length > 0 && res.every(r => r.shift.facilityId === res[0]!.shift.facilityId);
+    const here = oneSite ? { today: todayIn(await businessZone()), site: (await words()).lower(T.site) } : undefined;
+    return { people: bestPeople(res.map(r => r.candidates), 5, 3, here) };
   } catch (err) {
     if (err && typeof err === 'object' && 'digest' in err) throw err;
     return { error: err instanceof ApiError ? err.message : 'Could not load the list. Please try again.' };

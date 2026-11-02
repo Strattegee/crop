@@ -600,3 +600,11 @@ Newest first. One entry per working session or scheduled run.
 - Next: other unheld items (past work in the roster's right-click menu; "Only shifts I'm on").
 - Questions for David: is releasing by time band enough, or do you want layout C as its own screen grouped by site or role? Should people who know the site be suggested first?
 - Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
+
+## 2026-11-03 morning, 9:10am Melbourne (scheduled run)
+
+- Shipped: past work at the site in the roster's right-click menu. Right-click an open shift (or several picked shifts at the same site) and each suggested person now has a second line, "Worked here 3 times · last 22 Sep" (green) or "New to this site", the same as the Allocations fill panel. Shifts picked across different sites show no line. The order of people is unchanged.
+- Not checked in a browser (no local sign-in in this run); unit tests cover the line and that the order stays the same; every test passes.
+- Next: other unheld items ("Only shifts I'm on" on Allocations needs a meaning from David; a real Office for businesses with several branches).
+- Questions for David: is releasing by time band enough, or layout C as its own screen? Should people who know the site be suggested first?
+- Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
