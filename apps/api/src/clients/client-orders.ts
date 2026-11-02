@@ -68,6 +68,8 @@ export interface ConfirmationFacts {
   localStart: string;
   localEnd: string;
   clientReference: string | null;
+  /** The client confirms each booking before it counts as filled (`clients.confirms_bookings`): the email asks them to. */
+  askToConfirm?: boolean;
 }
 
 /** "Ward 4, Bayside Hospital" (area first when there is one). */
@@ -80,18 +82,22 @@ const place = (f: Pick<ConfirmationFacts, 'siteName' | 'areaName'>) => (f.areaNa
 export function clientConfirmationEmail(f: ConfirmationFacts, w: Words = DEFAULT_WORDS) {
   const when = `${fmtDate(f.localDate)} ${f.localStart}–${f.localEnd}`;
   const ref = f.clientReference ? ` (your ref ${f.clientReference})` : '';
-  const subject = `Booked: ${f.personName} for ${place(f)}, ${when}${ref}`;
+  const subject = `${f.askToConfirm ? 'Please confirm' : 'Booked'}: ${f.personName} for ${place(f)}, ${when}${ref}`;
   const lines = [
     `Hello ${f.contactName},`,
     '',
-    `${f.personName} (${f.role}) is booked for the ${w.lower(T.shift)} you asked ${f.businessName} for:`,
+    f.askToConfirm
+      ? `${f.businessName} has ${f.personName} (${f.role}) ready for the ${w.lower(T.shift)} you asked for. Please confirm you're happy with them:`
+      : `${f.personName} (${f.role}) is booked for the ${w.lower(T.shift)} you asked ${f.businessName} for:`,
     '',
     `${w.one(T.site)}: ${f.siteName}`,
     ...(f.areaName ? [`${w.one(T.area)}: ${f.areaName}`] : []),
     `When: ${when}`,
     ...(f.clientReference ? [`Your reference: ${f.clientReference}`] : []),
     '',
-    `If anything changes, please contact ${f.businessName}.`,
+    ...(f.askToConfirm
+      ? [`Please reply to this email or call ${f.businessName} to confirm. If they aren't suitable, let us know and we'll find someone else.`]
+      : [`If anything changes, please contact ${f.businessName}.`]),
     '',
     'Thanks,',
     f.businessName,
@@ -99,23 +105,48 @@ export function clientConfirmationEmail(f: ConfirmationFacts, w: Words = DEFAULT
   return { subject, body: lines.join('\n') };
 }
 
-export interface OrderCounts { total: number; booked: number; assigned: number; open: number; cancelled: number }
+export interface OrderCounts { total: number; booked: number; assigned: number; open: number; cancelled: number; toConfirm?: number }
 
-/** One line for an order: "2 of 3 filled", "2 of 3 filled · 1 waiting to confirm · 1 cancelled", "Cancelled". */
+/**
+ * One line for an order: "2 of 3 filled", "2 of 3 filled · 1 waiting to confirm · 1 cancelled", "Cancelled";
+ * booked ones the client still has to confirm add "1 for the client to confirm".
+ */
 export function orderSummary(c: OrderCounts, w: Words = DEFAULT_WORDS): string {
   const live = c.total - c.cancelled;
   if (c.total > 0 && live === 0) return 'Cancelled';
   const parts = [live === c.booked && live > 0 ? `All ${w.count(live, T.shift)} filled` : `${c.booked} of ${live} filled`];
   if (c.assigned) parts.push(`${c.assigned} waiting to confirm`);
+  if (c.toConfirm) parts.push(`${c.toConfirm} for the ${w.lower(T.client)} to confirm`);
   if (c.cancelled) parts.push(`${c.cancelled} cancelled`);
   return parts.join(' · ');
 }
 
-export type ClientShiftStage = 'open' | 'offered' | 'assigned' | 'booked';
+export type ClientShiftStage = 'open' | 'offered' | 'assigned' | 'client_to_confirm' | 'booked';
+export const CLIENT_SHIFT_STAGES: readonly ClientShiftStage[] = ['open', 'offered', 'assigned', 'client_to_confirm', 'booked'];
 
-/** A client shift's stage for the allocation screen (same order as the roster's colours). */
-export function clientShiftStage(s: { status: string; offersPending: number }): ClientShiftStage {
+/** Whether the client still has to confirm the person booked (their client confirms bookings, not yet confirmed). */
+export const waitsForClient = (s: { status: string; clientConfirms?: boolean; clientConfirmedAt?: string | Date | null }) =>
+  s.status === 'booked' && Boolean(s.clientConfirms) && !s.clientConfirmedAt;
+
+/**
+ * A client shift's stage for the allocation screen (same order as the roster's colours). A booked shift whose client
+ * confirms each booking is "client to confirm" until the office records the client's yes.
+ */
+export function clientShiftStage(s: { status: string; offersPending: number; clientConfirms?: boolean; clientConfirmedAt?: string | Date | null }): ClientShiftStage {
+  if (waitsForClient(s)) return 'client_to_confirm';
   if (s.status === 'booked') return 'booked';
   if (s.status === 'assigned') return 'assigned';
   return s.offersPending > 0 ? 'offered' : 'open';
+}
+
+/** Why the office can't record the client's yes on this shift, or null. Tokens are filled with the business's words. */
+export function clientConfirmRefusal(s: {
+  onOrder: boolean; clientConfirms: boolean; status: string; started: boolean; clientConfirmedAt: string | Date | null;
+}): string | null {
+  if (!s.onOrder) return 'This {shift} isn’t from a {client}’s order';
+  if (!s.clientConfirms) return 'This {client} doesn’t confirm bookings. Change that in the {client}’s set-up if they should.';
+  if (s.status !== 'booked') return 'Only a booked {shift} can be confirmed by the {client}';
+  if (s.started) return 'This {shift} has already started';
+  if (s.clientConfirmedAt) return 'The {client} has already confirmed this booking';
+  return null;
 }

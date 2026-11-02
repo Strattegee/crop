@@ -5,14 +5,46 @@
  */
 import { mondayOf } from '../app/(office)/roster/view';
 
-export type Stage = 'open' | 'offered' | 'assigned' | 'booked';
-/** Roster stage words and card classes (Steve's colours, 26 Oct). */
+export type Stage = 'open' | 'offered' | 'assigned' | 'client_to_confirm' | 'booked';
+/** Stages in the roster's order; "client to confirm" (migration 0069) sits between allocated and booked. */
+export const STAGES: readonly Stage[] = ['open', 'offered', 'assigned', 'client_to_confirm', 'booked'];
+/** Roster stage words and card classes (Steve's colours, 26 Oct). Use `stageLabel` for the business's word for client. */
 export const STAGE: Record<Stage, { label: string; cls: string }> = {
   open: { label: 'Unfilled', cls: 'unfilled' },
   offered: { label: 'Offered', cls: 'offered' },
   assigned: { label: 'Allocated', cls: 'allocated' },
+  client_to_confirm: { label: 'Client to confirm', cls: 'to-confirm' },
   booked: { label: 'Booked', cls: 'booked' },
 };
+
+/** A stage's words, with the business's word for client: "Customer to confirm". */
+export function stageLabel(stage: Stage, client = 'Client'): string {
+  return stage === 'client_to_confirm' ? `${client} to confirm` : STAGE[stage].label;
+}
+
+/** Client rank (1 = most loyal … 7 = fill-in) as a chip: "Rank 1"; nothing when not ranked. */
+export function rankChip(rank: number | null | undefined): string | null {
+  return rank && rank >= 1 && rank <= 7 ? `Rank ${rank}` : null;
+}
+
+/** The ranks for the client set-up's choice, with what the ends mean. */
+export const RANK_CHOICES: { value: string; label: string }[] = [
+  { value: '', label: 'Not ranked' },
+  ...[1, 2, 3, 4, 5, 6, 7].map(n => ({ value: String(n), label: n === 1 ? '1 (most loyal)' : n === 7 ? '7 (fill-in, last option)' : String(n) })),
+];
+
+/**
+ * The shift panel's line for a booked shift on an order whose client confirms each booking, or null:
+ * "Waiting for Bayside Health to confirm Sarah Example" / "Bayside Health confirmed (Pat at the office, Mon 2 Nov 10:15)".
+ */
+export function clientConfirmLine(
+  s: { status: string; workerName?: string | null; clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null },
+  client: string, when: (iso: string) => string,
+): { waiting: boolean; text: string } | null {
+  if (!s.clientConfirms || s.status !== 'booked') return null;
+  if (!s.clientConfirmedAt) return { waiting: true, text: `Waiting for the ${client} to confirm ${s.workerName ?? 'this booking'}. Record it when they say yes; if they say no, remove the person.` };
+  return { waiting: false, text: `The ${client} confirmed${s.clientConfirmedBy ? `, recorded by ${s.clientConfirmedBy}` : ''} ${when(s.clientConfirmedAt)}.` };
+}
 
 export const CHANNELS = [
   { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }, { value: 'portal', label: 'Portal' }, { value: 'other', label: 'Other' },

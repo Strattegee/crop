@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import type { Words } from '../../../lib/terms';
 import { T } from '../../../lib/terms';
-import { CHANNELS, STAGE, askedLine, byDay, findStaffHref, type PlaceGroup, type Stage } from '../../../lib/client-orders';
-import { createClientOrder } from './actions';
+import { CHANNELS, STAGES, askedLine, byDay, findStaffHref, rankChip, stageLabel, type PlaceGroup, type Stage } from '../../../lib/client-orders';
+import { clientConfirmedHere, createClientOrder } from './actions';
 
 export type ClientShift = {
   id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string;
   breakMinutes: number; workerName: string | null; clientName: string; orderId: string | null; clientReference: string | null; requestedByName: string | null;
   orderChannel: string | null; offersPending: number; stage: Stage; notes: string | null; genderRequested: 'F' | 'M' | null;
+  /** The client's rank (1 = most loyal … 7 = fill-in), null when not ranked (migration 0069). */
+  clientRank: number | null;
 };
 export type ClientShifts = { days: number; counts: Record<Stage, number>; shifts: ClientShift[] };
 export type ClientOrder = {
@@ -26,7 +28,7 @@ const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'sho
 export function ClientShiftsSection({ tw, places, roles, data, orders, today, when }: {
   tw: Words; places: PlaceGroup[]; roles: string[]; data: ClientShifts | null; orders: ClientOrder[]; today: string; when: (iso: string) => string;
 }) {
-  const shift = tw.lower(T.shift), shifts = tw.lower(T.shift, true), client = tw.lower(T.client);
+  const shift = tw.lower(T.shift), shifts = tw.lower(T.shift, true), client = tw.lower(T.client), Client = tw.one(T.client);
   return (
     <>
       <details className="card client-order" open={!data || data.shifts.length === 0}>
@@ -96,8 +98,8 @@ export function ClientShiftsSection({ tw, places, roles, data, orders, today, wh
         ) : (
           <>
             <p className="small client-counts">
-              {(['open', 'offered', 'assigned', 'booked'] as const).map(k => (
-                <span key={k} className={`cstage cstage-${k}`}>{STAGE[k].label} {data.counts[k]}</span>
+              {STAGES.filter(k => k !== 'client_to_confirm' || data.counts[k] > 0).map(k => (
+                <span key={k} className={`cstage cstage-${k}`}>{stageLabel(k, Client)} {data.counts[k] ?? 0}</span>
               ))}
             </p>
             {byDay(data.shifts).map(g => (
@@ -105,12 +107,14 @@ export function ClientShiftsSection({ tw, places, roles, data, orders, today, wh
                 <h3>{g.label}</h3>
                 {g.shifts.map(s => {
                   const asked = askedLine(s);
+                  const rank = rankChip(s.clientRank);
                   return (
                     <div key={s.id} className="client-shift">
-                      <span className={`cstage cstage-${s.stage}`}>{STAGE[s.stage].label}{s.stage === 'offered' && s.offersPending > 1 ? ` to ${s.offersPending}` : ''}</span>
+                      <span className={`cstage cstage-${s.stage}`}>{stageLabel(s.stage, Client)}{s.stage === 'offered' && s.offersPending > 1 ? ` to ${s.offersPending}` : ''}</span>
                       <span className="client-shift-what">
                         <strong>{s.localStart}–{s.localEnd}</strong> {s.role}
                         <span className="muted"> · {[s.clientName, s.facilityName, s.areaName].filter(Boolean).join(' · ')}</span>
+                        {rank && <> <span className="rank-chip" title={`${Client} rank: 1 = most loyal, 7 = fill-in`}>{rank}</span></>}
                         {s.workerName && <> · <strong>{s.workerName}</strong></>}
                         {(asked || s.genderRequested) && (
                           <span className="muted small client-shift-asked">
@@ -119,7 +123,12 @@ export function ClientShiftsSection({ tw, places, roles, data, orders, today, wh
                           </span>
                         )}
                       </span>
-                      <Link className="btn small secondary" href={findStaffHref(s)}>{s.stage === 'booked' ? 'Open' : 'Find staff'}</Link>
+                      {s.stage === 'client_to_confirm' && (
+                        <form action={clientConfirmedHere.bind(null, s.id)}>
+                          <button className="btn small" title={`Record that the ${client} said yes to ${s.workerName ?? 'this person'}. If they said no, open it and remove the person.`}>{Client} confirmed</button>
+                        </form>
+                      )}
+                      <Link className="btn small secondary" href={findStaffHref(s)}>{s.stage === 'booked' || s.stage === 'client_to_confirm' ? 'Open' : 'Find staff'}</Link>
                     </div>
                   );
                 })}

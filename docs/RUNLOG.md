@@ -556,3 +556,11 @@ Newest first. One entry per working session or scheduled run.
 - Not tried on a phone (no build in this run); every test passes, including new ones for these words.
 - Next: other unheld items (shift duties follow-ups, client orders' next steps: client contacts, change and cancellation emails).
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 night (2 Nov, David)
+
+- Shipped: two client settings from David's answers. Each client can be set to "confirms each booking before it's filled", and given a rank from 1 (most loyal) to 7 (a fill-in, last option); both are on the client's page and when adding a client. For a client who confirms bookings, a booked shift on their order now shows "Client to confirm" on Allocations until the office presses "Client confirmed" (the same button, with Undo, is on the roster's shift panel). The email to that client says "Please confirm" and asks them to reply or call; other clients get the usual "Booked" email. If the client says no, the office removes the person as usual. Allocations lists shifts starting at the same time with the higher-ranked client first, and shows a small "Rank 1" chip.
+- Saved David's notes on the agency's current allocation screen (placeholders only, no real names) in `docs/research/c4u-allocation-screen/`, and his three answers with the three layouts under discussion in `docs/decisions/2026-11-02-allocation-screen.md`.
+- Next: the allocation screen itself, once David chooses a layout.
+- Waiting on David: which allocation layout (A, B or C).
+

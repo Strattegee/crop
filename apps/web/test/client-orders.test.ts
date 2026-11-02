@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocationsMenu, askedLine, byDay, findStaffHref, orderPlaces, parsePlace } from '../lib/client-orders';
+import { RANK_CHOICES, STAGES, allocationsMenu, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel } from '../lib/client-orders';
 
 describe('client orders on Allocations (David, 2 Nov)', () => {
   it('offers client sites and their areas as one choice, grouped by client', () => {
@@ -40,5 +40,29 @@ describe('client orders on Allocations (David, 2 Nov)', () => {
     expect(allocationsMenu({ agencyLinks: 0, open: 0, hasClients: true, clientShiftsOpen: 5 })).toEqual({ show: true, count: 5 });
     expect(allocationsMenu({ agencyLinks: 1, open: 2, hasClients: true, clientShiftsOpen: 5 })).toEqual({ show: true, count: 7 });
     expect(allocationsMenu({ agencyLinks: 1, open: 2 })).toEqual({ show: true, count: 2 });
+  });
+
+  it('words the client-to-confirm stage and the client’s rank (migration 0069)', () => {
+    expect(STAGES).toEqual(['open', 'offered', 'assigned', 'client_to_confirm', 'booked']);
+    expect(stageLabel('client_to_confirm')).toBe('Client to confirm');
+    expect(stageLabel('client_to_confirm', 'Customer')).toBe('Customer to confirm');
+    expect(stageLabel('booked', 'Customer')).toBe('Booked');
+    expect(rankChip(1)).toBe('Rank 1');
+    expect(rankChip(null)).toBeNull();
+    expect(rankChip(9)).toBeNull();
+    expect(RANK_CHOICES.map(r => r.value)).toEqual(['', '1', '2', '3', '4', '5', '6', '7']);
+    expect(RANK_CHOICES[1].label).toBe('1 (most loyal)');
+    expect(RANK_CHOICES[7].label).toBe('7 (fill-in, last option)');
+  });
+
+  it('says on the shift panel whether the client still has to confirm', () => {
+    const when = (iso: string) => `at ${iso}`;
+    const booked = { status: 'booked', workerName: 'Sarah Example', clientConfirms: true, clientConfirmedAt: null };
+    expect(clientConfirmLine(booked, 'client', when)).toEqual({ waiting: true,
+      text: 'Waiting for the client to confirm Sarah Example. Record it when they say yes; if they say no, remove the person.' });
+    expect(clientConfirmLine({ ...booked, clientConfirmedAt: 'T', clientConfirmedBy: 'Alex Office' }, 'customer', when))
+      .toEqual({ waiting: false, text: 'The customer confirmed, recorded by Alex Office at T.' });
+    expect(clientConfirmLine({ ...booked, clientConfirms: false }, 'client', when)).toBeNull();
+    expect(clientConfirmLine({ ...booked, status: 'assigned' }, 'client', when)).toBeNull();
   });
 });

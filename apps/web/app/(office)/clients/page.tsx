@@ -6,10 +6,12 @@ import { CLIENT_STATUS } from '../../../lib/places';
 import { Notices } from '../notices';
 import { addClient } from './actions';
 import { T, words } from '../../../lib/terms';
+import { rankChip } from '../../../lib/client-orders';
+import { ClientAllocationFields } from './client-fields';
 
 export const dynamic = 'force-dynamic';
 
-type ClientRow = { id: string; name: string; abn: string | null; status: string; billingEmail: string | null; facilityCount: number };
+type ClientRow = { id: string; name: string; abn: string | null; status: string; billingEmail: string | null; facilityCount: number; confirmsBookings: boolean; rank: number | null };
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -29,6 +31,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
             <label>Billing contact<input name="billingContactName" maxLength={200} /></label>
             <label>Billing email<input name="billingEmail" type="email" maxLength={200} /></label>
             <label>Phone<input name="phone" maxLength={30} /></label>
+            <ClientAllocationFields client={tw.lower(T.client)} shift={tw.lower(T.shift)} />
             <button type="submit" className="btn">Add client</button>
           </form>
         </details>
@@ -36,7 +39,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       <div className="card" style={{ overflowX: 'auto' }}>
         {clients.length === 0 ? <p className="muted" style={{ margin: 0 }}>No clients yet.</p> : (
           <table>
-            <thead><tr><th>Name</th><th>ABN</th><th>Facilities</th><th>Billing email</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>ABN</th><th>Facilities</th><th>Billing email</th><th>Rank</th><th>Status</th></tr></thead>
             <tbody>
               {clients.map(c => (
                 <tr key={c.id}>
@@ -44,6 +47,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                   <td>{c.abn ? c.abn.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4') : '—'}</td>
                   <td>{c.facilityCount}</td>
                   <td>{c.billingEmail ?? '—'}</td>
+                  <td>{rankChip(c.rank) ? <span className="rank-chip">{rankChip(c.rank)}</span> : '—'}{c.confirmsBookings && <div className="muted small">Confirms bookings</div>}</td>
                   <td><Badge label={CLIENT_STATUS[c.status]} /></td>
                 </tr>
               ))}

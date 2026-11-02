@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { ClientConfirmations } from '../src/clients/client-orders.controller.js';
-import { clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder } from '../src/clients/client-orders.js';
+import { clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, waitsForClient } from '../src/clients/client-orders.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -65,6 +65,32 @@ describe('client orders: rules (David, 2 Nov)', () => {
     expect(clientShiftStage({ status: 'open', offersPending: 2 })).toBe('offered');
     expect(clientShiftStage({ status: 'assigned', offersPending: 0 })).toBe('assigned');
     expect(clientShiftStage({ status: 'booked', offersPending: 0 })).toBe('booked');
+  });
+
+  it('asks a client who confirms bookings to confirm, and has a "client to confirm" stage', () => {
+    const facts = { contactName: 'Pat Ward', businessName: 'Caring Example', personName: 'Sarah Example', role: 'Registered Nurse',
+      siteName: 'Bayside Hospital', areaName: 'Ward 4', localDate: '2026-11-10', localStart: '07:00', localEnd: '15:30', clientReference: 'PO-77', askToConfirm: true };
+    const { subject, body } = clientConfirmationEmail(facts);
+    expect(subject).toBe('Please confirm: Sarah Example for Ward 4, Bayside Hospital, Tue 10 Nov 07:00–15:30 (your ref PO-77)');
+    expect(body).toContain('Caring Example has Sarah Example (Registered Nurse) ready for the shift you asked for. Please confirm you\'re happy with them:');
+    expect(body).toContain('Please reply to this email or call Caring Example to confirm.');
+    expect(body).not.toContain('is booked');
+    expect(orderSummary({ total: 3, booked: 2, assigned: 0, open: 1, cancelled: 0, toConfirm: 1 })).toBe('2 of 3 filled · 1 for the client to confirm');
+    expect(orderSummary({ total: 1, booked: 1, assigned: 0, open: 0, cancelled: 0, toConfirm: 1 },
+      makeWords([{ code: 1015, singular: 'Customer', plural: 'Customers' }]))).toBe('All 1 shift filled · 1 for the customer to confirm');
+    const booked = { status: 'booked', offersPending: 0, clientConfirms: true, clientConfirmedAt: null };
+    expect(clientShiftStage(booked)).toBe('client_to_confirm');
+    expect(waitsForClient(booked)).toBe(true);
+    expect(clientShiftStage({ ...booked, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toBe('booked');
+    expect(clientShiftStage({ ...booked, clientConfirms: false })).toBe('booked');
+    expect(clientShiftStage({ ...booked, status: 'assigned' })).toBe('assigned');
+    const ok = { onOrder: true, clientConfirms: true, status: 'booked', started: false, clientConfirmedAt: null };
+    expect(clientConfirmRefusal(ok)).toBeNull();
+    expect(clientConfirmRefusal({ ...ok, onOrder: false })).toMatch(/order/);
+    expect(clientConfirmRefusal({ ...ok, clientConfirms: false })).toMatch(/doesn’t confirm bookings/);
+    expect(clientConfirmRefusal({ ...ok, status: 'assigned' })).toMatch(/Only a booked/);
+    expect(clientConfirmRefusal({ ...ok, started: true })).toMatch(/already started/);
+    expect(clientConfirmRefusal({ ...ok, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toMatch(/already confirmed/);
   });
 });
 
@@ -175,7 +201,7 @@ describe('client orders: API', () => {
     await http().post('/shifts').set(as('alloc')).send({ facilityId: ids.office, role: 'Admin', date: ahead(3), startTime: '09:00', endTime: '17:00' }).expect(201);
     const r = (await http().get('/allocations/client-shifts').set(as('alloc')).expect(200)).body;
     expect(r.shifts).toHaveLength(4);
-    expect(r.counts).toEqual({ open: 4, offered: 0, assigned: 0, booked: 0 });
+    expect(r.counts).toEqual({ open: 4, offered: 0, assigned: 0, client_to_confirm: 0, booked: 0 });
     expect(r.shifts[0]).toMatchObject({ clientName: 'Bayside Health', facilityName: 'Bayside Campus', areaName: 'Ward 4', orderId: ids.order,
       clientReference: 'PO-77', requestedByName: 'Pat Ward', stage: 'open', localStart: '07:00', localEnd: '15:30' });
     expect((await http().get(`/allocations/client-shifts?clientId=${ids.hill}`).set(as('alloc')).expect(200)).body.shifts).toEqual([]);
@@ -229,5 +255,104 @@ describe('client orders: API', () => {
     }
     expect(await confirmations().runOnce()).toBe(0);
     expect(await emails()).toHaveLength(2);
+  });
+
+  it('saves a client’s set-up: confirms bookings and rank', async () => {
+    const created = (await http().post('/clients').set(as('admin')).send({ name: 'Loyal Aged Care', confirmsBookings: true, rank: 1 }).expect(201)).body;
+    expect(created).toMatchObject({ confirmsBookings: true, rank: 1 });
+    ids.loyal = created.id;
+    expect((await http().get(`/clients/${ids.bayside}`).set(as('alloc')).expect(200)).body).toMatchObject({ confirmsBookings: false, rank: null });
+    await http().patch(`/clients/${ids.bayside}`).set(as('alloc')).send({ rank: 2 }).expect(403);
+    await http().patch(`/clients/${ids.bayside}`).set(as('admin')).send({ rank: 8 }).expect(400);
+    await http().patch(`/clients/${ids.bayside}`).set(as('admin')).send({ confirmsBookings: 'yes' }).expect(400);
+    const p = (await http().patch(`/clients/${ids.bayside}`).set(as('admin')).send({ confirmsBookings: true, rank: 3 }).expect(200)).body;
+    expect(p).toMatchObject({ confirmsBookings: true, rank: 3 });
+    // Leaving a field out keeps it; null clears the rank.
+    expect((await http().patch(`/clients/${ids.bayside}`).set(as('admin')).send({ phone: '03 9000 0001' }).expect(200)).body).toMatchObject({ confirmsBookings: true, rank: 3 });
+    expect((await http().patch(`/clients/${ids.hill}`).set(as('admin')).send({ rank: 5 }).expect(200)).body.rank).toBe(5);
+    expect((await http().patch(`/clients/${ids.hill}`).set(as('admin')).send({ rank: null }).expect(200)).body.rank).toBeNull();
+    const list = (await http().get('/clients').set(as('alloc')).expect(200)).body as { name: string; rank: number | null }[];
+    expect(list.find(c => c.name === 'Loyal Aged Care')).toMatchObject({ confirmsBookings: true, rank: 1 });
+    expect((await owner.query(`select 1 from audit_log where table_name = 'clients' and row_id = $1 and action = 'update'`, [ids.bayside])).rowCount).toBeGreaterThan(0);
+    // The other business sees none of it.
+    await http().get(`/clients/${ids.bayside}`).set(as('nosy')).expect(404);
+  });
+
+  it('waits for the client to confirm a booking, then records their yes', async () => {
+    const before = (await emails()).length;
+    const shiftId = (await http().post('/client-orders').set(as('alloc')).send(order({ date: ahead(9), clientReference: 'PO-90' })).expect(201)).body.ids[0] as string;
+    const stageOf = async () => ((await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.shifts as { id: string; stage: string }[])
+      .find(s => s.id === shiftId)!.stage;
+    // Not booked yet: refused.
+    const early = await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(409);
+    expect(early.body.message).toBe('Only a booked shift can be confirmed by the client');
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    expect(await stageOf()).toBe('assigned');
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await stageOf()).toBe('client_to_confirm');
+    const counts = (await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.counts;
+    // Bayside's earlier booked shifts count too: the setting applies to bookings not yet confirmed, whenever made.
+    expect(counts.client_to_confirm).toBe(5);
+    const roster = (await http().get(`/shifts/${shiftId}`).set(as('alloc')).expect(200)).body;
+    expect(roster).toMatchObject({ clientConfirms: true, clientConfirmedAt: null });
+
+    // The email asks the client to confirm.
+    expect(await confirmations().runOnce()).toBe(1);
+    const sent = (await emails()).slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toMatch(/^Please confirm: Sarah Example for Ward 4, Bayside Campus, .* \(your ref PO-90\)$/);
+    expect(sent[0].body).toContain('Please reply to this email or call Caring Example to confirm.');
+    const orders = (await http().get('/client-orders').set(as('alloc')).expect(200)).body as { clientReference: string; summary: string }[];
+    expect(orders.find(o => o.clientReference === 'PO-90')!.summary).toBe('All 1 shift filled · 1 for the client to confirm');
+
+    // Only the office records it, once; nothing goes in the shift log (not a roster change).
+    await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('worker')).expect(403);
+    await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('nosy')).expect(404);
+    const changes = (await owner.query('select count(*)::int as n from shift_changes where shift_id = $1', [shiftId])).rows[0].n;
+    const done = (await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(200)).body;
+    expect(done.clientConfirmedAt).not.toBeNull();
+    expect(done.clientConfirmedBy).toBeTruthy();
+    expect(await stageOf()).toBe('booked');
+    expect((await owner.query('select count(*)::int as n from shift_changes where shift_id = $1', [shiftId])).rows[0].n).toBe(changes);
+    expect((await owner.query(`select 1 from audit_log where table_name = 'shifts' and row_id = $1 and action = 'update' and new_values ? 'client_confirmed_at'`, [shiftId])).rowCount).toBe(1);
+    const again = await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(409);
+    expect(again.body.message).toBe('The client has already confirmed this booking');
+
+    // Undo puts it back; a different person booked later needs the client's yes again.
+    await http().post(`/shifts/${shiftId}/client-confirmed/undo`).set(as('alloc')).expect(200);
+    expect(await stageOf()).toBe('client_to_confirm');
+    await http().post(`/shifts/${shiftId}/client-confirmed/undo`).set(as('alloc')).expect(409);
+    await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(200);
+    await http().post(`/shifts/${shiftId}/unassign`).set(as('alloc')).send({}).expect(200);
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200);
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await stageOf()).toBe('client_to_confirm');
+  });
+
+  it('refuses a client confirmation for shifts that aren’t from such a client’s order', async () => {
+    const own = (await http().post('/shifts').set(as('alloc')).send({ facilityId: ids.office, role: 'Admin', date: ahead(10), startTime: '09:00', endTime: '17:00' }).expect(201)).body;
+    const ownId = (Array.isArray(own.ids) ? own.ids[0] : own.id) as string;
+    expect((await http().post(`/shifts/${ownId}/client-confirmed`).set(as('alloc')).expect(409)).body.message).toBe('This shift isn’t from a client’s order');
+    const hillShift = (await http().post('/client-orders').set(as('alloc')).send(order({ clientId: ids.hill, facilityId: ids.hillSite, areaId: undefined, date: ahead(10) })).expect(201)).body.ids[0];
+    await http().post(`/shifts/${hillShift}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    await http().post(`/shifts/${hillShift}/confirm`).set(as('alloc')).expect(200);
+    expect((await http().post(`/shifts/${hillShift}/client-confirmed`).set(as('alloc')).expect(409)).body.message).toMatch(/doesn’t confirm bookings/);
+    // Hillview doesn't confirm bookings: the usual "Booked" email.
+    await confirmations().runOnce();
+    const last = (await emails()).at(-1)!;
+    expect(last.subject).toMatch(/^Booked: Sarah Example for Hillview House/);
+  });
+
+  it('sorts by start time, then the client’s rank (ranked first, 1 first)', async () => {
+    await http().patch(`/clients/${ids.hill}`).set(as('admin')).send({ rank: 1 }).expect(200); // Bayside is 3
+    const unranked = (await http().post('/clients').set(as('admin')).send({ name: 'Aardvark Care' }).expect(201)).body.id;
+    const aSite = (await http().post('/facilities').set(as('admin')).send({ name: 'Aardvark House', state: 'VIC', clientId: unranked }).expect(201)).body.id;
+    const at = { date: ahead(12), startTime: '06:00', endTime: '14:00', clientReference: 'SORT' };
+    await http().post('/client-orders').set(as('alloc')).send(order({ ...at, clientId: unranked, facilityId: aSite, areaId: undefined })).expect(201);
+    await http().post('/client-orders').set(as('alloc')).send(order({ ...at })).expect(201);
+    await http().post('/client-orders').set(as('alloc')).send(order({ ...at, clientId: ids.hill, facilityId: ids.hillSite, areaId: undefined })).expect(201);
+    const rows = ((await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.shifts as { clientName: string; clientRank: number | null; clientReference: string }[])
+      .filter(s => s.clientReference === 'SORT');
+    expect(rows.map(r => [r.clientName, r.clientRank])).toEqual([['Hillview Care', 1], ['Bayside Health', 3], ['Aardvark Care', null]]);
   });
 });

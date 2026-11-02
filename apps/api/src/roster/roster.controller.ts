@@ -69,7 +69,10 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
   (select count(*)::int from (select m.item_id from stock_movements m where m.shift_id = s.id and m.kind in ('issued', 'used', 'returned')
                                group by m.item_id having sum(m.quantity) <> 0) x) as "itemCount",
   s.covering_worker_id as "coveringWorkerId",
-  (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from workers cw where cw.id = s.covering_worker_id) as "coveringName"`;
+  (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from workers cw where cw.id = s.covering_worker_id) as "coveringName",
+  coalesce((select cc.confirms_bookings from client_orders co join clients cc on cc.id = co.client_id where co.id = s.client_order_id), false) as "clientConfirms",
+  case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt",
+  case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_by end as "clientConfirmedBy"`;
 export const SHIFT_FROM = `shifts s join facilities f on f.id = s.facility_id
   left join areas a on a.id = s.area_id left join shift_codes sc on sc.id = s.shift_code_id
   left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
