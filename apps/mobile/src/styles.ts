@@ -1,9 +1,11 @@
 import { StyleSheet } from 'react-native';
 
-export const NAVY = '#1f3a5f';
+/** Milos's palette (2 Nov): navy for text and titles, orange accent; the web uses the same colours. */
+export const NAVY = '#0f1e3d';
+export const ORANGE = '#f26b1d';
 export const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#f6f7f9' },
-  kpi: { width: 150, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e1e4e8', borderLeftWidth: 4 },
+  page: { flex: 1, backgroundColor: '#f4f6fa' },
+  kpi: { width: 150, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#d3dae5', borderLeftWidth: 4 },
   kpiOff: { borderLeftColor: '#b42318', backgroundColor: '#fdecea' },
   kpiValue: { fontSize: 24, fontWeight: '700', color: NAVY, marginTop: 2 },
   kpiValueOff: { color: '#b42318' },
@@ -12,18 +14,18 @@ export const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   title: { fontSize: 32, fontWeight: '700', color: NAVY },
   heading: { fontSize: 20, fontWeight: '700', color: NAVY },
-  muted: { color: '#5d6775' },
+  muted: { color: '#4f5d75' },
   small: { fontSize: 13, marginTop: 4 },
   error: { color: '#b42318', marginVertical: 12 },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingBottom: 8 },
   tabs: { flexDirection: 'row', marginHorizontal: 16, borderRadius: 8, backgroundColor: '#e6e9ee', padding: 3 },
   tab: { flex: 1, paddingVertical: 10, paddingHorizontal: 2, alignItems: 'center', borderRadius: 6 },
   tabOn: { backgroundColor: '#fff' },
-  tabText: { color: '#5d6775', fontWeight: '600', fontSize: 13 },
+  tabText: { color: '#4f5d75', fontWeight: '600', fontSize: 13 },
   tabTextOn: { color: NAVY },
   list: { padding: 16, paddingBottom: 48 },
   day: { fontWeight: '700', marginTop: 12, marginBottom: 6, color: NAVY },
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e1e4e8' },
+  card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#d3dae5' },
   cardTitle: { fontSize: 17, fontWeight: '600', marginBottom: 2 },
   badge: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden', fontSize: 13 },
   badgeBooked: { backgroundColor: '#d3f0dc', color: '#11592b' },
@@ -38,7 +40,7 @@ export const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   section: { fontSize: 17, fontWeight: '700', color: NAVY, marginTop: 20, marginBottom: 8 },
-  dayRow: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#e1e4e8' },
+  dayRow: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#d3dae5' },
   dayHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: '#c5ccd6', backgroundColor: '#fff', minHeight: 36 },
@@ -50,7 +52,7 @@ export const styles = StyleSheet.create({
   stepText: { fontSize: 20, color: NAVY },
   label: { fontWeight: '600', marginTop: 10, marginBottom: 4 },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#c5ccd6', borderRadius: 8, padding: 10, minHeight: 44 },
-  stepMark: { width: 22, fontSize: 18, textAlign: 'center', color: '#5d6775' },
+  stepMark: { width: 22, fontSize: 18, textAlign: 'center', color: '#4f5d75' },
   stepMarkDone: { color: '#1a7f37' },
   link: { color: NAVY, textDecorationLine: 'underline', fontWeight: '600' },
 });

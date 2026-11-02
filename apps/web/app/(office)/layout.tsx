@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -6,6 +7,9 @@ import { currentAgency, currentUser, OFFICE_ROLES } from '../../lib/current-user
 import { TopNav, UserMenu, type NavItem, type NavLink } from './nav';
 import { FUNCTIONS } from '../../lib/functions';
 import { T, words } from '../../lib/terms';
+import { BrandMark } from '../../lib/logo';
+import { parseTheme, THEME_COOKIE, THEME_LABEL, THEMES } from '../../lib/theme';
+import { setTheme } from '../../lib/theme-actions';
 
 /** Which screens share a menu across the top (function codes from lib/functions.ts). */
 const GROUPS: { codes: number[]; label?: (w: Awaited<ReturnType<typeof words>>) => string }[] = [
@@ -46,11 +50,12 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   const settings = link(9000)!;
   const platform = user.me.platformAdmin ? link(9900) : null;
   const name = user.me.name ?? user.me.email;
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
 
   return (
     <div className="app">
       <header className="appbar">
-        <Link href="/dashboard" className="logo">CROP</Link>
+        <Link href="/dashboard" className="logo"><BrandMark size={28} />CROP</Link>
         <TopNav items={items} />
         <div className="appbar-right">
           {memberships.length > 1 ? (
@@ -68,6 +73,10 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
           <UserMenu initials={initialsOf(name)}>
             <div className="menu-who"><strong>{name}</strong><span className="muted small">{user.me.email}</span><span className="muted small">{current.tenantName}</span></div>
             {platform && <Link href={platform.href} role="menuitem" data-fn={platform.code}>{platform.label}</Link>}
+            <form action={setTheme} className="theme-choice">
+              <span>Appearance</span>
+              {THEMES.map(t => <button key={t} type="submit" name="theme" value={t} aria-pressed={theme === t}>{THEME_LABEL[t]}</button>)}
+            </form>
             <Link href="/legal" role="menuitem">Privacy and legal</Link>
             <form action="/auth/logout" method="post"><button type="submit" role="menuitem" className="menu-button">Sign out</button></form>
           </UserMenu>
