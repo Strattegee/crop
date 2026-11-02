@@ -49,6 +49,8 @@ The priority list for every Claude session, including scheduled runs. Work from 
 - [x] Office screens for equipment (26 Oct): register, types, status, dates, upcoming bookings. Booking stays on the roster.
 - [ ] Check other date checks use the business's time zone, not the server's (found 25 Oct: the VEVO "not in the future" check used UTC, so a Melbourne morning entry of today's date was refused; fixed). 28 Oct (scheduled run): the roster's today and its times (published, requests, changes) and the Messages page's times now use the business's time zone (`lib/business.ts`), not Melbourne. 31 Oct: `formatDate` takes the business's zone for timestamps (compliance queue, verified dates on the person's page), and the person's page, new-person employment start and the demo actions use `businessZone()`. Still Melbourne on purpose: the café demo data (`demo-tools.ts`, the demo café is in Melbourne) and the platform screens (Strattegee's own).
 
+- [ ] **Look and feel** (David, 2 Nov). Done 2 Nov (with David): Milos's colour palette and logo (design no. 8, redrawn until his final files arrive) across the office web app and sign-in page, orange main buttons with navy text, new app icons, and a dark mode each person chooses in their menu (Light / Dark / Match my device). Still to do: Milos's final logo files (SVG, app icon, one-colour); the UI designer's screens; dark mode in the phone app; decide with Steve whether the palette's warning yellow and selected-row peach clash with his roster stage colours.
+
 ## Later
 
 - Expenses and travel claims from the app (with Release 2).

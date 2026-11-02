@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { BrandMark } from '../lib/logo';
 import { LegalFooter } from '../lib/legal/legal-footer';
 import { apiBaseUrl } from '../lib/config';
 import { currentUser, OFFICE_ROLES } from '../lib/current-user';
@@ -16,9 +17,9 @@ async function getHealth(): Promise<Health | null> {
   }
 }
 
-const card = { background: '#fff', border: '1px solid #d6dae1', borderRadius: 8, padding: 16, marginTop: 16 } as const;
+const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginTop: 16 } as const;
 const button = {
-  display: 'inline-block', background: '#1f3a5f', color: '#fff', border: 0, borderRadius: 6,
+  display: 'inline-block', background: 'var(--orange)', color: 'var(--on-orange)', fontWeight: 600, border: 0, borderRadius: 6,
   padding: '10px 16px', fontSize: 15, cursor: 'pointer', textDecoration: 'none',
 } as const;
 
@@ -36,14 +37,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
 
   return (
     <main style={{ maxWidth: 640, margin: '64px auto', padding: '0 16px' }}>
-      <h1 style={{ fontSize: 28, marginBottom: 4 }}>CROP Workforce Management</h1>
-      <p style={{ marginTop: 0, color: '#5d6775' }}>Credentials · Rostering · Operations · People</p>
+      <h1 style={{ fontSize: 28, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}><BrandMark size={40} /><span><span style={{ fontFamily: 'var(--font-brand), system-ui, sans-serif' }}>CROP</span> Workforce Management</span></h1>
+      <p style={{ marginTop: 0, color: 'var(--muted)' }}>Credentials · Rostering · Operations · People</p>
 
       <section style={card}>
         {user.status === 'signed-in' ? (
           <>
             <h2 style={{ fontSize: 18, margin: '0 0 4px' }}>Welcome, {user.me.name ?? user.me.email}</h2>
-            <p style={{ margin: '0 0 12px', color: '#5d6775' }}>{user.me.email}</p>
+            <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>{user.me.email}</p>
             {user.me.memberships.length === 0 ? (
               <p>You&apos;re signed in, but you haven&apos;t been given access to a business yet. Ask the business to invite this email address.</p>
             ) : (
@@ -57,16 +58,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
               </>
             )}
             <form action="/auth/logout" method="post">
-              <button type="submit" style={{ ...button, background: '#fff', color: '#1f3a5f', border: '1px solid #1f3a5f' }}>Sign out</button>
+              <button type="submit" style={{ ...button, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--muted)' }}>Sign out</button>
             </form>
           </>
         ) : user.status === 'disabled' ? (
           <p style={{ margin: 0 }}>Sign-in isn&apos;t configured on this server yet.</p>
         ) : (
           <>
-            {params.signin === 'failed' && <p style={{ color: '#b42318' }}>Sign-in didn&apos;t complete. Please try again.</p>}
-            {params.signin === 'expired' && <p style={{ color: '#b42318' }}>That sign-in took too long. Please try again.</p>}
-            {user.status === 'error' && <p style={{ color: '#b42318' }}>We couldn&apos;t load your account ({user.message}).</p>}
+            {params.signin === 'failed' && <p style={{ color: 'var(--bad)' }}>Sign-in didn&apos;t complete. Please try again.</p>}
+            {params.signin === 'expired' && <p style={{ color: 'var(--bad)' }}>That sign-in took too long. Please try again.</p>}
+            {user.status === 'error' && <p style={{ color: 'var(--bad)' }}>We couldn&apos;t load your account ({user.message}).</p>}
             <a href="/auth/login" style={button}>Sign in</a>
           </>
         )}
@@ -75,7 +76,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
       <section style={card}>
         <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>System status</h2>
         <p style={{ margin: 0 }}>
-          API: <strong style={{ color: ok ? '#1a7f37' : '#b42318' }}>{health ? health.status : 'unreachable'}</strong>
+          API: <strong style={{ color: ok ? 'var(--ok)' : 'var(--bad)' }}>{health ? health.status : 'unreachable'}</strong>
           {health && <> · Database: <strong>{health.db}</strong> · Version: {health.version}</>}
         </p>
       </section>

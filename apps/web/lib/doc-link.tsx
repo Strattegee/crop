@@ -40,7 +40,7 @@ export function DocLink({ href, filename, contentType }: { href: string; filenam
           role="tooltip"
           style={{
             display: open ? 'block' : 'none', position: 'fixed', zIndex: 50, ...pos,
-            background: '#fff', border: '1px solid #d0d5dd', borderRadius: 8, boxShadow: '0 6px 20px rgba(16,24,40,.18)', padding: 6,
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 6px 20px rgba(16,24,40,.18)', padding: 6,
           }}
         >
           {failed ? (
