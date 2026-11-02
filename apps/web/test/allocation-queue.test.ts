@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  QUEUE_TABS, bandTitle, bestPeople, initials, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
+  QUEUE_TABS, bandTitle, bestPeople, hereLine, initials, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
 } from '../lib/allocation-queue';
 
 const NOW = Date.parse('2026-11-02T08:00:00Z');
@@ -65,5 +65,13 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
       .toBe('Warning: Only 9 hours’ rest (+1) · 16 h that week');
     expect(personLine({ eligible: false, weekHours: 0, warnings: [], blocks: [{ message: 'On leave' }] })).toBe('On leave');
     expect(initials('Oscar Diaz')).toBe('OD');
+  });
+
+  it('says who has worked at the site before', () => {
+    expect(hereLine({ shiftsHere: 3, lastHere: '2026-09-22' }, '2026-11-02')).toBe('Worked here 3 times · last 22 Sep');
+    expect(hereLine({ shiftsHere: 2, lastHere: '2026-10-01' }, '2026-11-02')).toBe('Worked here twice · last 1 Oct');
+    expect(hereLine({ shiftsHere: 1, lastHere: '2025-12-04' }, '2026-11-02')).toBe('Worked here once · last 4 Dec 2025');
+    expect(hereLine({ shiftsHere: 0, lastHere: null }, '2026-11-02')).toBe('New to this site');
+    expect(hereLine(undefined, '2026-11-02', 'location')).toBe('New to this location');
   });
 });

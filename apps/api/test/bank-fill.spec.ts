@@ -295,6 +295,38 @@ describe('bank fill: offers, first to accept is booked', () => {
     }
   });
 
+  it('shows who has worked at the site before (David, 2 Nov: past work at the site in the best people)', async () => {
+    // Ana worked two shifts here (booked), Ben was only assigned (never confirmed), one of Ana's was cancelled.
+    const past = async (date: string, who: string, confirmBooking: boolean) => {
+      const id = await shift(date, '09:00', '17:00');
+      await http().post(`/shifts/${id}/assign`).set(as('alloc')).send({ workerId: who }).expect(200);
+      if (confirmBooking) await http().post(`/shifts/${id}/confirm`).set(as('alloc')).send({}).expect(200);
+      return id;
+    };
+    const a1 = await past('2026-12-20', ana, true);
+    const a2 = await past('2026-12-21', ana, true);
+    const b1 = await past('2026-12-22', ben, false);
+    const a3 = await past('2026-12-23', ana, true);
+    await http().post(`/shifts/${a3}/cancel`).set(as('alloc')).send({ reason: 'Not needed' }).expect(200);
+    // Move them into the past, as if worked (the owner role, like a data fix; the API never moves shifts backwards).
+    await owner.query(`update shifts set starts_at = starts_at - interval '90 days', ends_at = ends_at - interval '90 days' where id = any($1)`, [[a1, a2, b1, a3]]);
+
+    const s = await shift('2026-12-28');
+    const list = (await http().get(`/shifts/${s}/bank-fill?everyone=true`).set(as('alloc')).expect(200)).body.candidates as { name: string; siteHistory: { shiftsHere: number; lastHere: string | null } }[];
+    const h = (name: string) => list.find(c => c.name === name)!.siteHistory;
+    expect(h('Ana Example')).toEqual({ shiftsHere: 2, lastHere: '2026-09-22' });
+    expect(h('Ben Example')).toEqual({ shiftsHere: 0, lastHere: null });
+    expect(h('Cal Example')).toEqual({ shiftsHere: 0, lastHere: null });
+    const c = (await http().get(`/shifts/${s}/candidates`).set(as('alloc')).expect(200)).body.candidates as { name: string; siteHistory: { shiftsHere: number } }[];
+    expect(c.find(x => x.name === 'Ana Example')!.siteHistory.shiftsHere).toBe(2);
+
+    // Another site: nothing carried over.
+    const other = (await http().post('/facilities').set(as('admin')).send({ name: 'Station Cafe', state: 'VIC' }).expect(201)).body.id as string;
+    const o = (await http().post('/shifts').set(as('alloc')).send({ facilityId: other, role: 'Chef', date: '2026-12-28', startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
+    const ol = (await http().get(`/shifts/${o}/bank-fill?everyone=true`).set(as('alloc')).expect(200)).body.candidates as { name: string; siteHistory: { shiftsHere: number } }[];
+    expect(ol.find(x => x.name === 'Ana Example')!.siteHistory.shiftsHere).toBe(0);
+  });
+
   it('keeps offers to the business and never deletes them', async () => {
     const s = await shift('2026-11-11');
     const o = (await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;

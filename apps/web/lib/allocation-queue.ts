@@ -128,5 +128,20 @@ export function bestPeople<C extends { name: string; eligible: boolean; offer?: 
   return cands.filter(c => c.eligible && c.offer?.status !== 'pending' && c.name !== skipName).slice(0, n);
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A person's past work at the shift's site, for the best people (David, 2 Nov): "Worked here 3 times · last 22 Sep",
+ * "Worked here once · last 4 Oct 2025" (year only when it isn't this year), or "New to this site". `today` is the
+ * business's date (YYYY-MM-DD); `site` the business's word for a site, in lower case.
+ */
+export function hereLine(h: { shiftsHere: number; lastHere: string | null } | null | undefined, today: string, site = 'site'): string {
+  if (!h || h.shiftsHere <= 0 || !h.lastHere) return `New to this ${site}`;
+  const [y, m, d] = h.lastHere.split('-').map(Number);
+  const when = `${d} ${MONTHS[m - 1]}${String(y) === today.slice(0, 4) ? '' : ` ${y}`}`;
+  const times = h.shiftsHere === 1 ? 'once' : h.shiftsHere === 2 ? 'twice' : `${h.shiftsHere} times`;
+  return `Worked here ${times} · last ${when}`;
+}
+
 /** Two letters for a person: "OD" for "Oscar Diaz". */
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]!.toUpperCase()).join('') || '?';
