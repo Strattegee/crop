@@ -129,3 +129,11 @@ export function askedLine(s: { requestedByName?: string | null; orderChannel?: s
   const how = CHANNELS.find(c => c.value === s.orderChannel)?.label;
   return [s.requestedByName, how, s.clientReference ? `ref ${s.clientReference}` : null].filter(Boolean).join(' · ');
 }
+
+/** "2 booked emails sent · 1 change email" for an order's line in Completed and history. */
+export function sentLine(booked: number, changes: number): string {
+  const parts: string[] = [];
+  if (booked > 0) parts.push(`${booked} booked ${booked === 1 ? 'email' : 'emails'} sent`);
+  if (changes > 0) parts.push(`${changes} change ${changes === 1 ? 'email' : 'emails'} sent`);
+  return parts.join(' · ');
+}

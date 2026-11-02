@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { ClientConfirmations } from '../src/clients/client-orders.controller.js';
-import { clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, waitsForClient } from '../src/clients/client-orders.js';
+import { clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, waitsForClient } from '../src/clients/client-orders.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -95,6 +95,36 @@ describe('client orders: rules (David, 2 Nov)', () => {
     expect(clientConfirmRefusal({ ...ok, status: 'open' })).toBe('Put someone on the {shift} first: the {client} confirms the person');
     expect(clientConfirmRefusal({ ...ok, started: true })).toMatch(/already started/);
     expect(clientConfirmRefusal({ ...ok, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toMatch(/already confirmed/);
+  });
+});
+
+describe('client orders: change emails (rules)', () => {
+  const base = { contactName: 'Pat', businessName: 'Caring Example', personName: 'Sarah Example', siteName: 'Bayside Campus', areaName: 'Ward 4',
+    localDate: '2026-11-10', localStart: '08:00', localEnd: '16:30', clientReference: 'PO-1' };
+  it('tells the client of a cancellation without naming anyone', () => {
+    const m = clientChangeEmail({ ...base, kind: 'cancelled' });
+    expect(m.subject).toBe('Cancelled: Ward 4, Bayside Campus, Tue 10 Nov 08:00–16:30 (your ref PO-1)');
+    expect(m.body).toContain('has been cancelled');
+    expect(m.body).not.toContain('Sarah');
+  });
+  it('says the person is no longer going, never why, and what happens next', () => {
+    const m = clientChangeEmail({ ...base, kind: 'removed' });
+    expect(m.subject).toMatch(/^Change of person: /);
+    expect(m.body).toContain('Sarah Example is no longer going to the shift below.');
+    expect(m.body).toContain('finding someone else');
+    expect(clientChangeEmail({ ...base, kind: 'removed', someoneElseBooked: true }).body).toContain('emailed you separately');
+  });
+  it('shows what changed, with what it was, in the business’s words', () => {
+    const w = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1030, singular: 'Unit', plural: 'Units' }]);
+    const m = clientChangeEmail({ ...base, kind: 'changed', wasAreaName: 'Ward 2', wasLocalDate: '2026-11-10', wasLocalStart: '07:00', wasLocalEnd: '15:30' }, w);
+    expect(m.subject).toBe('Changed: Ward 4, Bayside Campus, now Tue 10 Nov 08:00–16:30 (your ref PO-1)');
+    expect(m.body).toContain('Sarah Example is still going.');
+    expect(m.body).toContain('When: Tue 10 Nov 08:00–16:30 (was Tue 10 Nov 07:00–15:30)');
+    expect(m.body).toContain('Unit: Ward 4 (was Ward 2)');
+    expect(m.body).toContain('The job below has changed.');
+    // Only the times changed: no "was" on the area.
+    const t = clientChangeEmail({ ...base, kind: 'changed', wasAreaName: 'Ward 4', wasLocalDate: '2026-11-10', wasLocalStart: '07:00', wasLocalEnd: '15:30' });
+    expect(t.body).toContain('Ward 4\n');
   });
 });
 
@@ -404,4 +434,69 @@ describe('client orders: API', () => {
       .filter(s => s.clientReference === 'SORT');
     expect(rows.map(r => [r.clientName, r.clientRank])).toEqual([['Hillview Care', 1], ['Bayside Health', 3], ['Aardvark Care', null]]);
   });
+  it('emails the client when a booking they were told about changes, the person is taken off, or it is cancelled', async () => {
+    const changes = (settle = 0) => confirmations().runChanges(settle);
+    const sentSince = async (n: number) => (await owner.query<{ subject: string; body: string; template: string }>(
+      `select subject, body, template from notifications where template like 'client_booking_%' order by created_at`)).rows.slice(n);
+    await confirmations().runOnce();
+    await changes(); // what earlier tests changed
+    const before = (await sentSince(0)).length;
+    const shiftId = (await http().post('/client-orders').set(as('alloc')).send(order({ date: ahead(15), clientReference: 'PO-C1' })).expect(201)).body.ids[0] as string;
+    // Nothing told yet: changing and cancelling an unfilled shift sends nothing.
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await changes()).toBe(0);
+    expect(await confirmations().runOnce()).toBe(1);
+    const told = (await owner.query('select starts_at from client_order_confirmations where shift_id = $1', [shiftId])).rows[0];
+    expect(told.starts_at).not.toBeNull();
+
+    // New times: waits while the office is still at it, then one email with the old and new times.
+    await http().put(`/shifts/${shiftId}/times`).set(as('alloc')).send({ startTime: '08:00', endTime: '16:30', breakMinutes: 30 }).expect(200);
+    expect(await changes(120)).toBe(0);
+    expect(await changes()).toBe(1);
+    expect(await changes()).toBe(0);
+    let sent = await sentSince(before + 1);
+    expect(sent[0].template).toBe('client_booking_changed');
+    expect(sent[0].subject).toMatch(/^Changed: Ward 4, Bayside Campus, now .* 08:00–16:30 \(your ref PO-C1\)$/);
+    expect(sent[0].body).toMatch(/When: .* 08:00–16:30 \(was .* 07:00–15:30\)/);
+    expect(sent[0].body).toContain('Sarah Example is still going.');
+    // Put back as it was: the client is told again (compared with what they were told last).
+    await http().put(`/shifts/${shiftId}/times`).set(as('alloc')).send({ startTime: '07:00', endTime: '15:30', breakMinutes: 30 }).expect(200);
+    expect(await changes()).toBe(1);
+
+    // Taken off: once, without a reason; then the next person gets the usual booked email.
+    await http().post(`/shifts/${shiftId}/unassign`).set(as('alloc')).send({ pulledOut: true }).expect(200);
+    expect(await changes()).toBe(1);
+    expect(await changes()).toBe(0);
+    sent = await sentSince(before + 3);
+    expect(sent[0].template).toBe('client_booking_removed');
+    expect(sent[0].body).toContain('Sarah Example is no longer going');
+    expect(sent[0].body).toContain('finding someone else');
+    expect(sent[0].body).not.toMatch(/pulled out/i);
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200);
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await confirmations().runOnce()).toBe(1);
+    expect(await changes()).toBe(0);
+
+    // Cancelled: at once (no settling), once.
+    await http().post(`/shifts/${shiftId}/cancel`).set(as('alloc')).send({ reason: 'Client no longer needs it' }).expect(200);
+    expect(await changes(120)).toBe(1);
+    expect(await changes()).toBe(0);
+    sent = await sentSince(before + 5);
+    expect(sent.map(m => m.template)).toEqual(['client_booking_cancelled']);
+    expect(sent[0].subject).toMatch(/^Cancelled: Ward 4, Bayside Campus, .* \(your ref PO-C1\)$/);
+    expect(sent[0].body).not.toContain('Client no longer needs it');
+    // Each is recorded against the booking it was about; crop_app can't change the record.
+    const kinds = (await owner.query<{ kind: string }>('select kind from client_order_notices where shift_id = $1 order by sent_at', [shiftId])).rows.map(r => r.kind);
+    expect(kinds).toEqual(['changed', 'changed', 'removed', 'cancelled']);
+
+    // An order that didn't want emails: nothing about its changes either.
+    const quiet = (await http().post('/client-orders').set(as('alloc')).send(order({ date: ahead(16), confirmToClient: false })).expect(201)).body.ids[0];
+    await http().post(`/shifts/${quiet}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    await http().post(`/shifts/${quiet}/confirm`).set(as('alloc')).expect(200);
+    await http().post(`/shifts/${quiet}/cancel`).set(as('alloc')).send({ reason: 'Not needed' }).expect(200);
+    expect(await confirmations().runOnce()).toBe(0);
+    expect(await changes()).toBe(0);
+  });
 });
+
