@@ -111,15 +111,15 @@ describe('client orders: API', () => {
     ids.ward = (await http().post(`/facilities/${ids.campus}/areas`).set(as('admin')).send({ name: 'Ward 4' }).expect(201)).body.id;
     ids.hillSite = (await http().post('/facilities').set(as('admin')).send({ name: 'Hillview House', state: 'VIC', clientId: ids.hill }).expect(201)).body.id;
     ids.office = (await http().post('/facilities').set(as('admin')).send({ name: 'Head Office', state: 'VIC' }).expect(201)).body.id;
-    const person = async (firstName: string) => {
-      const w = (await http().post('/workers').set(as('admin')).send({ firstName, lastName: 'Example', roles: ['Nurse'], email: `${firstName.toLowerCase()}@example.com` }).expect(201)).body.id as string;
+    const person = async (firstName: string, preferredName?: string) => {
+      const w = (await http().post('/workers').set(as('admin')).send({ firstName, preferredName, lastName: 'Example', roles: ['Nurse'], email: `${firstName.toLowerCase()}@example.com` }).expect(201)).body.id as string;
       await http().put(`/workers/${w}/right-to-work`).set(as('admin')).send({ status: 'citizen', citizenProofType: 'au_passport' }).expect(200);
       await http().post(`/workers/${w}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
       await http().post(`/workers/${w}/employment`).set(as('admin')).send({ employmentType: 'casual', startsOn: '2026-01-01' }).expect(201);
       return w;
     };
     ids.sarah = await person('Sarah');
-    ids.tom = await person('Tom');
+    ids.tom = await person('Thomas', 'Tom'); // the email uses the name he goes by
   });
 
   afterAll(async () => {
@@ -217,6 +217,7 @@ describe('client orders: API', () => {
     const sent = await emails();
     expect(sent).toHaveLength(2);
     expect(sent[1].body).toContain('Tom Example (Nurse) is booked');
+    expect(sent[1].body).not.toContain('Thomas');
   });
 
   it('sends nothing when the order said not to, or has no email', async () => {

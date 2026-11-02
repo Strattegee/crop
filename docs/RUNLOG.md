@@ -547,3 +547,4 @@ Newest first. One entry per working session or scheduled run.
 
 - Shipped: client orders and allocations for Caring For You. The office types in an order a client sent by email, phone or their portal (who asked, their reference, the shifts wanted at the client's site); Allocations lists client shifts for the next 14 days with their stage and a Find staff link to the roster; when one is booked, the person who asked is emailed who is going (name, role, site, date and times). Privacy policy and DPA now say clients get the booked person's name.
 - Next: client contacts saved per client, emailing the client about changes and cancellations, a light client portal.
+- (2 Nov, David) The email to the client now uses the name the person goes by (preferred name if recorded) with their last name. The worker privacy notice now says clients get the booked person's name, role and shift; it is version 0.2, so every worker confirms it again in the app.

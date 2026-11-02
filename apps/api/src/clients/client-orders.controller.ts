@@ -162,7 +162,7 @@ export class ClientConfirmations implements OnApplicationBootstrap, OnApplicatio
       const r = (await db.query<{ orderId: string; to: string; contactName: string; clientReference: string | null; personName: string; role: string;
         siteName: string; areaName: string | null; localDate: string; localStart: string; localEnd: string; businessName: string }>(
         `select o.id as "orderId", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
-                w.first_name || ' ' || w.last_name as "personName", s.role, f.name as "siteName", a.name as "areaName",
+                coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName", a.name as "areaName",
                 to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
                 to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
                 to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "localEnd",
