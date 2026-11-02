@@ -110,7 +110,8 @@ export class ClientOrdersController {
   }
 
   /**
-   * Records that the client confirmed the person booked on a shift from their order (their client confirms bookings).
+   * Records that the client confirmed the person on a shift from their order (their client confirms bookings), whether
+   * the person has confirmed yet or not (either side can say yes first; the shift is final when both have).
    * Not a roster change: nothing goes in the shift log and the after-publishing rules don't apply; the audit log
    * keeps who and when. If the client says no, the office removes the person as usual.
    */
@@ -129,7 +130,7 @@ export class ClientOrdersController {
     }, actor);
   }
 
-  /** Takes back a client confirmation recorded by mistake (before the shift starts): the shift is "client to confirm" again. */
+  /** Takes back a client confirmation recorded by mistake (before the shift starts): the shift waits for the client again. */
   @Roles(...OFFICE_ROLES)
   @Post('shifts/:id/client-confirmed/undo')
   @HttpCode(200)
@@ -150,7 +151,7 @@ export class ClientOrdersController {
               s.starts_at <= now() as started, sa.worker_id as "workerId",
               case when sa.worker_id is not null and s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt"
          from shifts s left join client_orders o on o.id = s.client_order_id left join clients c on c.id = o.client_id
-         left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status = 'confirmed'
+         left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
         where s.id = $1 for update of s`, [id])).rows[0];
     if (!s) throw new NotFoundException('{Shift} not found');
     return s;
@@ -216,7 +217,9 @@ export class ClientConfirmations implements OnApplicationBootstrap, OnApplicatio
       // Checked again in the business: still booked to this person, not started, and the order still wants it.
       const r = (await db.query<{ orderId: string; to: string; contactName: string; clientReference: string | null; personName: string; role: string;
         siteName: string; areaName: string | null; localDate: string; localStart: string; localEnd: string; businessName: string; askToConfirm: boolean }>(
-        `select o.id as "orderId", (select c.confirms_bookings from clients c where c.id = o.client_id) as "askToConfirm", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
+        `select o.id as "orderId",
+                -- Ask the client to confirm unless they already said yes to this person (before the person confirmed).
+                (select c.confirms_bookings from clients c where c.id = o.client_id) and s.client_confirmed_worker_id is distinct from $2 as "askToConfirm", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
                 coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName", a.name as "areaName",
                 to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
                 to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",

@@ -563,4 +563,4 @@ Newest first. One entry per working session or scheduled run.
 - Saved David's notes on the agency's current allocation screen (placeholders only, no real names) in `docs/research/c4u-allocation-screen/`, and his three answers with the three layouts under discussion in `docs/decisions/2026-11-02-allocation-screen.md`.
 - Next: the allocation screen itself, once David chooses a layout.
 - Waiting on David: which allocation layout (A, B or C).
-
+- (2 Nov, David) Both sides must confirm. For a client who confirms each booking, a shift is only final once both the client and the worker have said yes, in either order. The office can now press "Client confirmed" as soon as someone is on the shift, not only once they've confirmed: then it shows "Worker to confirm" until the person confirms, and the email to the client is the plain "Booked" one (they've already said yes). If the person confirms first, it's "Client to confirm" as before and the email asks the client to confirm. The roster's shift panel says "Not final yet" while the client still has to confirm. Bookings made before this still wait for the client.
