@@ -778,6 +778,7 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-person { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--divider); }
 .q-person .cut { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .q-name { font-weight: 600; font-size: 13px; }
+.q-here { color: var(--ok); }
 .q-person-btns { display: flex; gap: 4px; }
 .q-person-btns form, .q-actions form, .q-big-actions form { margin: 0; }
 .q-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }

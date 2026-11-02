@@ -583,3 +583,11 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); every test passes, including new ones for contacts on orders, refusals (another client's or a switched-off contact) and the audit log.
 - Next: the "group and release in bulk" allocation view (C); other unheld items.
 - Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
+
+## 2026-11-03 early, 4:10am Melbourne (scheduled run)
+
+- Shipped: past work at the site in the Allocations fill panel. Under each of the best people there is now a second line: "Worked here 3 times · last 22 Sep" (in green) or "New to this site", counting shifts at that site they were booked on and that have finished, over the last 12 months (cancelled shifts don't count). It only informs: the order of people is unchanged (ready first, then fewest hours). The roster's who-can-work list from the API carries the same facts for later use.
+- Not checked in a browser (no local sign-in in this run); every test passes, including new ones for the counts (another site, unconfirmed and cancelled shifts left out) and the wording.
+- Next: the "group and release in bulk" allocation view (C); showing past work in the roster's right-click menu.
+- Questions for David: should people who know the site be suggested first? Distance from the site would need addresses turned into map positions (an outside service).
+- Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.

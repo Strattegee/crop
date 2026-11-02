@@ -14,6 +14,7 @@ import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-
 import { equipmentForShift } from './equipment-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
 import { actorOf } from './publishing.js';
+import { withSiteHistory } from './site-history.js';
 import { MAX_RANGE_DAYS, UUID, daysBetween, insertShifts, parseShiftRequest, time, uuidField } from './shift-create.js';
 import { END_REASONS, correctionPlan, endPlan, withdrawalPlan, type TermDates } from './employment.js';
 
@@ -566,14 +567,14 @@ export class ShiftsController {
     });
   }
 
-  /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3). */
+  /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3) and their past work at the site (`siteHistory`). */
   @Roles(...OFFICE_ROLES)
   @Get('shifts/:id/candidates')
   candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const shift = await shiftById(db, id);
       if (shift.equipmentOnly) return { shift, candidates: [] }; // nobody goes on an equipment-only shift
-      return { shift, candidates: rankCandidates(await eligibilityForShift(db, t.tenantId, id)) };
+      return { shift, candidates: await withSiteHistory(db, id, rankCandidates(await eligibilityForShift(db, t.tenantId, id))) };
     });
   }
 

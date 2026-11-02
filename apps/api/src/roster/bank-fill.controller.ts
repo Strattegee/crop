@@ -15,6 +15,7 @@ import { closePendingOffers } from './offers-data.js';
 import { actorOf } from './publishing.js';
 import { rosterChangeRefusal } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
+import { withSiteHistory } from './site-history.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_OFFERS = 50;
@@ -46,7 +47,7 @@ function expiresLabel(at: Date, timezone: string) {
 export class BankFillController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  /** Bank and casual staff (or `everyone=true`), ready first, fewest hours that week first, with any offer already made. */
+  /** Bank and casual staff (or `everyone=true`), ready first, fewest hours that week first, with any offer already made and their past work at the site (`siteHistory`). */
   @Roles(...OFFICE_ROLES)
   @Get('shifts/:id/bank-fill')
   list(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('everyone') everyone?: string) {
@@ -57,7 +58,8 @@ export class BankFillController {
       const latest = new Map<string, OfferRow>();
       for (const o of offers) latest.set(o.workerId, o);
       const all = rankCandidates(await eligibilityForShift(db, t.tenantId, id));
-      const pool = everyone === 'true' ? all : all.filter(c => (BANK_FILL_TYPES as readonly string[]).includes(c.employmentType ?? ''));
+      const pool = await withSiteHistory(db, id,
+        everyone === 'true' ? all : all.filter(c => (BANK_FILL_TYPES as readonly string[]).includes(c.employmentType ?? '')));
       return {
         shift,
         candidates: pool.map(c => ({ ...c, offer: latest.get(c.workerId) ? { id: latest.get(c.workerId)!.id, status: latest.get(c.workerId)!.status } : null })),

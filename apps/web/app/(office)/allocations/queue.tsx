@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { T, type Words } from '../../../lib/terms';
 import {
-  DAY_CHOICES, QUEUE_BANDS, QUEUE_TABS, bandTitle, bestPeople, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
+  DAY_CHOICES, QUEUE_BANDS, QUEUE_TABS, bandTitle, bestPeople, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
   type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
 } from '../../../lib/allocation-queue';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
@@ -23,7 +23,8 @@ export type Queue = {
   counts: Record<QueueTab, number>; regions: { name: string; count: number }[]; bands: Record<QueueBand, number>; total: number; shifts: QueueRow[];
 };
 type Reason = { code: string; message: string };
-export type PanelCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; available: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
+export type PanelCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; available: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null;
+  siteHistory?: { shiftsHere: number; lastHere: string | null } };
 export type PanelOffer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 export type PanelShift = {
   id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; status: string; localDate: string; localStart: string; localEnd: string;
@@ -210,6 +211,7 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
                 <div style={{ minWidth: 0 }}>
                   <div className="q-name">{c.name}</div>
                   <div className={`small cut ${c.warnings.length ? 'warnline' : 'muted'}`} title={c.warnings.map(w => w.message).join('. ')}>{personLine(c)}</div>
+                  <div className={`small cut ${c.siteHistory?.shiftsHere ? 'q-here' : 'muted'}`}>{hereLine(c.siteHistory, s.localDate, tw.lower(T.site))}</div>
                 </div>
                 <div className="q-person-btns">
                   <form action={offer.bind(null, s.id)}>{back}<input type="hidden" name="workerIds" value={c.workerId} /><button className="btn small secondary">Offer</button></form>
