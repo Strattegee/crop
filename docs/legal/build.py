@@ -10,7 +10,7 @@ DOCS = [
     ('acceptable-use', 'Acceptable Use Policy', 'What everyone using CROP agrees not to do.'),
     ('schedules', 'Service levels, security and data', 'Service levels, security commitments, data lifecycle and the subprocessor register.'),
 ]
-VERSION = 'Version 0.1 (draft), 24 October 2026'
+VERSION = 'Version 0.2 (draft), 2 November 2026'
 out = []
 for slug, title, summary in DOCS:
     text = open(os.path.join(HERE, f'{slug}.md'), encoding='utf-8').read()
