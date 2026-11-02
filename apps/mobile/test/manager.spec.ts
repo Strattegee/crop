@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kpiNote, kpiOrder, kpiValue, type Kpi } from '../src/manager';
+import { kindLabel, kpiNote, kpiOrder, kpiValue, type Kpi } from '../src/manager';
 import {
   approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, isManager, leaveRequestLine, requestsTab, roleOf, shiftWhere, shiftWord, startMode, todayIn,
 } from '../src/manager';
@@ -71,5 +71,13 @@ describe('dashboard numbers on the phone', () => {
   });
   it('puts numbers off target first', () => {
     expect(kpiOrder([k({ key: 'a' }), k({ key: 'b', standing: 'off_target' })]).map(x => x.key)).toEqual(['b', 'a']);
+  });
+});
+
+describe('kindLabel', () => {
+  it("names equipment problems in the business's word", () => {
+    expect(kindLabel('equipment_blocked')).toBe('Equipment problem');
+    expect(kindLabel('equipment_blocked', { one: 'Plant' })).toBe('Plant problem');
+    expect(kindLabel('open', { one: 'Plant' })).toBe('Nobody on it');
   });
 });

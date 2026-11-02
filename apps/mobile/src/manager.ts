@@ -52,6 +52,11 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   unconfirmed: 'Not confirmed',
 };
 
+/** A Needs attention kind's label, with the business's word for equipment ("Plant problem"). */
+export function kindLabel(kind: AttentionKind, equipment?: { one: string }): string {
+  return kind === 'equipment_blocked' && equipment ? `${equipment.one} problem` : KIND_LABEL[kind];
+}
+
 /** "3 things in the next 7 days · 1 within a day", or the all-clear. */
 export function attentionHeading(a: Pick<Attention, 'total' | 'urgent' | 'days'>): string {
   if (a.total === 0) return `Nothing needs attention in the next ${a.days} days.`;

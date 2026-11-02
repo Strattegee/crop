@@ -21,7 +21,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 type Me = { email: string; memberships: { tenantSlug: string; tenantName: string; role: string }[] };
 type Word = { one: string; many: string; lower: string; lowerMany: string };
-type My = { business: string; firstName: string; today: string; word: Word; credentialWord?: Word; notice?: MyNotice };
+type My = { business: string; firstName: string; today: string; word: Word; credentialWord?: Word; rosterWord?: Word; roleWord?: Word; notice?: MyNotice };
 type Phase = 'loading' | 'signedOut' | 'choose' | 'ready';
 
 export default function App() {
@@ -206,7 +206,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
           <Text style={styles.muted}>{my?.business ?? ''}</Text>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          {onManager && <Pressable onPress={onManager}><Text style={styles.link}>Run the roster</Text></Pressable>}
+          {onManager && <Pressable onPress={onManager}><Text style={styles.link}>Run the {my?.rosterWord?.lower ?? 'roster'}</Text></Pressable>}
           {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
         </View>
       </View>
@@ -222,7 +222,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
       {tab === 'availability' ? (
         <AvailabilityTab tenant={tenant} word={word} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
       ) : tab === 'credentials' ? (
-        <CredentialsTab tenant={tenant} word={my?.credentialWord ?? { one: 'Credential', many: 'Credentials', lower: 'credential', lowerMany: 'credentials' }} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
+        <CredentialsTab tenant={tenant} word={my?.credentialWord ?? { one: 'Credential', many: 'Credentials', lower: 'credential', lowerMany: 'credentials' }} roleWord={my?.roleWord} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
@@ -248,7 +248,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
           </View>
         )}
         {tab === 'shifts' && !error && (shifts.length === 0
-          ? <Text style={styles.muted}>{noShiftsLine(word, onboarding)}</Text>
+          ? <Text style={styles.muted}>{noShiftsLine(word, onboarding, my?.rosterWord)}</Text>
           : byDay(shifts).map(d => (
             <View key={d.date}>
               <Text style={styles.day}>{dayLabel(d.date, my?.today)}</Text>

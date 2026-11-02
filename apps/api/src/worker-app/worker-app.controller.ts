@@ -212,6 +212,8 @@ export class MyController {
         business: t.tenantName, firstName: w.firstName, name: w.name, today: todayIn(settings.timezone),
         word: { one: words.one(T.shift), many: words.many(T.shift), lower: words.lower(T.shift), lowerMany: words.lower(T.shift, true) },
         credentialWord: { one: words.one(T.credential), many: words.many(T.credential), lower: words.lower(T.credential), lowerMany: words.lower(T.credential, true) },
+        rosterWord: { one: words.one(T.roster), many: words.many(T.roster), lower: words.lower(T.roster), lowerMany: words.lower(T.roster, true) },
+        roleWord: { one: words.one(T.role), many: words.many(T.role), lower: words.lower(T.role), lowerMany: words.lower(T.role, true) },
         notice: await myNotice(db, w.id),
       };
     });

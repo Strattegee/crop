@@ -21,8 +21,8 @@ const TONE = { urgent: styles.badgeUrgent, waiting: styles.badgeWaiting, booked:
  * whole week, each shift with its stage in the roster's words; tap one to fill or change it. The week's Draft /
  * Live / History state per site and Publish (with or without telling staff), through the same endpoints as the web.
  */
-export function RosterTab({ tenant, today, view, setView, word, people, siteWord, busyOutside, onOpen, onSignedOut }: {
-  tenant: string; today?: string; view: RosterView; setView: (v: RosterView) => void; word: Word; people: Word; siteWord: Word;
+export function RosterTab({ tenant, today, view, setView, word, people, siteWord, equipmentWord, busyOutside, onOpen, onSignedOut }: {
+  tenant: string; today?: string; view: RosterView; setView: (v: RosterView) => void; word: Word; people: Word; siteWord: Word; equipmentWord?: Word;
   busyOutside: boolean; onOpen: (shiftId: string) => void; onSignedOut: () => void;
 }) {
   const [shifts, setShifts] = useState<RosterShift[]>([]);
@@ -82,8 +82,8 @@ export function RosterTab({ tenant, today, view, setView, word, people, siteWord
   };
 
   const card = (s: RosterShift) => {
-    const stage = stageOf(s);
-    const who = s.equipmentOnly ? 'Equipment only' : s.workerName ? (s.agencyName ? `${s.workerName} (${s.agencyName})` : s.workerName) : 'Unfilled';
+    const stage = stageOf(s, equipmentWord);
+    const who = s.equipmentOnly ? `${equipmentWord?.one ?? 'Equipment'} only` : s.workerName ? (s.agencyName ? `${s.workerName} (${s.agencyName})` : s.workerName) : 'Unfilled';
     return (
       <Pressable key={s.id} style={[styles.card, stage.tone === 'urgent' && styles.urgent, s.status === 'cancelled' && styles.disabled]} onPress={() => onOpen(s.id)}
         accessibilityRole="button" accessibilityHint={`Opens the ${word.lower} to fill or change it`}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  needsNotice, noticeText, addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
+  needsNotice, noticeText, addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, nothingNeededLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
 describe('worker app formatting', () => {
@@ -103,6 +103,11 @@ describe('getting started', () => {
     const word = { lowerMany: 'jobs' };
     expect(noShiftsLine(word, o([]))).toBe('Your jobs show here once the office has finished getting you started.');
     expect(noShiftsLine(word, null)).toBe('No jobs in the next four weeks yet. New ones show here once the roster is published.');
+    expect(noShiftsLine(word, null, { lower: 'schedule' })).toBe('No jobs in the next four weeks yet. New ones show here once the schedule is published.');
+  });
+  it("says nothing is needed in the business's word for role", () => {
+    expect(nothingNeededLine()).toBe('Nothing right now. You have everything your role needs.');
+    expect(nothingNeededLine({ lower: 'position' })).toBe('Nothing right now. You have everything your position needs.');
   });
 
   it('shows the worker privacy notice until it is confirmed', () => {
