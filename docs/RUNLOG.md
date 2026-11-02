@@ -542,3 +542,8 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); every test passes, including a new one for a business with its own words.
 - Next: the worker app's remaining fixed labels; other unheld items.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 evening (David's session)
+
+- Shipped: client orders and allocations for Caring For You. The office types in an order a client sent by email, phone or their portal (who asked, their reference, the shifts wanted at the client's site); Allocations lists client shifts for the next 14 days with their stage and a Find staff link to the roster; when one is booked, the person who asked is emailed who is going (name, role, site, date and times). Privacy policy and DPA now say clients get the booked person's name.
+- Next: client contacts saved per client, emailing the client about changes and cancellations, a light client portal.

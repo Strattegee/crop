@@ -9,6 +9,7 @@ import { AgencyAttentionController } from './agencies/agency-attention.controlle
 import { AgencyOfferLinksController, AgencyOffersController } from './agencies/agency-offers.controller.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClientsController } from './clients/clients.controller.js';
+import { ClientConfirmations, ClientOrdersController } from './clients/client-orders.controller.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -42,7 +43,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
@@ -50,6 +51,6 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
     OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController, OutsideAgenciesController, AgencyAttentionController, AgencyOffersController, AgencyOfferLinksController,
     AppAccessController, MyController, MyAvailabilityController,
   ],
-  providers: [{ provide: APP_INTERCEPTOR, useClass: WordsInErrorsInterceptor }, { provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: WordsInErrorsInterceptor }, { provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator, ClientConfirmations],
 })
 export class AppModule {}

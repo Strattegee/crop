@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
-import { businessZone, whenIn } from '../../../lib/business';
+import { businessZone, todayIn, whenIn } from '../../../lib/business';
+import { orderPlaces } from '../../../lib/client-orders';
+import { ClientShiftsSection, type ClientOrder, type ClientShifts } from './client-shifts';
 import { T, words } from '../../../lib/terms';
 import { Notices } from '../notices';
 import { AgencyAttentionList, type AgencyAttention } from './agency-attention';
@@ -26,14 +28,36 @@ const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warn
 const GENDER_ASKED = { F: 'A female worker requested', M: 'A male worker requested' } as const;
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
 
+type Summary = { agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number };
+type Site = { id: string; name: string; clientId: string | null; clientName: string | null; active: boolean };
+
 /**
- * Allocations (function code 2200, agency fill): the requests employers have sent this business, soonest first, with
- * what each needs and this business's people checked against it (ready first), each with Put forward (migration 0042:
- * booked straight away or waiting for the employer's approval, as the employer chose). Closed ones show who went.
+ * Allocations (function code 2200). Client shifts first (client orders, 2 Nov): orders typed in from the business's
+ * clients and their shifts still to fill, each with Find staff (the roster's shift panel). Then, for a business that
+ * supplies employers on CROP (agency fill), the requests employers have sent it, soonest first, with what each needs
+ * and this business's people checked against it (ready first), each with Put forward (migration 0042: booked straight
+ * away or waiting for the employer's approval, as the employer chose). Closed ones show who went.
  */
 export default async function AllocationsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
-  const [list, tw, zone, sp, attention] = await Promise.all([api<Request[]>('/agency-requests?status=all'), words(), businessZone(), searchParams,
-    api<AgencyAttention>('/allocations/attention').catch(() => null)]);
+  const [summary, tw, zone, sp] = await Promise.all([api<Summary>('/allocations/summary').catch(() => null), words(), businessZone(), searchParams]);
+  const hasAgency = (summary?.agencyLinks ?? 0) > 0;
+  const hasClients = Boolean(summary?.hasClients);
+  const [list, attention] = hasAgency
+    ? await Promise.all([api<Request[]>('/agency-requests?status=all'), api<AgencyAttention>('/allocations/attention').catch(() => null)])
+    : [[] as Request[], null];
+  const clientPart = hasClients ? await (async () => {
+    const [sites, roles, data, orders] = await Promise.all([
+      api<Site[]>('/facilities').catch(() => [] as Site[]),
+      api<{ name: string; active?: boolean }[]>('/roles').catch(() => []),
+      api<ClientShifts>('/allocations/client-shifts?days=14').catch(() => null),
+      api<ClientOrder[]>('/client-orders?days=30').catch(() => [] as ClientOrder[]),
+    ]);
+    const clientSites = sites.filter(f => f.clientId && f.active).slice(0, 60);
+    const withAreas = await Promise.all(clientSites.map(async f =>
+      ({ ...f, areas: (await api<{ areas: { id: string; name: string; active: boolean }[] }>(`/facilities/${f.id}`).catch(() => ({ areas: [] }))).areas })));
+    const roleNames = [...new Set(roles.filter(r => r.active !== false).map(r => r.name))].sort();
+    return { places: orderPlaces(withAreas), roles: roleNames, data, orders };
+  })() : null;
   const when = whenIn(zone);
   const open = list.filter(r => r.status === 'open');
   // Each open request's people, checked against the employer's requirements as matched to this business's credentials.
@@ -47,12 +71,21 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   return (
     <>
       <h1>Allocations</h1>
+      <Notices error={sp.error} done={sp.done} />
+      {clientPart && (
+        <ClientShiftsSection tw={tw} places={clientPart.places} roles={clientPart.roles} data={clientPart.data} orders={clientPart.orders}
+          today={todayIn(zone)} when={when} />
+      )}
+      {!hasClients && !hasAgency && (
+        <p className="muted">Nothing to allocate yet. Give a {tw.lower(T.site)} a {tw.lower(T.client)} to take their orders here.</p>
+      )}
+      {hasAgency && <>
+      {hasClients && <h2 style={{ marginTop: 24 }}>Requests from employers on CROP</h2>}
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
         Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
         Put someone forward, or offer it to several and the first to accept goes, and they go onto the employer&apos;s roster (booked straight away, or once the employer approves, as they chose). If they can&apos;t go after all, pull them out before the {shift} starts; you&apos;re emailed when the employer approves, declines or takes them off.
       </p>
-      <Notices error={sp.error} done={sp.done} />
       {attention && attention.total > 0 && (
         <details className="card dash-attention" open={attention.urgent > 0 || attention.byKind.person_blocked > 0} aria-label="Needs attention">
           <summary style={{ cursor: 'pointer' }}>
@@ -185,6 +218,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
           </table>
         </div>
       )}
+      </>}
     </>
   );
 }

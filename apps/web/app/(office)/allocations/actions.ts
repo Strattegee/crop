@@ -1,7 +1,10 @@
 'use server';
 
 import { api, ApiError } from '../../../lib/api';
-import { attempt } from '../../../lib/actions';
+import { attempt, str } from '../../../lib/actions';
+import { parsePlace } from '../../../lib/client-orders';
+import { T, words } from '../../../lib/terms';
+import { addShiftsDates, addShiftsUntil, addShiftsWhen } from '../roster/view';
 
 /** Puts one of the business's people forward for a request an employer sent it (agency fill, migration 0042). */
 export async function putForward(requestId: string, workerId: string, name: string) {
@@ -49,4 +52,33 @@ export async function recordYes(offerId: string, name: string) {
 /** Withdraws every pending offer on a request. */
 export async function withdrawOffers(requestId: string) {
   await attempt('/allocations', () => api(`/agency-requests/${requestId}/offers/withdraw`, { method: 'POST' }), 'Offers withdrawn. Their links no longer work.');
+}
+
+/**
+ * Records a client's order (by email, phone or their portal) and makes its shifts at the client's site (client
+ * orders, 2 Nov). Days ticked with no Until go on those days in the 7 days from the date, as on the roster.
+ */
+export async function createClientOrder(f: FormData) {
+  const tw = await words();
+  const place = parsePlace(str(f, 'place'));
+  const weekdays = f.getAll('weekdays').map(Number).filter(n => n >= 1 && n <= 7);
+  const startDate = str(f, 'startDate');
+  const endDate = addShiftsUntil(startDate, str(f, 'endDate'), weekdays);
+  const single = !endDate || endDate === startDate;
+  let created = 0;
+  await attempt('/allocations', async () => {
+    if (!place) throw new ApiError(400, `Choose the ${tw.lower(T.client)} and ${tw.lower(T.site)}.`);
+    created = (await api<{ created: number }>('/client-orders', {
+      method: 'POST',
+      body: {
+        ...place, role: str(f, 'role'), startTime: str(f, 'startTime'), endTime: str(f, 'endTime'),
+        breakMinutes: str(f, 'breakMinutes') ? Number(str(f, 'breakMinutes')) : undefined,
+        ...(single ? { date: startDate } : { startDate, endDate, weekdays: weekdays.length ? weekdays : undefined }),
+        quantity: Number(str(f, 'quantity') ?? 1), genderRequested: str(f, 'genderRequested'), notes: str(f, 'notes'),
+        channel: str(f, 'channel') ?? 'other', requestedByName: str(f, 'requestedByName'), requestedByEmail: str(f, 'requestedByEmail'),
+        requestedByPhone: str(f, 'requestedByPhone'), clientReference: str(f, 'clientReference'), orderNotes: str(f, 'orderNotes'),
+        confirmToClient: f.get('confirmToClient') === 'on',
+      },
+    })).created;
+  }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. Fill them below with Find staff.`);
 }

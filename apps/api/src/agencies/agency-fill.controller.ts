@@ -13,6 +13,7 @@ import { shiftById } from '../roster/roster.controller.js';
 import { T, wordsFor } from '../terms/words.js';
 import { BAND_WORDS, DEFAULT_AGENCY_TIMING, agencyFillProblem, agencyRules, escalationMinutes, minutesWords, timingBand, type AgencyTiming, inWords, localWhen, placementChangedEmail, placementWords, pulledOutEmail, putForwardEmail, requestArrivedEmail, roundSchedule, roundState, type InboxShift, type Notice, type Placement, type SnapshotRequirement } from './requests.js';
 import { eligibilityForFacts, rankCandidates } from '../roster/eligibility-data.js';
+import { clientAllocationSummary } from '../clients/client-orders.controller.js';
 
 type Delivery = { agency_tenant_id: string; inbox_id: string };
 
@@ -392,13 +393,19 @@ export class AgencyFillController {
     });
   }
 
-  /** For the menu: whether this business supplies any employer (an agency side link) and how many requests are open. */
+  /**
+   * For the menu: whether this business supplies any employer (an agency side link) and how many requests are open;
+   * plus (client orders, migration 0068) whether it has clients with sites and their shifts still to fill in 14 days.
+   */
   @Roles(...OFFICE_ROLES)
   @Get('allocations/summary')
   summary(@Tenant() t: Membership) {
-    return withTenant(this.pool, t.tenantId, async db => (await db.query<{ agencyLinks: number; open: number }>(
-      `select (select count(*)::int from agency_connections where side = 'agency' and status <> 'ended') as "agencyLinks",
-              (select count(*)::int from agency_inbox where status = 'open') as open`)).rows[0]);
+    return withTenant(this.pool, t.tenantId, async db => ({
+      ...(await db.query<{ agencyLinks: number; open: number }>(
+        `select (select count(*)::int from agency_connections where side = 'agency' and status <> 'ended') as "agencyLinks",
+                (select count(*)::int from agency_inbox where status = 'open') as open`)).rows[0],
+      ...(await clientAllocationSummary(db)),
+    }));
   }
 
   @Roles(...OFFICE_ROLES)
