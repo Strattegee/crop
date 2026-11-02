@@ -652,3 +652,28 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 :root[data-mode='dark'] .mk.mk-g.soft.f { background: #4a1f33; color: #f4b6d2; }
 :root[data-mode='dark'] .mk.mk-g.soft.m { background: #262f5c; color: #c3cbf3; }
 :root[data-mode='dark'] .strip-row .ty-bank, :root[data-mode='dark'] .strip-row .ty-casual { background: #3d2c12; color: #f3cf98; }
+
+/* Filling the roster (David, 2 Nov): picked shift cards, the picking bar and the right-click menu of best people. */
+.rcard.picked { outline: 3px solid var(--orange) !important; outline-offset: -1px; background: var(--hover); position: relative; }
+.rcard.picked::after { content: '✓'; position: absolute; top: 2px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: var(--on-orange); font-size: 11px; font-weight: 800; line-height: 16px; text-align: center; }
+.rcard.bar.picked { position: absolute; }
+.pick-bar { position: sticky; top: 0; left: 0; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 10px; background: var(--hover); color: var(--text); border-bottom: 1px solid var(--orange); font-size: 13px; }
+.pick-bar .btn { margin-left: auto; }
+.shift-menu { position: fixed; z-index: 80; width: 290px; max-height: 340px; overflow: auto; padding: 4px 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
+.shift-menu-head { padding: 6px 12px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.shift-menu-note { margin: 4px 12px 6px; }
+.shift-menu-note.bad { color: var(--bad); }
+.shift-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 12px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; border-left: 3px solid transparent; }
+.shift-menu-item:hover, .shift-menu-item:focus { background: var(--hover); outline: none; }
+.shift-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--orange); }
+.shift-menu-item.ready { border-left-color: var(--ok); }
+.shift-menu-item.warn { border-left-color: var(--warn); }
+.shift-menu-item.blocked { color: var(--muted); cursor: not-allowed; opacity: 0.75; font-size: 13px; padding: 6px 12px; border-bottom: 0; }
+.shift-menu-item.blocked span { display: flex; color: var(--muted); }
+.shift-menu-item.blocked:hover { background: none; }
+.shift-menu-item .nm { display: flex; flex-direction: column; min-width: 0; }
+.shift-menu-item .nm small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.shift-menu-item.blocked .num { display: block; }
+.shift-menu-item .num { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.shift-menu-item.plain { font-weight: 600; }
+.shift-menu-sep { height: 1px; margin: 4px 0; background: var(--divider); }

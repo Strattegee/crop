@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import { bestPeople, multiAssignMessage, parseStripFilter, pickedInOrder, reasonFor, withStripFilter, type MenuCandidate } from '../app/(office)/roster/view';
+
+describe('strip filters in the roster URL', () => {
+  it('reads role and hours left', () => {
+    expect(parseStripFilter({ role: 'Barista', hours: 'left' })).toEqual({ role: 'Barista', hoursLeft: true });
+    expect(parseStripFilter({})).toEqual({ role: '', hoursLeft: false });
+    expect(parseStripFilter({ role: '  ', hours: 'yes' })).toEqual({ role: '', hoursLeft: false });
+  });
+
+  it('sets and clears them, keeping the rest of the view and dropping old messages', () => {
+    const u = withStripFilter('/roster?week=2026-11-02&view=area&shift=abc&done=Assigned', { role: 'Barista', hoursLeft: true });
+    const p = new URL(u, 'http://x').searchParams;
+    expect(p.get('role')).toBe('Barista');
+    expect(p.get('hours')).toBe('left');
+    expect(p.get('week')).toBe('2026-11-02');
+    expect(p.get('shift')).toBe('abc');
+    expect(p.get('done')).toBeNull();
+    expect(withStripFilter(u, { role: '', hoursLeft: false })).toBe('/roster?week=2026-11-02&view=area&shift=abc');
+  });
+
+  it('keeps roles with spaces and ampersands intact', () => {
+    const u = withStripFilter('/roster', { role: 'Kitchen hand & porter', hoursLeft: false });
+    expect(parseStripFilter({ role: new URL(u, 'http://x').searchParams.get('role') ?? undefined }).role).toBe('Kitchen hand & porter');
+  });
+
+  it('never leaves the roster', () => {
+    expect(withStripFilter('https://evil.example/x', { role: 'A', hoursLeft: false })).toBe('/roster?role=A');
+  });
+});
+
+describe('assigning one person to several shifts', () => {
+  it('puts the picks in date order and adds times only when two share a day', () => {
+    expect(pickedInOrder([
+      { id: 'c', date: '2026-11-06', start: '07:00' },
+      { id: 'a', date: '2026-11-04', start: '13:00' },
+      { id: 'b', date: '2026-11-04', start: '06:00' },
+    ]).map(p => [p.id, p.label])).toEqual([['b', 'Wed 4 Nov 06:00'], ['a', 'Wed 4 Nov 13:00'], ['c', 'Fri 6 Nov']]);
+  });
+
+  it('words reasons without repeating the name', () => {
+    expect(reasonFor('Sol Oakley', 'Sol Oakley is already rostered 07:00–15:00 at The Grand Café')).toBe('already rostered 07:00–15:00 at The Grand Café');
+    expect(reasonFor('Sol Oakley', "Sol Oakley doesn't have the role Barista. Sol Oakley is on leave.")).toBe("doesn't have the role Barista; on leave");
+    expect(reasonFor('Sol Oakley', "Sol Oakley's visa allows 48 hours a fortnight")).toBe("Sol Oakley's visa allows 48 hours a fortnight");
+    expect(reasonFor('Sol Oakley', 'Someone is already on this shift. Remove them first.')).toBe('Someone is already on this shift; Remove them first');
+  });
+
+  const count = (n: number) => `${n} ${n === 1 ? 'shift' : 'shifts'}`;
+  it('says how many went on and which did not, with why', () => {
+    expect(multiAssignMessage('Sol Oakley', [
+      { label: 'Wed 4 Nov', ok: true }, { label: 'Thu 5 Nov', ok: true }, { label: 'Sat 7 Nov', ok: true },
+      { label: 'Fri 6 Nov', ok: false, message: 'Sol Oakley is already rostered 07:00–15:00 at Bay St' },
+    ], count)).toEqual({ done: 'Assigned Sol Oakley to 3 shifts. Confirm once they have agreed. Not assigned: Fri 6 Nov (already rostered 07:00–15:00 at Bay St).' });
+    expect(multiAssignMessage('Sol Oakley', [{ label: 'Wed 4 Nov', ok: true }, { label: 'Thu 5 Nov', ok: true }], count))
+      .toEqual({ done: 'Assigned Sol Oakley to 2 shifts. Confirm once they have agreed.' });
+  });
+
+  it('is an error when none went on', () => {
+    expect(multiAssignMessage('Sol Oakley', [{ label: 'Wed 4 Nov', ok: false, message: "Sol Oakley doesn't have the role Barista" }], count))
+      .toEqual({ error: "Sol Oakley wasn't assigned. Not assigned: Wed 4 Nov (doesn't have the role Barista)." });
+  });
+});
+
+describe('best people for the right-click menu', () => {
+  const c = (workerId: string, weekHours: number, eligible = true, warn?: string, block?: string): MenuCandidate => ({
+    workerId, name: `Person ${workerId}`, weekHours, eligible, warnings: warn ? [{ message: warn }] : [], blocks: block ? [{ message: block }] : [],
+  });
+
+  it('keeps the API order for one shift, ready people first and blocked ones last', () => {
+    const r = bestPeople([[c('a', 4), c('b', 10, true, 'Person b is on leave requested'), c('x', 0, false, undefined, 'Person x doesn\'t have the role Barista')]]);
+    expect(r.map(p => [p.workerId, p.blocked, p.note])).toEqual([
+      ['a', false, null], ['b', false, 'on leave requested'], ['x', true, "doesn't have the role Barista"],
+    ]);
+  });
+
+  it('shows the top five who can work it and up to three who cannot', () => {
+    const list = [...'abcdefg'].map((id, i) => c(id, i)).concat([...'wxyz'].map(id => c(id, 0, false)));
+    const r = bestPeople([list]);
+    expect(r.filter(p => !p.blocked).map(p => p.workerId)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(r.filter(p => p.blocked)).toHaveLength(3);
+  });
+
+  it('for several shifts puts people who can do all of them first', () => {
+    const r = bestPeople([
+      [c('a', 2), c('b', 8)],
+      [c('a', 2, false, undefined, 'Person a is already rostered 07:00–15:00 at Bay St'), c('b', 8)],
+    ]);
+    expect(r.map(p => [p.workerId, p.canDo, p.note])).toEqual([['b', 2, null], ['a', 1, 'can do 1 of 2; already rostered 07:00–15:00 at Bay St']]);
+  });
+});
