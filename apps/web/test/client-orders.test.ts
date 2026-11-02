@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RANK_CHOICES, STAGES, allocationsMenu, canRecordClientYes, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel } from '../lib/client-orders';
+import { RANK_CHOICES, STAGES, allocationsMenu, canRecordClientYes, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel, sentLine } from '../lib/client-orders';
 
 describe('client orders on Allocations (David, 2 Nov)', () => {
   it('offers client sites and their areas as one choice, grouped by client', () => {
@@ -76,5 +76,13 @@ describe('client orders on Allocations (David, 2 Nov)', () => {
       text: 'The client confirms each booking. Record their yes when they\'re happy with Sarah Example; it\'s final once both have confirmed.' });
     expect(clientConfirmLine({ ...booked, status: 'assigned', clientConfirmedAt: 'T', clientConfirmedBy: 'Alex Office' }, 'client', when)).toEqual({ waiting: false,
       text: 'The client confirmed Sarah Example, recorded by Alex Office at T. Waiting for Sarah Example to confirm; it\'s final when they do.' });
+  });
+});
+
+describe('sentLine', () => {
+  it('counts booked and change emails sent to the client', () => {
+    expect(sentLine(1, 0)).toBe('1 booked email sent');
+    expect(sentLine(2, 1)).toBe('2 booked emails sent · 1 change email sent');
+    expect(sentLine(0, 3)).toBe('3 change emails sent');
   });
 });

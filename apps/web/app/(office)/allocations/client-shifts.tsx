@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import type { Words } from '../../../lib/terms';
 import { T } from '../../../lib/terms';
-import { CHANNELS, type PlaceGroup } from '../../../lib/client-orders';
+import { CHANNELS, sentLine, type PlaceGroup } from '../../../lib/client-orders';
 import { createClientOrder } from './actions';
 
 export type ClientOrder = {
   id: string; clientName: string; facilityName: string; channelWords: string; requestedByName: string; requestedByEmail: string | null; requestedByPhone: string | null;
   clientReference: string | null; notes: string | null; confirmToClient: boolean; createdAt: string; firstLocalDate: string | null; lastLocalDate: string | null;
-  total: number; summary: string; confirmationsSent: number;
+  total: number; summary: string; confirmationsSent: number; changesSent?: number;
 };
 
 const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
@@ -101,7 +101,7 @@ export function RecentOrders({ tw, orders, when }: { tw: Words; orders: ClientOr
                   </td>
                   <td>{o.firstLocalDate ? (o.lastLocalDate && o.lastLocalDate !== o.firstLocalDate ? `${shortDay(o.firstLocalDate)} to ${shortDay(o.lastLocalDate)}` : shortDay(o.firstLocalDate)) : '–'}
                     <span className="muted"> · {tw.count(o.total, T.shift)}</span></td>
-                  <td>{o.summary}{o.confirmationsSent > 0 && <div className="muted small">{o.confirmationsSent} booked {o.confirmationsSent === 1 ? 'email' : 'emails'} sent</div>}</td>
+                  <td>{o.summary}{(o.confirmationsSent > 0 || (o.changesSent ?? 0) > 0) && <div className="muted small">{sentLine(o.confirmationsSent, o.changesSent ?? 0)}</div>}</td>
                 </tr>
               ))}
             </tbody>

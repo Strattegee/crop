@@ -10,7 +10,7 @@ import { actorOf } from '../roster/publishing.js';
 import { SHIFT_COLS, SHIFT_FROM, shiftById } from '../roster/roster.controller.js';
 import { UUID, insertShifts, parseShiftRequest } from '../roster/shift-create.js';
 import { wordsFor } from '../terms/words.js';
-import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
+import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type ChangeKind, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
 
 const whole = (v: string | undefined, def: number, min: number, max: number) => {
   const n = v === undefined || v === '' ? def : Number(v);
@@ -66,7 +66,8 @@ export class ClientOrdersController {
                 n.total, n.booked, n.assigned, n.open, n.cancelled, n."toConfirm", n.first_starts_at as "firstStartsAt",
                 to_char(n.first_starts_at at time zone f.timezone, 'YYYY-MM-DD') as "firstLocalDate",
                 to_char(n.last_starts_at at time zone f.timezone, 'YYYY-MM-DD') as "lastLocalDate",
-                (select count(*)::int from client_order_confirmations x where x.order_id = o.id) as "confirmationsSent"
+                (select count(*)::int from client_order_confirmations x where x.order_id = o.id) as "confirmationsSent",
+                (select count(*)::int from client_order_notices x where x.order_id = o.id) as "changesSent"
            from client_orders o join clients c on c.id = o.client_id join facilities f on f.id = o.facility_id
            cross join lateral (
              select count(*)::int as total, count(*) filter (where s.status = 'booked')::int as booked,
@@ -185,7 +186,8 @@ export class ClientConfirmations implements OnApplicationBootstrap, OnApplicatio
   onApplicationBootstrap() {
     if (process.env.CLIENT_CONFIRM === 'off' || process.env.NOTIFY_DISPATCH === 'off') return;
     const every = Number(process.env.CLIENT_CONFIRM_MS ?? 60_000);
-    this.timer = setInterval(() => void this.runOnce().catch(err => this.log.error(err)), every);
+    const settle = Number(process.env.CLIENT_NOTICE_SETTLE_SECONDS ?? 120);
+    this.timer = setInterval(() => void this.runOnce().then(() => this.runChanges(settle)).catch(err => this.log.error(err)), every);
   }
 
   onApplicationShutdown() {
@@ -237,8 +239,91 @@ export class ClientConfirmations implements OnApplicationBootstrap, OnApplicatio
       const q = await queueNotification(db, d.tenant_id, { channel: 'email', to: r.to, template: 'client_booking_confirmed', subject, body,
         dedupeKey: `client-confirm:${d.shift_id}:${d.worker_id}` });
       const saved = await db.query(
-        `insert into client_order_confirmations(tenant_id, order_id, shift_id, worker_id, notification_id) values ($1,$2,$3,$4,$5)
+        `insert into client_order_confirmations(tenant_id, order_id, shift_id, worker_id, notification_id, starts_at, ends_at, area_id)
+         select $1, $2, s.id, $4, $5, s.starts_at, s.ends_at, s.area_id from shifts s where s.id = $3
          on conflict (shift_id, worker_id) do nothing`, [d.tenant_id, r.orderId, d.shift_id, d.worker_id, q.id]);
+      return Boolean(saved.rowCount) && q.id !== null;
+    });
+  }
+
+  private changing = false;
+
+  /**
+   * Emails the client when a booking they were told about changes (migration 0071): cancelled, the person taken off,
+   * or the date, times or area changed while they're still on it. `settleSeconds` is how long since the shift's last
+   * change before a removal or change goes, so the office can finish what it's doing (cancellations go at once).
+   * Returns how many emails were queued.
+   */
+  async runChanges(settleSeconds = 120): Promise<number> {
+    if (this.changing) return 0;
+    this.changing = true;
+    try {
+      const due = (await this.pool.query<{ tenant_id: string; confirmation_id: string; kind: ChangeKind }>(
+        'select tenant_id, confirmation_id, kind from app_client_notices_due($1, 50)', [Math.max(0, Math.round(settleSeconds))])).rows;
+      let sent = 0;
+      for (const d of due) {
+        try {
+          if (await this.notice(d.tenant_id, d.confirmation_id, d.kind)) sent++;
+        } catch (err) {
+          this.log.error(err);
+        }
+      }
+      return sent;
+    } finally {
+      this.changing = false;
+    }
+  }
+
+  private notice(tenantId: string, confirmationId: string, kind: ChangeKind): Promise<boolean> {
+    return withTenant(this.pool, tenantId, async db => {
+      // Checked again in the business: the order still wants it, the shift hasn't ended, and the condition still holds.
+      const r = (await db.query<{ orderId: string; shiftId: string; to: string; contactName: string; clientReference: string | null; personName: string;
+        siteName: string; areaName: string | null; localDate: string; localStart: string; localEnd: string; businessName: string;
+        wasAreaName: string | null; wasLocalDate: string | null; wasLocalStart: string | null; wasLocalEnd: string | null;
+        status: string; stillOn: boolean; someoneElseBooked: boolean; differs: boolean; startsAt: Date; endsAt: Date; areaId: string | null }>(
+        `select o.id as "orderId", s.id as "shiftId", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
+                coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as "personName",
+                f.name as "siteName", a.name as "areaName",
+                to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
+                to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
+                to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "localEnd",
+                (select name from tenants where id = s.tenant_id) as "businessName",
+                (select name from areas where id = t.area_id) as "wasAreaName",
+                to_char(t.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "wasLocalDate",
+                to_char(t.starts_at at time zone f.timezone, 'HH24:MI') as "wasLocalStart",
+                to_char(t.ends_at at time zone f.timezone, 'HH24:MI') as "wasLocalEnd",
+                s.status, s.starts_at as "startsAt", s.ends_at as "endsAt", s.area_id as "areaId",
+                exists (select 1 from shift_assignments sa where sa.shift_id = s.id and sa.resource_kind = 'worker'
+                          and sa.worker_id = c.worker_id and sa.status in ('assigned', 'confirmed')) as "stillOn",
+                exists (select 1 from shift_assignments sa where sa.shift_id = s.id and sa.resource_kind = 'worker'
+                          and sa.worker_id <> c.worker_id and sa.status = 'confirmed') as "someoneElseBooked",
+                t.starts_at is not null and (t.starts_at, t.ends_at, t.area_id) is distinct from (s.starts_at, s.ends_at, s.area_id) as differs
+           from client_order_confirmations c
+           join client_orders o on o.id = c.order_id
+           join shifts s on s.id = c.shift_id
+           join facilities f on f.id = s.facility_id
+           left join areas a on a.id = s.area_id
+           join workers w on w.id = c.worker_id
+           cross join lateral app_client_told(c.id) t
+          where c.id = $1 and o.confirm_to_client and o.requested_by_email is not null and s.ends_at > now()`,
+        [confirmationId])).rows[0];
+      if (!r) return false;
+      const holds = kind === 'cancelled' ? r.status === 'cancelled'
+        : kind === 'removed' ? r.status !== 'cancelled' && !r.stillOn
+        : r.status !== 'cancelled' && r.stillOn && r.differs;
+      if (!holds) return false;
+      const { subject, body } = clientChangeEmail({
+        kind, ...r,
+        wasLocalDate: r.wasLocalDate ?? undefined, wasLocalStart: r.wasLocalStart ?? undefined, wasLocalEnd: r.wasLocalEnd ?? undefined,
+      }, await wordsFor(db));
+      const dedupeKey = kind === 'cancelled' ? `client-cancelled:${r.shiftId}`
+        : kind === 'removed' ? `client-removed:${confirmationId}`
+        : `client-changed:${confirmationId}:${r.startsAt.toISOString()}:${r.endsAt.toISOString()}:${r.areaId ?? '-'}`;
+      const q = await queueNotification(db, tenantId, { channel: 'email', to: r.to, template: `client_booking_${kind}`, subject, body, dedupeKey });
+      const saved = await db.query(
+        `insert into client_order_notices(tenant_id, order_id, shift_id, confirmation_id, kind, starts_at, ends_at, area_id, notification_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict do nothing`,
+        [tenantId, r.orderId, r.shiftId, confirmationId, kind, r.startsAt, r.endsAt, r.areaId, q.id]);
       return Boolean(saved.rowCount) && q.id !== null;
     });
   }

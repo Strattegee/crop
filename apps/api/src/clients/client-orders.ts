@@ -105,6 +105,74 @@ export function clientConfirmationEmail(f: ConfirmationFacts, w: Words = DEFAULT
   return { subject, body: lines.join('\n') };
 }
 
+export type ChangeKind = 'cancelled' | 'removed' | 'changed';
+
+export interface ChangeFacts {
+  kind: ChangeKind;
+  contactName: string;
+  businessName: string;
+  /** The person the client was told about (name they go by and last name). */
+  personName: string;
+  siteName: string;
+  /** Where and when now (for a cancellation or removal, the shift as it stands). */
+  areaName: string | null;
+  localDate: string;
+  localStart: string;
+  localEnd: string;
+  /** What the client was told before ('changed' only). */
+  wasAreaName?: string | null;
+  wasLocalDate?: string;
+  wasLocalStart?: string;
+  wasLocalEnd?: string;
+  clientReference: string | null;
+  /** 'removed': someone else is already booked (their own booked email tells the client who). */
+  someoneElseBooked?: boolean;
+}
+
+/**
+ * The email to the client when a booking they were told about changes: the shift is cancelled, the person is no
+ * longer going (never why: it may be personal), or the date, times or area change while they're still going.
+ */
+export function clientChangeEmail(f: ChangeFacts, w: Words = DEFAULT_WORDS) {
+  const shift = w.lower(T.shift);
+  const when = `${fmtDate(f.localDate)} ${f.localStart}–${f.localEnd}`;
+  const ref = f.clientReference ? ` (your ref ${f.clientReference})` : '';
+  const wasWhen = f.wasLocalDate ? `${fmtDate(f.wasLocalDate)} ${f.wasLocalStart}–${f.wasLocalEnd}` : when;
+  const subject =
+    f.kind === 'cancelled' ? `Cancelled: ${place(f)}, ${when}${ref}`
+    : f.kind === 'removed' ? `Change of person: ${place(f)}, ${when}${ref}`
+    : `Changed: ${place(f)}, now ${when}${ref}`;
+  const intro =
+    f.kind === 'cancelled' ? `The ${shift} below, which you asked ${f.businessName} for, has been cancelled.`
+    : f.kind === 'removed' ? `${f.personName} is no longer going to the ${shift} below.`
+    : `The ${shift} below has changed. ${f.personName} is still going.`;
+  const next =
+    f.kind === 'cancelled' ? `If you didn't expect this, please contact ${f.businessName}.`
+    : f.kind === 'removed'
+      ? (f.someoneElseBooked
+        ? `Someone else is booked instead: we've emailed you separately with who is going.`
+        : `${f.businessName} is finding someone else and will email you when they're booked.`)
+    : `If this doesn't suit you, please contact ${f.businessName}.`;
+  const areaChanged = f.kind === 'changed' && (f.wasAreaName ?? null) !== (f.areaName ?? null);
+  const timeChanged = f.kind === 'changed' && wasWhen !== when;
+  const lines = [
+    `Hello ${f.contactName},`,
+    '',
+    intro,
+    '',
+    `${w.one(T.site)}: ${f.siteName}`,
+    ...(f.areaName || areaChanged ? [`${w.one(T.area)}: ${f.areaName ?? 'none'}${areaChanged ? ` (was ${f.wasAreaName ?? 'none'})` : ''}`] : []),
+    `When: ${when}${timeChanged ? ` (was ${wasWhen})` : ''}`,
+    ...(f.clientReference ? [`Your reference: ${f.clientReference}`] : []),
+    '',
+    next,
+    '',
+    'Thanks,',
+    f.businessName,
+  ];
+  return { subject, body: lines.join('\n') };
+}
+
 export interface OrderCounts { total: number; booked: number; assigned: number; open: number; cancelled: number; toConfirm?: number }
 
 /**
