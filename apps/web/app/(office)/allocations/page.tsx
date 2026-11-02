@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { businessZone, todayIn, whenIn } from '../../../lib/business';
-import { orderPlaces } from '../../../lib/client-orders';
+import { orderPlaces, type ClientContact } from '../../../lib/client-orders';
 import { parseQueueParams, queueHref, type QueueParams } from '../../../lib/allocation-queue';
 import { NewOrderForm, RecentOrders, type ClientOrder } from './client-shifts';
 import { QueueScreen, type Panel, type PanelCandidate, type PanelOffer, type PanelShift, type Queue, type QueueRow } from './queue';
@@ -104,15 +104,16 @@ async function ClientQueue({ tw, p, when }: { tw: Words; p: QueueParams; when: (
 
 /** "+ New order": the order form, with every client site and area as one choice. */
 async function NewOrder({ tw, today }: { tw: Words; today: string }) {
-  const [sites, roles] = await Promise.all([
+  const [sites, roles, contacts] = await Promise.all([
     api<Site[]>('/facilities').catch(() => [] as Site[]),
     api<{ name: string; active?: boolean }[]>('/roles').catch(() => []),
+    api<ClientContact[]>('/client-contacts').catch(() => [] as ClientContact[]),
   ]);
   const clientSites = sites.filter(f => f.clientId && f.active).slice(0, 60);
   const withAreas = await Promise.all(clientSites.map(async f =>
     ({ ...f, areas: (await api<{ areas: { id: string; name: string; active: boolean }[] }>(`/facilities/${f.id}`).catch(() => ({ areas: [] }))).areas })));
   const roleNames = [...new Set(roles.filter(r => r.active !== false).map(r => r.name))].sort();
-  return <NewOrderForm tw={tw} places={orderPlaces(withAreas)} roles={roleNames} today={today} />;
+  return <NewOrderForm tw={tw} places={orderPlaces(withAreas)} roles={roleNames} today={today} contacts={contacts} />;
 }
 
 /** Requests from employers on CROP (agency fill), each with this business's people checked against it. */

@@ -2,7 +2,7 @@
 
 import { api, ApiError } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
-import { parsePlace } from '../../../lib/client-orders';
+import { contactSavedNote, parsePlace } from '../../../lib/client-orders';
 import { T, words } from '../../../lib/terms';
 import { addShiftsDates, addShiftsUntil, addShiftsWhen } from '../roster/view';
 
@@ -65,10 +65,11 @@ export async function createClientOrder(f: FormData) {
   const startDate = str(f, 'startDate');
   const endDate = addShiftsUntil(startDate, str(f, 'endDate'), weekdays);
   const single = !endDate || endDate === startDate;
-  let created = 0;
+  let created = 0, contactSaved = false;
+  const contactId = str(f, 'contactId');
   await attempt('/allocations', async () => {
     if (!place) throw new ApiError(400, `Choose the ${tw.lower(T.client)} and ${tw.lower(T.site)}.`);
-    created = (await api<{ created: number }>('/client-orders', {
+    ({ created, contactSaved } = await api<{ created: number; contactSaved: boolean }>('/client-orders', {
       method: 'POST',
       body: {
         ...place, role: str(f, 'role'), startTime: str(f, 'startTime'), endTime: str(f, 'endTime'),
@@ -77,10 +78,11 @@ export async function createClientOrder(f: FormData) {
         quantity: Number(str(f, 'quantity') ?? 1), genderRequested: str(f, 'genderRequested'), notes: str(f, 'notes'),
         channel: str(f, 'channel') ?? 'other', requestedByName: str(f, 'requestedByName'), requestedByEmail: str(f, 'requestedByEmail'),
         requestedByPhone: str(f, 'requestedByPhone'), clientReference: str(f, 'clientReference'), orderNotes: str(f, 'orderNotes'),
-        confirmToClient: f.get('confirmToClient') === 'on',
+        confirmToClient: f.get('confirmToClient') === 'on', contactId, saveContact: !contactId && f.get('saveContact') === 'on',
       },
-    })).created;
-  }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. They're in the queue now.`);
+    }));
+  }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. They're in the queue now.`
+    + contactSavedNote(contactSaved, str(f, 'requestedByName'), tw.lower(T.client)));
 }
 
 type BankCandidate = { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null };

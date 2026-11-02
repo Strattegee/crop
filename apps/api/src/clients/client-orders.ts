@@ -24,6 +24,53 @@ export interface OrderFields {
   clientReference: string | null;
   orderNotes: string | null;
   confirmToClient: boolean;
+  /** A saved contact of this client (migration 0072): fills who asked where the order leaves it out. */
+  contactId: string | null;
+  /** Save the typed details as a new contact of the client (or link the live one of that name). */
+  saveContact: boolean;
+}
+
+/** A client contact as stored (migration 0072). */
+export interface ContactFields {
+  name: string;
+  position: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+}
+
+/** A new contact's fields. Throws plain-English 400s. */
+export function parseContact(body: Record<string, unknown>): ContactFields {
+  return {
+    name: text(body, 'name', { required: true, max: 120 })!,
+    position: text(body, 'position', { max: 120 }),
+    email: email(body, 'email'),
+    phone: text(body, 'phone', { max: 40 }),
+    notes: text(body, 'notes', { max: 500 }),
+  };
+}
+
+/**
+ * Who asked, from what was typed and the saved contact picked (typed details win field by field, so the office can
+ * take an order from a contact at a different number). Null name means neither gave one.
+ */
+export function whoAsked(
+  order: Pick<OrderFields, 'requestedByName' | 'requestedByEmail' | 'requestedByPhone'>,
+  contact: { name: string; email: string | null; phone: string | null } | null,
+): { name: string | null; email: string | null; phone: string | null } {
+  return {
+    name: order.requestedByName || contact?.name || null,
+    email: order.requestedByEmail ?? contact?.email ?? null,
+    phone: order.requestedByPhone ?? contact?.phone ?? null,
+  };
+}
+
+/** Why a saved contact can't be used on an order for this client, or null. */
+export function contactProblem(contact: { clientId: string; active: boolean } | undefined, clientId: string): string | null {
+  if (!contact) return 'That contact wasn’t found. Choose another or type who asked.';
+  if (contact.clientId !== clientId) return 'That contact is with another {client}. Choose one of this {client}’s contacts or type who asked.';
+  if (!contact.active) return 'That contact is switched off. Choose another or type who asked.';
+  return null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,13 +81,16 @@ export function parseOrder(body: Record<string, unknown>): OrderFields {
   if (!clientId || !UUID.test(clientId)) throw new BadRequestException('Choose {a client}');
   const channel = text(body, 'channel', { max: 20 }) ?? 'other';
   if (!(CHANNELS as readonly string[]).includes(channel)) throw new BadRequestException('How they asked must be email, phone, portal or other');
-  const requestedByName = text(body, 'requestedByName', { required: true, max: 120 })!;
+  const contactId = text(body, 'contactId', { max: 40 });
+  if (contactId && !UUID.test(contactId)) throw new BadRequestException('Choose a saved contact or type who asked');
+  const requestedByName = text(body, 'requestedByName', { required: !contactId, max: 120 }) ?? '';
   const requestedByEmail = email(body, 'requestedByEmail');
   const requestedByPhone = text(body, 'requestedByPhone', { max: 40 });
   const clientReference = text(body, 'clientReference', { max: 60 });
   const orderNotes = text(body, 'orderNotes', { max: 1000 });
   const confirmToClient = bool(body, 'confirmToClient') ?? true;
-  return { clientId, channel: channel as Channel, requestedByName, requestedByEmail, requestedByPhone, clientReference, orderNotes, confirmToClient };
+  const saveContact = !contactId && (bool(body, 'saveContact') ?? false);
+  return { clientId, channel: channel as Channel, requestedByName, requestedByEmail, requestedByPhone, clientReference, orderNotes, confirmToClient, contactId, saveContact };
 }
 
 /** Why an order can't go on this client and site, or null. Tokens are filled with the business's words. */

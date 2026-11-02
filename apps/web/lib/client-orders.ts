@@ -137,3 +137,27 @@ export function sentLine(booked: number, changes: number): string {
   if (changes > 0) parts.push(`${changes} change ${changes === 1 ? 'email' : 'emails'} sent`);
   return parts.join(' · ');
 }
+
+/** A saved client contact (migration 0072): the client's people who order shifts. */
+export type ClientContact = {
+  id: string; clientId: string; clientName?: string; name: string; position: string | null; email: string | null; phone: string | null;
+  notes?: string | null; active?: boolean;
+};
+
+/** The live contacts of the client in a place choice (`clientId|siteId|areaId`), by name; none until a place is chosen. */
+export function contactsFor(contacts: ClientContact[], placeValue: string | undefined): ClientContact[] {
+  const clientId = parsePlace(placeValue)?.clientId;
+  if (!clientId) return [];
+  return contacts.filter(c => c.clientId === clientId && c.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** A contact as one line in a list or choice: "Jo Bloggs (Nurse unit manager) · jo@… · 0400 …". */
+export function contactLine(c: Pick<ClientContact, 'name' | 'position' | 'email' | 'phone'>, withDetails = true): string {
+  const head = c.position ? `${c.name} (${c.position})` : c.name;
+  return withDetails ? [head, c.email, c.phone].filter(Boolean).join(' · ') : head;
+}
+
+/** What the order's "saved" message adds about who asked. */
+export function contactSavedNote(saved: boolean, name: string | undefined, client: string): string {
+  return saved && name ? ` ${name} is saved as a contact for this ${client}.` : '';
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RANK_CHOICES, STAGES, allocationsMenu, canRecordClientYes, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel, sentLine } from '../lib/client-orders';
+import { contactLine, contactSavedNote, contactsFor, RANK_CHOICES, STAGES, allocationsMenu, canRecordClientYes, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel, sentLine } from '../lib/client-orders';
 
 describe('client orders on Allocations (David, 2 Nov)', () => {
   it('offers client sites and their areas as one choice, grouped by client', () => {
@@ -84,5 +84,22 @@ describe('sentLine', () => {
     expect(sentLine(1, 0)).toBe('1 booked email sent');
     expect(sentLine(2, 1)).toBe('2 booked emails sent · 1 change email sent');
     expect(sentLine(0, 3)).toBe('3 change emails sent');
+  });
+
+  it('lists the chosen client’s saved contacts and words them (migration 0072)', () => {
+    const contacts = [
+      { id: 'k2', clientId: 'c1', name: 'Pat Ward', position: null, email: 'pat@bayside.example', phone: null },
+      { id: 'k1', clientId: 'c1', name: 'Jo Bloggs', position: 'Nurse unit manager', email: null, phone: '0400 111 222' },
+      { id: 'k3', clientId: 'c1', name: 'Old Contact', position: null, email: null, phone: null, active: false },
+      { id: 'k4', clientId: 'c2', name: 'Lee Example', position: null, email: null, phone: null },
+    ];
+    expect(contactsFor(contacts, 'c1|s1|a1').map(c => c.id)).toEqual(['k1', 'k2']);
+    expect(contactsFor(contacts, 'c2|s2|').map(c => c.id)).toEqual(['k4']);
+    expect(contactsFor(contacts, '')).toEqual([]);
+    expect(contactLine(contacts[1])).toBe('Jo Bloggs (Nurse unit manager) · 0400 111 222');
+    expect(contactLine(contacts[0])).toBe('Pat Ward · pat@bayside.example');
+    expect(contactLine(contacts[1], false)).toBe('Jo Bloggs (Nurse unit manager)');
+    expect(contactSavedNote(true, 'Lee', 'client')).toBe(' Lee is saved as a contact for this client.');
+    expect(contactSavedNote(false, 'Lee', 'client')).toBe('');
   });
 });
