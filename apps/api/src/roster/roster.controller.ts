@@ -542,7 +542,7 @@ export class ShiftsController {
     return this.tx(t, auth, async db => {
       const shift = await shiftById(db, id);
       if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
-      if (shift.equipmentOnly) throw new BadRequestException('Nobody works an equipment-only {shift}, so it can\'t cover anyone');
+      if (shift.equipmentOnly) throw new BadRequestException('Nobody works {an equipment}-only {shift}, so it can\'t cover anyone');
       if (workerId) {
         if (!(await db.query('select 1 from workers where id = $1', [workerId])).rowCount) throw new BadRequestException('Choose a person');
         if (workerId === shift.workerId) throw new BadRequestException(`${shift.workerName} is working this {shift}, so it can't be covering them`);
@@ -563,7 +563,7 @@ export class ShiftsController {
     return this.tx(t, auth, async db => {
       const shift = await shiftById(db, id);
       if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
-      if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works an equipment-only {shift}');
+      if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works {an equipment}-only {shift}');
       if (shift.genderRequested !== requested) await db.query('update shifts set gender_requested = $2, updated_at = now() where id = $1', [id, requested]);
       const after = await shiftById(db, id);
       const personWarning = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined)?.message ?? null;
@@ -637,7 +637,7 @@ export class ShiftsController {
       if (!cur) throw new NotFoundException('{Shift} not found');
       if (cur.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
       if (cur.started) throw new ConflictException('This {shift} has already started, so it can no longer be changed');
-      if (role && !cur.needs_person) throw new BadRequestException('Nobody works an equipment-only {shift}');
+      if (role && !cur.needs_person) throw new BadRequestException('Nobody works {an equipment}-only {shift}');
       if (areaId && !(await db.query('select 1 from areas where id = $1 and facility_id = $2', [areaId, cur.facility_id])).rowCount) {
         throw new BadRequestException('Choose {an area} at this {site}');
       }

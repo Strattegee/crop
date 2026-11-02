@@ -16,7 +16,7 @@ export async function assignWorker(db: PoolClient, tenantId: string, by: string 
   const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [shiftId])).rows[0];
   if (!shift) throw new NotFoundException('{Shift} not found');
   if (shift.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
-  if (!shift.needs_person) throw new ConflictException('This {shift} is for equipment only, so nobody can be put on it');
+  if (!shift.needs_person) throw new ConflictException('This {shift} is for {equipment} only, so nobody can be put on it');
   if (shift.status !== 'open') throw new ConflictException('Someone is already on this {shift}. Remove them first.');
   // Locking the worker serialises assignments for one person, so two shifts can't be given to them at once.
   const worker = (await db.query<{ status: string; name: string }>(

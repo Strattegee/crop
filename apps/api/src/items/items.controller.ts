@@ -50,7 +50,7 @@ interface ItemRow { id: string; name: string; unit: string; unitCostCents: numbe
 async function lockItem(db: PoolClient, id: string): Promise<ItemRow> {
   // Locking the item serialises every stock movement for it, so two issues can't both take the last one.
   const item = (await db.query<ItemRow>(`select ${ITEM_COLS} from items i where i.id = $1 for update`, [id])).rows[0];
-  if (!item) throw new NotFoundException('Item not found');
+  if (!item) throw new NotFoundException('{Item} not found');
   return item;
 }
 
@@ -121,7 +121,7 @@ export class ItemsController {
           [t.tenantId, name, category, unit, sku, unitCostCents, chargeCents, tracksStock, reorderLevel])).rows[0];
         return this.one(db, id);
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException('There is already an item with that name or SKU');
+        if (isUnique(e)) throw new BadRequestException('There is already {an item} with that name or SKU');
         throw e;
       }
     });
@@ -150,9 +150,9 @@ export class ItemsController {
                   reorder_level = case when $11 then $12::numeric else reorder_level end, active = coalesce($13, active), updated_at = now()
             where id = $1`,
           [id, name, category, unit, has('sku'), sku, unitCostCents, has('chargeCents'), chargeCents, tracksStock, has('reorderLevel'), reorderLevel, active]);
-        if (!r.rowCount) throw new NotFoundException('Item not found');
+        if (!r.rowCount) throw new NotFoundException('{Item} not found');
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException('There is already an item with that name or SKU');
+        if (isUnique(e)) throw new BadRequestException('There is already {an item} with that name or SKU');
         throw e;
       }
       return this.one(db, id);
@@ -161,7 +161,7 @@ export class ItemsController {
 
   private async one(db: PoolClient, id: string) {
     const item = (await db.query(`select ${ITEM_COLS} from items i where i.id = $1`, [id])).rows[0] as (ItemRow & { reorderLevel: number | null }) | undefined;
-    if (!item) throw new NotFoundException('Item not found');
+    if (!item) throw new NotFoundException('{Item} not found');
     const sites = item.tracksStock ? (await db.query<{ facilityId: string; facilityName: string; onHand: number }>(
       `select m.facility_id as "facilityId", f.name as "facilityName", sum(m.quantity)::float8 as "onHand"
          from stock_movements m join facilities f on f.id = m.facility_id
@@ -198,7 +198,7 @@ export class ItemsController {
   @Roles(...OFFICE_ROLES)
   @Post(':id/receive')
   receive(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const facilityId = uuidOrNull(body, 'facilityId', 'a site');
+    const facilityId = uuidOrNull(body, 'facilityId', '{a site}');
     if (!facilityId) throw new BadRequestException('Choose {a site}');
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
     const unitCostCents = int(body, 'unitCostCents', 0, MAX_CENTS);
@@ -224,8 +224,8 @@ export class ItemsController {
   issue(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
     const workerId = uuidOrNull(body, 'workerId', 'a person') ?? null;
-    const shiftId = uuidOrNull(body, 'shiftId', 'a shift') ?? null;
-    const given = uuidOrNull(body, 'facilityId', 'a site') ?? null;
+    const shiftId = uuidOrNull(body, 'shiftId', '{a shift}') ?? null;
+    const given = uuidOrNull(body, 'facilityId', '{a site}') ?? null;
     const notes = text(body, 'notes', { max: 500 });
     if (!workerId && !shiftId) throw new BadRequestException('Choose a person or {a shift}');
     return withTenant(this.pool, t.tenantId, async db => {
@@ -254,8 +254,8 @@ export class ItemsController {
   giveBack(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
     const workerId = uuidOrNull(body, 'workerId', 'a person') ?? null;
-    const shiftId = uuidOrNull(body, 'shiftId', 'a shift') ?? null;
-    const given = uuidOrNull(body, 'facilityId', 'a site') ?? null;
+    const shiftId = uuidOrNull(body, 'shiftId', '{a shift}') ?? null;
+    const given = uuidOrNull(body, 'facilityId', '{a site}') ?? null;
     const notes = text(body, 'notes', { max: 500 });
     if (!workerId && !shiftId) throw new BadRequestException('Choose a person or {a shift}');
     return withTenant(this.pool, t.tenantId, async db => {
@@ -292,8 +292,8 @@ export class ItemsController {
   @Roles(...OFFICE_ROLES)
   @Post(':id/transfer')
   transfer(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const fromId = uuidOrNull(body, 'fromFacilityId', 'the site it leaves');
-    const toId = uuidOrNull(body, 'toFacilityId', 'the site it goes to');
+    const fromId = uuidOrNull(body, 'fromFacilityId', 'the {site} it leaves');
+    const toId = uuidOrNull(body, 'toFacilityId', 'the {site} it goes to');
     if (!fromId) throw new BadRequestException('Choose the {site} the stock leaves');
     if (!toId) throw new BadRequestException('Choose the {site} the stock goes to');
     const qty = quantity(body, 'quantity', 'Quantity', { required: true })!;
@@ -319,7 +319,7 @@ export class ItemsController {
   @Roles('owner', 'admin')
   @Post(':id/count')
   count(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const facilityId = uuidOrNull(body, 'facilityId', 'a site');
+    const facilityId = uuidOrNull(body, 'facilityId', '{a site}');
     if (!facilityId) throw new BadRequestException('Choose {a site}');
     const counted = quantity(body, 'quantity', 'Quantity', { required: true, allowZero: true })!;
     const notes = text(body, 'notes', { max: 500 });

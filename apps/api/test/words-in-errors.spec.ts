@@ -64,6 +64,7 @@ describe('API error messages use the business\'s words', () => {
     await app.init();
     await http().put('/terms').set(as('admin')).send({ terms: [
       { code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1020, singular: 'Venue', plural: 'Venues' }, { code: 1030, singular: 'Section', plural: 'Sections' },
+      { code: 1050, singular: 'Certificate', plural: 'Certificates' }, { code: 1060, singular: 'Plant', plural: 'Plant' }, { code: 1070, singular: 'Stock item', plural: 'Stock' },
     ] }).expect(200);
   });
 
@@ -84,6 +85,16 @@ describe('API error messages use the business\'s words', () => {
     const a = await http().post('/shifts').set(as('admin'))
       .send({ facilityId: site, areaId: missing, role: 'Chef', startDate: '2031-03-03', endDate: '2031-03-03', startTime: '07:00', endTime: '15:00' }).expect(400);
     expect(a.body.message).toBe('Choose a section at this venue');
+  });
+
+  it('words equipment, item and credential errors with them', async () => {
+    expect((await http().get(`/equipment/${missing}`).set(as('admin')).expect(404)).body.message).toBe('Plant not found');
+    expect((await http().post('/equipment').set(as('admin')).send({ name: 'Excavator 1' }).expect(400)).body.message).toBe('Choose a plant type');
+    expect((await http().get(`/items/${missing}`).set(as('admin')).expect(404)).body.message).toBe('Stock item not found');
+    const ana = (await http().post('/workers').set(as('admin')).send({ firstName: 'Ana', lastName: 'Example', email: 'ana@example.com' }).expect(201)).body.id;
+    expect((await http().post(`/workers/${ana}/credentials`).set(as('admin')).send({ credentialTypeId: 'nope' }).expect(400)).body.message).toBe('Choose a certificate');
+    expect((await http().post(`/workers/${ana}/credentials`).set(as('admin')).send({ credentialTypeId: missing }).expect(404)).body.message).toBe('Certificate type not found');
+    expect((await http().get(`/equipment/${missing}`).set(as('other')).expect(404)).body.message).toBe('Equipment not found');
   });
 
   it('keeps CROP\'s words for a business that hasn\'t chosen its own', async () => {

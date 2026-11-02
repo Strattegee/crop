@@ -527,3 +527,10 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); every test passes, including new ones for a business with its own words and one without.
 - Next: the rest of the words work (onboarding requests, the worker app's own labels) and other unheld items.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
+
+## 2026-11-02 midday, 12:15pm Melbourne (scheduled run)
+
+- Shipped: the rest of the error messages now use each business's words for equipment, items and credentials too. A construction firm that says Plant and Tickets sees "Plant not found", "Choose a plant type" or "Choose a ticket"; a café that says Stock items sees "Stock item not found". About 40 more messages across equipment, items, credentials and their types, cover rules, duties, onboarding steps, the app's credentials and agency matching. A business that hasn't chosen its own words sees exactly what it saw before.
+- Not checked in a browser (no local sign-in in this run); every test passes, including new ones for these words.
+- Next: the reasons shown in lists (why someone can't work a shift) in the business's words; other unheld items.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

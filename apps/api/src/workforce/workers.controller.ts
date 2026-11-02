@@ -177,15 +177,15 @@ export class WorkersController {
   @Post(':id/credentials')
   addCredential(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) workerId: string, @Body() body: Record<string, unknown>) {
     const typeId = text(body, 'credentialTypeId', { required: true, max: 40 })!;
-    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose a credential');
+    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose {a credential}');
     const fields = credentialFields(body);
     return withTenant(this.pool, t.tenantId, async db => {
       const worker = await db.query('select 1 from workers where id = $1', [workerId]);
       if (!worker.rowCount) throw new NotFoundException('{Worker} not found');
       const type = (await db.query<{ has_expiry: boolean; has_number: boolean }>('select has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
-      if (!type) throw new NotFoundException('credential type not found');
-      if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
-      if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this credential');
+      if (!type) throw new NotFoundException('{Credential} type not found');
+      if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this {credential}');
+      if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this {credential}');
       const row = (await db.query<{ id: string }>(
         `insert into worker_credentials(tenant_id, worker_id, credential_type_id, number, issue_date, expiry_date, notes, issued_by)
          values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
@@ -216,7 +216,7 @@ export class WorkersController {
            from worker_credentials c join credential_types t on t.id = c.credential_type_id
           where c.id = $1 and c.worker_id = $2 for update of c`, [credentialId, workerId],
       )).rows[0];
-      if (!before) throw new NotFoundException('credential not found');
+      if (!before) throw new NotFoundException('{Credential} not found');
       const next = {
         number: has('number') ? fields.number : before.number,
         issuedBy: has('issuedBy') ? fields.issuedBy : before.issuedBy,
@@ -225,8 +225,8 @@ export class WorkersController {
       };
       if (next.issueDate && next.expiryDate && next.expiryDate < next.issueDate) throw new BadRequestException('Expiry date must be on or after the issue date');
       // The same rules as adding: a credential type that has a number or an expiry date can't have it taken away.
-      if (before.hasExpiry && !next.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
-      if (before.hasNumber && !next.number) throw new BadRequestException('Number is required for this credential');
+      if (before.hasExpiry && !next.expiryDate) throw new BadRequestException('Expiry date is required for this {credential}');
+      if (before.hasNumber && !next.number) throw new BadRequestException('Number is required for this {credential}');
       const factsChanged = next.number !== before.number || next.issuedBy !== before.issuedBy || next.issueDate !== before.issue || next.expiryDate !== before.expiry;
       const notesChanged = has('notes') && fields.notes !== before.notes;
       // Saving the form without changing anything leaves the credential and its history alone.
@@ -263,7 +263,7 @@ export class WorkersController {
            verification_note = $4, rejection_reason = null, updated_at = now()
          where id = $1 and worker_id = $2`, [credentialId, workerId, auth.userId, note],
       );
-      if (!r.rowCount) throw new NotFoundException('credential not found');
+      if (!r.rowCount) throw new NotFoundException('{Credential} not found');
       await event(db, t.tenantId, credentialId, auth.userId, 'verified', { note });
       return getCredential(db, workerId, credentialId);
     });
@@ -283,7 +283,7 @@ export class WorkersController {
            verification_note = null, updated_at = now()
          where id = $1 and worker_id = $2`, [credentialId, workerId, reason, auth.userId],
       );
-      if (!r.rowCount) throw new NotFoundException('credential not found');
+      if (!r.rowCount) throw new NotFoundException('{Credential} not found');
       await event(db, t.tenantId, credentialId, auth.userId, 'rejected', { reason });
       return getCredential(db, workerId, credentialId);
     });
@@ -294,7 +294,7 @@ export class WorkersController {
   history(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) workerId: string, @Param('credentialId', ParseUUIDPipe) credentialId: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const owns = await db.query('select 1 from worker_credentials where id = $1 and worker_id = $2', [credentialId, workerId]);
-      if (!owns.rowCount) throw new NotFoundException('credential not found');
+      if (!owns.rowCount) throw new NotFoundException('{Credential} not found');
       // Names of who did what come from the sign-in records via a safe lookup, not the users table.
       return (await db.query(
         `select e.at, e.action, e.details, e.actor_user_id as "actorUserId"
