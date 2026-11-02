@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { api, ApiError, SignedOut } from './api';
 import {
-  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, KIND_LABEL, kpiNote, kpiOrder, kpiValue, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
+  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, kindLabel, kpiNote, kpiOrder, kpiValue, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
   type Attention, type ChangeRequest, type Dashboard, type LeaveRequest, type Term,
 } from './manager';
 import { currentWeek, firstDay, termWord } from './roster';
@@ -75,6 +75,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const people = termWord(terms, 'worker', 'Worker', 'Workers');
   const siteWord = termWord(terms, 'site', 'Site', 'Sites');
   const rosterWord = termWord(terms, 'roster', 'Roster', 'Rosters');
+  const equipmentWord = termWord(terms, 'equipment', 'Equipment', 'Equipment');
 
   const act = async (path: string, done: (result: unknown) => string) => {
     setBusy(true);
@@ -94,13 +95,13 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       : 'Declined.');
 
   const decideChange = (r: ChangeRequest, answer: 'approve' | 'decline') =>
-    act(`/change-requests/${r.id}/${answer}`, () => (answer === 'approve' ? 'Approved and changed on the roster.' : 'Declined. They have been told by email.'));
+    act(`/change-requests/${r.id}/${answer}`, () => (answer === 'approve' ? `Approved and changed on the ${rosterWord.lower}.` : 'Declined. They have been told by email.'));
 
   const confirm = (title: string, run: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', onPress: run }]);
 
   if (openShift) {
-    return <ShiftScreen tenant={tenant} shiftId={openShift} today={today} word={word} onSignedOut={onSignedOut}
+    return <ShiftScreen tenant={tenant} shiftId={openShift} today={today} word={word} equipmentWord={equipmentWord} onSignedOut={onSignedOut}
       onBack={() => { setOpenShift(null); load(); }} />;
   }
 
@@ -109,7 +110,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.heading}>{business}</Text>
-          <Text style={styles.muted}>Running the roster</Text>
+          <Text style={styles.muted}>Running the {rosterWord.lower}</Text>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {onMyShifts && <Pressable onPress={onMyShifts}><Text style={styles.link}>My {word.lowerMany}</Text></Pressable>}
@@ -124,7 +125,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         ))}
       </View>
       {tab === 'roster' && rosterView ? (
-        <RosterTab tenant={tenant} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord}
+        <RosterTab tenant={tenant} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
           busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
@@ -155,7 +156,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
               <Pressable key={`${i.kind}-${i.shiftId}`} style={[styles.card, i.urgent && styles.urgent]} onPress={() => setOpenShift(i.shiftId)}
                 accessibilityRole="button" accessibilityHint={`Opens the ${word.lower} to fill or change it`}>
                 <Text style={[styles.badge, i.urgent ? styles.badgeUrgent : styles.badgeWaiting, { marginTop: 0, marginBottom: 6 }]}>
-                  {KIND_LABEL[i.kind]} · {i.startsIn}
+                  {kindLabel(i.kind, equipmentWord)} · {i.startsIn}
                 </Text>
                 <Text style={styles.cardTitle}>{i.title}</Text>
                 {!!i.detail && <Text>{i.detail}</Text>}
@@ -163,7 +164,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
                 <Text style={[styles.link, styles.small]}>Open ›</Text>
               </Pressable>
             ))}
-            {attention.truncated && <Text style={[styles.muted, styles.small]}>The list was cut short; the roster on the web has the rest.</Text>}
+            {attention.truncated && <Text style={[styles.muted, styles.small]}>The list was cut short; the {rosterWord.lower} on the web has the rest.</Text>}
           </>
         )}
 
@@ -187,7 +188,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
               </View>
             ))}
 
-            <Text style={styles.section}>Roster changes waiting for approval</Text>
+            <Text style={styles.section}>{rosterWord.one} changes waiting for approval</Text>
             {changes.length === 0 ? <Text style={styles.muted}>None waiting.</Text> : changes.map(r => (
               <View key={r.id} style={styles.card}>
                 <Text style={styles.cardTitle}>{r.summary}</Text>

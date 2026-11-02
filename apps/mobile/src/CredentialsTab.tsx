@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { api, ApiError, SignedOut, upload } from './api';
 import {
-  CHECK_LABEL, dateFromParts, expiryLine, filesLine, LEVEL_LABEL, RTW_BADGE, rtwDetail, uploadName,
+  CHECK_LABEL, dateFromParts, expiryLine, filesLine, LEVEL_LABEL, nothingNeededLine, RTW_BADGE, rtwDetail, uploadName,
   type CredentialType, type MyCredential, type MyNeed, type MyRightToWork,
 } from './format';
 import { styles } from './styles';
@@ -29,8 +29,8 @@ function DateBoxes({ value, onChange, label }: { value: Parts; onChange: (p: Par
 }
 
 /** The worker app's Credentials tab: what their role needs, their credentials, adding one and adding photos or files. */
-export function CredentialsTab({ tenant, word, onSignedOut, footer }: {
-  tenant: string; word: { one: string; many: string; lower: string; lowerMany: string }; onSignedOut: () => void; footer: ReactNode;
+export function CredentialsTab({ tenant, word, roleWord, onSignedOut, footer }: {
+  tenant: string; word: { one: string; many: string; lower: string; lowerMany: string }; roleWord?: { lower: string }; onSignedOut: () => void; footer: ReactNode;
 }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +146,7 @@ export function CredentialsTab({ tenant, word, onSignedOut, footer }: {
         <>
           <Text style={[styles.section, { marginTop: 0 }]}>What you need</Text>
           {data.needs.length === 0
-            ? <Text style={styles.muted}>Nothing right now. You have everything your role needs.</Text>
+            ? <Text style={styles.muted}>{nothingNeededLine(roleWord)}</Text>
             : data.needs.map(n => (
               <View key={n.credentialTypeId} style={[styles.card, { flexDirection: 'row', alignItems: 'center' }]}>
                 <View style={{ flex: 1 }}>

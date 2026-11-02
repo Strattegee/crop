@@ -173,7 +173,16 @@ describe('worker app: access, my shifts and offers', () => {
     await http().get('/my').set(as('ana')).expect(403);
     await signIn('ana', 'ana@example.com', true);
     const me = await http().get('/my').set(as('ana')).expect(200);
-    expect(me.body).toMatchObject({ business: 'Demo Cafe', firstName: 'Ana', name: 'Ana Example', word: { one: 'Shift', lower: 'shift' } });
+    expect(me.body).toMatchObject({
+      business: 'Demo Cafe', firstName: 'Ana', name: 'Ana Example', word: { one: 'Shift', lower: 'shift' },
+      rosterWord: { one: 'Roster', lower: 'roster' }, roleWord: { one: 'Role', lower: 'role' },
+    });
+    // The app's labels follow the business's own words.
+    await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1045, singular: 'Schedule', plural: 'Schedules' }, { code: 1055, singular: 'Position', plural: 'Positions' }] }).expect(200);
+    expect((await http().get('/my').set(as('ana')).expect(200)).body).toMatchObject({
+      rosterWord: { one: 'Schedule', lower: 'schedule', lowerMany: 'schedules' }, roleWord: { one: 'Position', lower: 'position' },
+    });
+    await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1045, singular: '' }, { code: 1055, singular: '' }] }).expect(200);
     expect((await owner.query('select user_id is not null as linked from workers where id = $1', [ana])).rows[0].linked).toBe(true);
     expect((await http().get(`/workers/${ana}/app-access`).set(as('alloc')).expect(200)).body).toMatchObject({ state: 'active' });
     expect((await http().post(`/workers/${ana}/app-access`).set(as('admin')).expect(409)).body.message).toBe('Ana Example already has the app');

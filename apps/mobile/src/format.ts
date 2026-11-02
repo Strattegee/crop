@@ -236,9 +236,9 @@ export function hasStepsForMe(o: MyOnboarding | null): boolean {
 }
 
 /** What My shifts says when there are none: someone being onboarded hears why. */
-export function noShiftsLine(word: { lowerMany: string }, onboarding: MyOnboarding | null): string {
+export function noShiftsLine(word: { lowerMany: string }, onboarding: MyOnboarding | null, roster: { lower: string } = { lower: 'roster' }): string {
   if (onboarding) return `Your ${word.lowerMany} show here once the office has finished getting you started.`;
-  return `No ${word.lowerMany} in the next four weeks yet. New ones show here once the roster is published.`;
+  return `No ${word.lowerMany} in the next four weeks yet. New ones show here once the ${roster.lower} is published.`;
 }
 
 /** The worker privacy notice (GET /my `notice`): shown the first time and whenever it changes, until confirmed. */
@@ -260,4 +260,9 @@ export function noticeText(n: MyNotice, business: string): { heading: string; bo
     body: `CROP is provided by Strattegee Pty Ltd. ${business || 'Your employer'} uses it for your shifts and work records. `
       + 'Please read how your information is handled.',
   };
+}
+
+/** "Nothing right now. You have everything your role needs." in the business's word for role. */
+export function nothingNeededLine(role: { lower: string } = { lower: 'role' }): string {
+  return `Nothing right now. You have everything your ${role.lower} needs.`;
 }

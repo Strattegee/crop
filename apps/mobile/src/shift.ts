@@ -32,9 +32,9 @@ export function sentences(list: (Reason | string)[]): string {
 }
 
 /** The stage the shift is in, in the roster's words, and how loud to show it. */
-export function stageOf(s: ShiftDetail): { label: string; tone: 'urgent' | 'waiting' | 'booked' | 'plain' } {
+export function stageOf(s: ShiftDetail, equipment: { one: string; lower: string } = { one: 'Equipment', lower: 'equipment' }): { label: string; tone: 'urgent' | 'waiting' | 'booked' | 'plain' } {
   if (s.status === 'cancelled') return { label: s.cancelledReason ? `Cancelled: ${s.cancelledReason}` : 'Cancelled', tone: 'plain' };
-  if (s.equipmentOnly) return { label: s.status === 'booked' ? 'Equipment booked' : 'No equipment on it yet', tone: s.status === 'booked' ? 'booked' : 'urgent' };
+  if (s.equipmentOnly) return { label: s.status === 'booked' ? `${equipment.one} booked` : `No ${equipment.lower} on it yet`, tone: s.status === 'booked' ? 'booked' : 'urgent' };
   if (s.workerName && s.assignmentStatus === 'confirmed') return { label: `Booked: ${s.workerName}`, tone: 'booked' };
   if (s.workerName && s.agencyName) return { label: `${s.workerName} from ${s.agencyName}, waiting for you to approve`, tone: 'waiting' };
   if (s.workerName) return { label: `${s.workerName}, waiting for them to confirm`, tone: 'waiting' };

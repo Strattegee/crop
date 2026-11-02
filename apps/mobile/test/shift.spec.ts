@@ -25,6 +25,9 @@ describe('a shift in manager mode', () => {
     expect(stageOf({ ...on, status: 'booked', assignmentStatus: 'confirmed' })).toEqual({ label: 'Booked: Sam Lee', tone: 'booked' });
     expect(stageOf({ ...shift, status: 'cancelled', cancelledReason: 'Client closed' }).label).toBe('Cancelled: Client closed');
     expect(stageOf({ ...shift, equipmentOnly: true }).label).toBe('No equipment on it yet');
+    const plant = { one: 'Plant', lower: 'plant' };
+    expect(stageOf({ ...shift, equipmentOnly: true }, plant).label).toBe('No plant on it yet');
+    expect(stageOf({ ...shift, equipmentOnly: true, status: 'booked' }, plant).label).toBe('Plant booked');
   });
 
   it('says when it is and how long', () => {
