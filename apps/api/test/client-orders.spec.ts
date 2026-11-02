@@ -84,11 +84,15 @@ describe('client orders: rules (David, 2 Nov)', () => {
     expect(clientShiftStage({ ...booked, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toBe('booked');
     expect(clientShiftStage({ ...booked, clientConfirms: false })).toBe('booked');
     expect(clientShiftStage({ ...booked, status: 'assigned' })).toBe('assigned');
+    // Either side can say yes first: the client's yes on an allocated shift waits for the worker.
+    expect(clientShiftStage({ ...booked, status: 'assigned', clientConfirmedAt: '2026-11-02T00:00:00Z' })).toBe('worker_to_confirm');
+    expect(clientShiftStage({ ...booked, status: 'assigned', clientConfirms: false, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toBe('assigned');
     const ok = { onOrder: true, clientConfirms: true, status: 'booked', started: false, clientConfirmedAt: null };
     expect(clientConfirmRefusal(ok)).toBeNull();
     expect(clientConfirmRefusal({ ...ok, onOrder: false })).toMatch(/order/);
     expect(clientConfirmRefusal({ ...ok, clientConfirms: false })).toMatch(/doesn’t confirm bookings/);
-    expect(clientConfirmRefusal({ ...ok, status: 'assigned' })).toMatch(/Only a booked/);
+    expect(clientConfirmRefusal({ ...ok, status: 'assigned' })).toBeNull();
+    expect(clientConfirmRefusal({ ...ok, status: 'open' })).toBe('Put someone on the {shift} first: the {client} confirms the person');
     expect(clientConfirmRefusal({ ...ok, started: true })).toMatch(/already started/);
     expect(clientConfirmRefusal({ ...ok, clientConfirmedAt: '2026-11-02T00:00:00Z' })).toMatch(/already confirmed/);
   });
@@ -201,7 +205,7 @@ describe('client orders: API', () => {
     await http().post('/shifts').set(as('alloc')).send({ facilityId: ids.office, role: 'Admin', date: ahead(3), startTime: '09:00', endTime: '17:00' }).expect(201);
     const r = (await http().get('/allocations/client-shifts').set(as('alloc')).expect(200)).body;
     expect(r.shifts).toHaveLength(4);
-    expect(r.counts).toEqual({ open: 4, offered: 0, assigned: 0, client_to_confirm: 0, booked: 0 });
+    expect(r.counts).toEqual({ open: 4, offered: 0, assigned: 0, worker_to_confirm: 0, client_to_confirm: 0, booked: 0 });
     expect(r.shifts[0]).toMatchObject({ clientName: 'Bayside Health', facilityName: 'Bayside Campus', areaName: 'Ward 4', orderId: ids.order,
       clientReference: 'PO-77', requestedByName: 'Pat Ward', stage: 'open', localStart: '07:00', localEnd: '15:30' });
     expect((await http().get(`/allocations/client-shifts?clientId=${ids.hill}`).set(as('alloc')).expect(200)).body.shifts).toEqual([]);
@@ -285,7 +289,7 @@ describe('client orders: API', () => {
       .find(s => s.id === shiftId)!.stage;
     // Not booked yet: refused.
     const early = await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(409);
-    expect(early.body.message).toBe('Only a booked shift can be confirmed by the client');
+    expect(early.body.message).toBe('Put someone on the shift first: the client confirms the person');
     await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
     expect(await stageOf()).toBe('assigned');
     await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
@@ -316,7 +320,7 @@ describe('client orders: API', () => {
     expect((await owner.query('select count(*)::int as n from shift_changes where shift_id = $1', [shiftId])).rows[0].n).toBe(changes);
     expect((await owner.query(`select 1 from audit_log where table_name = 'shifts' and row_id = $1 and action = 'update' and new_values ? 'client_confirmed_at'`, [shiftId])).rowCount).toBe(1);
     const again = await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(409);
-    expect(again.body.message).toBe('The client has already confirmed this booking');
+    expect(again.body.message).toBe('The client has already confirmed this person');
 
     // Undo puts it back; a different person booked later needs the client's yes again.
     await http().post(`/shifts/${shiftId}/client-confirmed/undo`).set(as('alloc')).expect(200);
@@ -327,6 +331,51 @@ describe('client orders: API', () => {
     await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200);
     await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
     expect(await stageOf()).toBe('client_to_confirm');
+  });
+
+  it('lets the client say yes first: waits for the worker, then sends the plain booked email', async () => {
+    await confirmations().runOnce(); // what earlier tests booked
+    const before = (await emails()).length;
+    const shiftId = (await http().post('/client-orders').set(as('alloc')).send(order({ date: ahead(11), clientReference: 'PO-91' })).expect(201)).body.ids[0] as string;
+    const stageOf = async () => ((await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.shifts as { id: string; stage: string }[])
+      .find(s => s.id === shiftId)!.stage;
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    expect(await stageOf()).toBe('assigned');
+    // The client is happy with Sarah before she has said yes.
+    const yes = (await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(200)).body;
+    expect(yes).toMatchObject({ status: 'assigned', clientConfirms: true });
+    expect(yes.clientConfirmedAt).not.toBeNull();
+    expect(await stageOf()).toBe('worker_to_confirm');
+    const counts = (await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.counts;
+    expect(counts.worker_to_confirm).toBe(1);
+    expect(await confirmations().runOnce()).toBe(0); // nothing until the worker confirms
+    // Sarah confirms: both have said yes, so it's booked and the client gets "Booked", not "Please confirm".
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await stageOf()).toBe('booked');
+    expect(await confirmations().runOnce()).toBe(1);
+    expect(await confirmations().runOnce()).toBe(0);
+    const sent = (await emails()).slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toMatch(/^Booked: Sarah Example for Ward 4, Bayside Campus, .* \(your ref PO-91\)$/);
+    expect(sent[0].body).not.toContain('Please reply to this email');
+  });
+
+  it('a client’s yes belongs to the person: someone else on the shift waits for the client again', async () => {
+    const shiftId = (await http().post('/client-orders').set(as('alloc')).send(order({ date: ahead(13), clientReference: 'PO-92' })).expect(201)).body.ids[0] as string;
+    const stageOf = async () => ((await http().get('/allocations/client-shifts?days=31').set(as('alloc')).expect(200)).body.shifts as { id: string; stage: string }[])
+      .find(s => s.id === shiftId)!.stage;
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+    await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(200);
+    await http().post(`/shifts/${shiftId}/client-confirmed`).set(as('alloc')).expect(409);
+    await http().post(`/shifts/${shiftId}/unassign`).set(as('alloc')).send({}).expect(200);
+    expect(await stageOf()).toBe('open');
+    await http().post(`/shifts/${shiftId}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200);
+    expect(await stageOf()).toBe('assigned');
+    await http().post(`/shifts/${shiftId}/confirm`).set(as('alloc')).expect(200);
+    expect(await stageOf()).toBe('client_to_confirm');
+    // Tom hasn't been confirmed by the client, so the email asks them to.
+    expect(await confirmations().runOnce()).toBe(1);
+    expect((await emails()).at(-1)!.subject).toMatch(/^Please confirm: Tom Example/);
   });
 
   it('refuses a client confirmation for shifts that aren’t from such a client’s order', async () => {

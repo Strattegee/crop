@@ -5,22 +5,33 @@
  */
 import { mondayOf } from '../app/(office)/roster/view';
 
-export type Stage = 'open' | 'offered' | 'assigned' | 'client_to_confirm' | 'booked';
-/** Stages in the roster's order; "client to confirm" (migration 0069) sits between allocated and booked. */
-export const STAGES: readonly Stage[] = ['open', 'offered', 'assigned', 'client_to_confirm', 'booked'];
+export type Stage = 'open' | 'offered' | 'assigned' | 'worker_to_confirm' | 'client_to_confirm' | 'booked';
+/**
+ * Stages in the roster's order. When a client confirms each booking, both sides must say yes (David, 2 Nov):
+ * "worker to confirm" (the client is happy, the person hasn't confirmed) and "client to confirm" (the person confirmed,
+ * the client hasn't) sit between allocated and booked.
+ */
+export const STAGES: readonly Stage[] = ['open', 'offered', 'assigned', 'worker_to_confirm', 'client_to_confirm', 'booked'];
 /** Roster stage words and card classes (Steve's colours, 26 Oct). Use `stageLabel` for the business's word for client. */
 export const STAGE: Record<Stage, { label: string; cls: string }> = {
   open: { label: 'Unfilled', cls: 'unfilled' },
   offered: { label: 'Offered', cls: 'offered' },
   assigned: { label: 'Allocated', cls: 'allocated' },
+  worker_to_confirm: { label: 'Worker to confirm', cls: 'allocated' },
   client_to_confirm: { label: 'Client to confirm', cls: 'to-confirm' },
   booked: { label: 'Booked', cls: 'booked' },
 };
 
-/** A stage's words, with the business's word for client: "Customer to confirm". */
-export function stageLabel(stage: Stage, client = 'Client'): string {
-  return stage === 'client_to_confirm' ? `${client} to confirm` : STAGE[stage].label;
+/** A stage's words, with the business's words for client and worker: "Customer to confirm", "Employee to confirm". */
+export function stageLabel(stage: Stage, client = 'Client', worker = 'Worker'): string {
+  if (stage === 'client_to_confirm') return `${client} to confirm`;
+  if (stage === 'worker_to_confirm') return `${worker} to confirm`;
+  return STAGE[stage].label;
 }
+
+/** Whether the office can record the client's yes on this shift now (someone on it, client confirms, not yet said yes). */
+export const canRecordClientYes = (s: { stage: Stage; clientConfirms?: boolean }) =>
+  s.stage === 'client_to_confirm' || (s.stage === 'assigned' && Boolean(s.clientConfirms));
 
 /** Client rank (1 = most loyal … 7 = fill-in) as a chip: "Rank 1"; nothing when not ranked. */
 export function rankChip(rank: number | null | undefined): string | null {
@@ -34,16 +45,23 @@ export const RANK_CHOICES: { value: string; label: string }[] = [
 ];
 
 /**
- * The shift panel's line for a booked shift on an order whose client confirms each booking, or null:
- * "Waiting for Bayside Health to confirm Sarah Example" / "Bayside Health confirmed (Pat at the office, Mon 2 Nov 10:15)".
+ * The shift panel's line when the shift's client confirms each booking and someone is on it, or null. Both sides must
+ * say yes, in either order (David, 2 Nov): `waiting` = the client's yes is still to record (button "Client confirmed"),
+ * otherwise the line says who recorded it (button Undo).
  */
 export function clientConfirmLine(
   s: { status: string; workerName?: string | null; clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null },
   client: string, when: (iso: string) => string,
 ): { waiting: boolean; text: string } | null {
-  if (!s.clientConfirms || s.status !== 'booked') return null;
-  if (!s.clientConfirmedAt) return { waiting: true, text: `Waiting for the ${client} to confirm ${s.workerName ?? 'this booking'}. Record it when they say yes; if they say no, remove the person.` };
-  return { waiting: false, text: `The ${client} confirmed${s.clientConfirmedBy ? `, recorded by ${s.clientConfirmedBy}` : ''} ${when(s.clientConfirmedAt)}.` };
+  if (!s.clientConfirms || (s.status !== 'booked' && s.status !== 'assigned')) return null;
+  const who = s.workerName ?? 'this person';
+  if (!s.clientConfirmedAt) {
+    return s.status === 'booked'
+      ? { waiting: true, text: `Not final yet: waiting for the ${client} to confirm ${who}. Record it when they say yes; if they say no, remove the person.` }
+      : { waiting: true, text: `The ${client} confirms each booking. Record their yes when they're happy with ${who}; it's final once both have confirmed.` };
+  }
+  const recorded = `The ${client} confirmed ${s.status === 'booked' ? '' : `${who} `}`.trimEnd() + `${s.clientConfirmedBy ? `, recorded by ${s.clientConfirmedBy}` : ''} ${when(s.clientConfirmedAt)}.`;
+  return { waiting: false, text: s.status === 'booked' ? recorded : `${recorded} Waiting for ${who} to confirm; it's final when they do.` };
 }
 
 export const CHANNELS = [

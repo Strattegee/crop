@@ -83,8 +83,11 @@ export async function createClientOrder(f: FormData) {
   }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. Fill them below with Find staff.`);
 }
 
-/** Records the client's yes for a booked shift on Allocations (their client confirms bookings, migration 0069). */
+/** Records the client's yes on Allocations, allocated or booked (their client confirms bookings; both sides must say yes). */
 export async function clientConfirmedHere(shiftId: string) {
   const tw = await words();
-  await attempt('/allocations', () => api(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' }), `Recorded: the ${tw.lower(T.client)} confirmed.`);
+  let status = '';
+  await attempt('/allocations', async () => {
+    status = (await api<{ status: string }>(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' })).status;
+  }, () => status === 'booked' ? `Recorded: the ${tw.lower(T.client)} confirmed. It's booked.` : `Recorded: the ${tw.lower(T.client)} confirmed. Waiting for the ${tw.lower(T.worker)} to confirm.`);
 }

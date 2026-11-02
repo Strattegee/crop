@@ -121,32 +121,44 @@ export function orderSummary(c: OrderCounts, w: Words = DEFAULT_WORDS): string {
   return parts.join(' · ');
 }
 
-export type ClientShiftStage = 'open' | 'offered' | 'assigned' | 'client_to_confirm' | 'booked';
-export const CLIENT_SHIFT_STAGES: readonly ClientShiftStage[] = ['open', 'offered', 'assigned', 'client_to_confirm', 'booked'];
+export type ClientShiftStage = 'open' | 'offered' | 'assigned' | 'worker_to_confirm' | 'client_to_confirm' | 'booked';
+export const CLIENT_SHIFT_STAGES: readonly ClientShiftStage[] = ['open', 'offered', 'assigned', 'worker_to_confirm', 'client_to_confirm', 'booked'];
+
+type ConfirmFacts = { status: string; clientConfirms?: boolean; clientConfirmedAt?: string | Date | null };
 
 /** Whether the client still has to confirm the person booked (their client confirms bookings, not yet confirmed). */
-export const waitsForClient = (s: { status: string; clientConfirms?: boolean; clientConfirmedAt?: string | Date | null }) =>
+export const waitsForClient = (s: ConfirmFacts) =>
   s.status === 'booked' && Boolean(s.clientConfirms) && !s.clientConfirmedAt;
 
+/** Whether the client has said yes to the person on the shift, who hasn't confirmed yet (their client confirms bookings). */
+export const waitsForWorker = (s: ConfirmFacts) =>
+  s.status === 'assigned' && Boolean(s.clientConfirms) && Boolean(s.clientConfirmedAt);
+
 /**
- * A client shift's stage for the allocation screen (same order as the roster's colours). A booked shift whose client
- * confirms each booking is "client to confirm" until the office records the client's yes.
+ * A client shift's stage for the allocation screen (same order as the roster's colours). When the client confirms each
+ * booking (David, 2 Nov: "both client and worker must confirm before it is finalised"), either side can say yes
+ * first: assigned with the client's yes is "worker to confirm", booked without it is "client to confirm"; only both
+ * is booked. The shift's own status (open / assigned / booked) is unchanged; this is the allocation stage on top.
  */
-export function clientShiftStage(s: { status: string; offersPending: number; clientConfirms?: boolean; clientConfirmedAt?: string | Date | null }): ClientShiftStage {
+export function clientShiftStage(s: ConfirmFacts & { offersPending: number }): ClientShiftStage {
   if (waitsForClient(s)) return 'client_to_confirm';
+  if (waitsForWorker(s)) return 'worker_to_confirm';
   if (s.status === 'booked') return 'booked';
   if (s.status === 'assigned') return 'assigned';
   return s.offersPending > 0 ? 'offered' : 'open';
 }
 
-/** Why the office can't record the client's yes on this shift, or null. Tokens are filled with the business's words. */
+/**
+ * Why the office can't record the client's yes on this shift, or null. Tokens are filled with the business's words.
+ * The client can say yes as soon as someone is on the shift (allocated or booked); it counts for that person only.
+ */
 export function clientConfirmRefusal(s: {
   onOrder: boolean; clientConfirms: boolean; status: string; started: boolean; clientConfirmedAt: string | Date | null;
 }): string | null {
   if (!s.onOrder) return 'This {shift} isn’t from a {client}’s order';
   if (!s.clientConfirms) return 'This {client} doesn’t confirm bookings. Change that in the {client}’s set-up if they should.';
-  if (s.status !== 'booked') return 'Only a booked {shift} can be confirmed by the {client}';
+  if (s.status !== 'booked' && s.status !== 'assigned') return 'Put someone on the {shift} first: the {client} confirms the person';
   if (s.started) return 'This {shift} has already started';
-  if (s.clientConfirmedAt) return 'The {client} has already confirmed this booking';
+  if (s.clientConfirmedAt) return 'The {client} has already confirmed this person';
   return null;
 }

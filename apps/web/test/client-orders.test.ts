@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RANK_CHOICES, STAGES, allocationsMenu, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel } from '../lib/client-orders';
+import { RANK_CHOICES, STAGES, allocationsMenu, canRecordClientYes, askedLine, byDay, clientConfirmLine, findStaffHref, orderPlaces, parsePlace, rankChip, stageLabel } from '../lib/client-orders';
 
 describe('client orders on Allocations (David, 2 Nov)', () => {
   it('offers client sites and their areas as one choice, grouped by client', () => {
@@ -43,7 +43,14 @@ describe('client orders on Allocations (David, 2 Nov)', () => {
   });
 
   it('words the client-to-confirm stage and the client’s rank (migration 0069)', () => {
-    expect(STAGES).toEqual(['open', 'offered', 'assigned', 'client_to_confirm', 'booked']);
+    expect(STAGES).toEqual(['open', 'offered', 'assigned', 'worker_to_confirm', 'client_to_confirm', 'booked']);
+    expect(stageLabel('worker_to_confirm')).toBe('Worker to confirm');
+    expect(stageLabel('worker_to_confirm', 'Customer', 'Employee')).toBe('Employee to confirm');
+    expect(canRecordClientYes({ stage: 'assigned', clientConfirms: true })).toBe(true);
+    expect(canRecordClientYes({ stage: 'assigned', clientConfirms: false })).toBe(false);
+    expect(canRecordClientYes({ stage: 'client_to_confirm' })).toBe(true);
+    expect(canRecordClientYes({ stage: 'worker_to_confirm', clientConfirms: true })).toBe(false);
+    expect(canRecordClientYes({ stage: 'open', clientConfirms: true })).toBe(false);
     expect(stageLabel('client_to_confirm')).toBe('Client to confirm');
     expect(stageLabel('client_to_confirm', 'Customer')).toBe('Customer to confirm');
     expect(stageLabel('booked', 'Customer')).toBe('Booked');
@@ -59,10 +66,15 @@ describe('client orders on Allocations (David, 2 Nov)', () => {
     const when = (iso: string) => `at ${iso}`;
     const booked = { status: 'booked', workerName: 'Sarah Example', clientConfirms: true, clientConfirmedAt: null };
     expect(clientConfirmLine(booked, 'client', when)).toEqual({ waiting: true,
-      text: 'Waiting for the client to confirm Sarah Example. Record it when they say yes; if they say no, remove the person.' });
+      text: 'Not final yet: waiting for the client to confirm Sarah Example. Record it when they say yes; if they say no, remove the person.' });
     expect(clientConfirmLine({ ...booked, clientConfirmedAt: 'T', clientConfirmedBy: 'Alex Office' }, 'customer', when))
       .toEqual({ waiting: false, text: 'The customer confirmed, recorded by Alex Office at T.' });
     expect(clientConfirmLine({ ...booked, clientConfirms: false }, 'client', when)).toBeNull();
-    expect(clientConfirmLine({ ...booked, status: 'assigned' }, 'client', when)).toBeNull();
+    expect(clientConfirmLine({ ...booked, status: 'open', workerName: null }, 'client', when)).toBeNull();
+    // Either side can say yes first (David, 2 Nov).
+    expect(clientConfirmLine({ ...booked, status: 'assigned' }, 'client', when)).toEqual({ waiting: true,
+      text: 'The client confirms each booking. Record their yes when they\'re happy with Sarah Example; it\'s final once both have confirmed.' });
+    expect(clientConfirmLine({ ...booked, status: 'assigned', clientConfirmedAt: 'T', clientConfirmedBy: 'Alex Office' }, 'client', when)).toEqual({ waiting: false,
+      text: 'The client confirmed Sarah Example, recorded by Alex Office at T. Waiting for Sarah Example to confirm; it\'s final when they do.' });
   });
 });

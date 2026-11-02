@@ -50,13 +50,24 @@ export async function assign(shiftId: string, workerId: string, f: FormData) {
 }
 
 export async function confirm(shiftId: string, f: FormData) {
-  await attempt(back(f), () => api(`/shifts/${shiftId}/confirm`, { method: 'POST' }), 'Booked.');
+  const tw = await words();
+  let waits = false;
+  await attempt(back(f), async () => {
+    const s = await api<{ clientConfirms?: boolean; clientConfirmedAt?: string | null }>(`/shifts/${shiftId}/confirm`, { method: 'POST' });
+    waits = Boolean(s.clientConfirms && !s.clientConfirmedAt);
+  }, () => waits ? `Confirmed. Not final until the ${tw.lower(T.client)} confirms too.` : 'Booked.');
 }
 
-/** Records the client's yes for the person booked on a shift from their order (their client confirms bookings, migration 0069). */
+/**
+ * Records the client's yes for the person on a shift from their order (their client confirms bookings, migration 0069),
+ * whether the person has confirmed yet or not (both must, either order).
+ */
 export async function clientConfirmed(shiftId: string, f: FormData) {
   const tw = await words();
-  await attempt(back(f), () => api(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' }), `Recorded: the ${tw.lower(T.client)} confirmed.`);
+  let status = '';
+  await attempt(back(f), async () => {
+    status = (await api<{ status: string }>(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' })).status;
+  }, () => status === 'booked' ? `Recorded: the ${tw.lower(T.client)} confirmed. It's booked.` : `Recorded: the ${tw.lower(T.client)} confirmed. Waiting for the ${tw.lower(T.worker)} to confirm.`);
 }
 
 /** Takes back a client confirmation recorded by mistake. */
