@@ -9,7 +9,10 @@ import { T, words } from '../../../lib/terms';
 import { addedMessage } from '../../../lib/outside-agency';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen, itemDrop, itemDropMessage, withShift } from './view';
+import {
+  ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen, bestPeople, itemDrop, itemDropMessage, multiAssignMessage, pickedInOrder, withShift,
+  type AssignOutcome, type BestPerson, type MenuCandidate, type PickedShift,
+} from './view';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 const back = (f: FormData) => {
@@ -228,6 +231,44 @@ export async function dropOnShift(kind: 'person' | 'equipment' | 'item', shiftId
     const drop = itemDrop(target.workerId, !!target.equipmentOnly);
     await attempt(withShift(to, shiftId), () => api(`/items/${id}/issue`, { method: 'POST', body: { shiftId, ...drop } }),
       itemDropMessage(target.itemName ?? tw.one(T.item), target.itemUnit, drop.workerId ? target.workerName : null, tw.lower(T.shift)));
+  }
+}
+
+/**
+ * One person onto several picked shifts (David, 2 Nov): each through the ordinary assign, in date order, carrying on
+ * past any the API refuses, then one message saying which went on and why the others didn't. One shift behaves
+ * exactly like a drop.
+ */
+export async function assignToShifts(workerId: string, workerName: string, picks: PickedShift[], backTo: string) {
+  const to = backTo.startsWith('/roster') ? backTo : '/roster';
+  if (picks.length <= 1) {
+    if (picks[0]) await dropOnShift('person', picks[0].id, workerId, to);
+    redirect(to);
+  }
+  const tw = await words();
+  const results: AssignOutcome[] = [];
+  for (const p of pickedInOrder(picks.slice(0, 60))) {
+    try {
+      await api(`/shifts/${p.id}/assign`, { method: 'POST', body: { workerId } });
+      results.push({ label: p.label, ok: true });
+    } catch (err) {
+      if (err && typeof err === 'object' && 'digest' in err) throw err; // Next.js redirect (sign in again)
+      results.push({ label: p.label, ok: false, message: err instanceof ApiError ? err.message : 'something went wrong' });
+    }
+  }
+  const m = multiAssignMessage(workerName, results, n => tw.count(n, T.shift));
+  const text = m.done ?? m.error ?? '';
+  redirect(`${to}${to.includes('?') ? '&' : '?'}${m.done ? 'done' : 'error'}=${encodeURIComponent(text)}`);
+}
+
+/** The right-click menu on a shift card: the best people for it (or for every picked shift), from the candidates list. */
+export async function peopleForShifts(shiftIds: string[]): Promise<{ people: BestPerson[] } | { error: string }> {
+  try {
+    const lists = await Promise.all(shiftIds.slice(0, 30).map(id => api<{ candidates: MenuCandidate[] }>(`/shifts/${id}/candidates`).then(r => r.candidates)));
+    return { people: bestPeople(lists) };
+  } catch (err) {
+    if (err && typeof err === 'object' && 'digest' in err) throw err;
+    return { error: err instanceof ApiError ? err.message : 'Could not load the list. Please try again.' };
   }
 }
 

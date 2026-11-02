@@ -16,7 +16,7 @@ import { minutesWords, requestStepChoices } from '../../../lib/agency-timing';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
-  addDaysIso, shiftMarkers,
+  addDaysIso, parseStripFilter, shiftMarkers,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -123,7 +123,7 @@ const LANE_PX = 60;
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; error?: string; done?: string }>;
+  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; role?: string; hours?: string; error?: string; done?: string }>;
 }) {
   const money = moneyFor((await businessSettings()).country);
   const tw = await words();
@@ -141,10 +141,13 @@ export default async function RosterPage({ searchParams }: {
   const look = parseLook(sp.look);
   const cardLook = span === 'week' ? look : 'cards';
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
+  // The strip's role and "Has hours left" filters (David, 2 Nov) ride along in every roster URL, so drops keep them.
+  const stripFilter = parseStripFilter(sp);
   const at = (s: Span, anchor: string) => s === 'week' ? { span: undefined, date: undefined, week: anchor } : { span: s, date: anchor, week: undefined };
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { ...at(span, range.anchor), site, view, look: look === 'cards' ? undefined : look, shift: sp.shift, log: sp.log === '1' ? '1' : undefined, ...over };
+    const merged = { ...at(span, range.anchor), site, view, look: look === 'cards' ? undefined : look, shift: sp.shift, log: sp.log === '1' ? '1' : undefined,
+      role: stripFilter.role || undefined, hours: stripFilter.hoursLeft ? 'left' : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
@@ -326,7 +329,7 @@ export default async function RosterPage({ searchParams }: {
   // Shift cards, shared by the week grid and the day timeline (bars).
   const win = dayWindow(span === 'day' ? [...shifts, ...cancelled] : []);
   const cardAttrs = (s: Shift) => ({
-    href: url({ shift: s.id }), 'data-shift': s.id,
+    href: url({ shift: s.id }), 'data-shift': s.id, 'data-date': s.localDate, 'data-start': s.localStart,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
     // For dropping an item: who it goes to (the person on the shift), as the panel's "Give to" does.
@@ -879,9 +882,9 @@ export default async function RosterPage({ searchParams }: {
 
       {span !== 'month' && (
       <div className="roster-layout">
-        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag
-          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), sites: tw.many(T.site) }} />
-        <DropZone back={here}>
+        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter}
+          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), sites: tw.many(T.site) }} />
+        <DropZone back={here} labels={{ shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true), person: tw.lower(T.worker), people: tw.lower(T.worker, true) }}>
           <table className={`ribbon ${span === 'day' ? 'day' : ''} look-${cardLook}`}>
             <thead>
               <tr>

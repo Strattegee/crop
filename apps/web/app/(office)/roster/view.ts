@@ -403,3 +403,92 @@ export function shiftMarkers(s: MarkerShift): Marker[] {
   if (s.duties?.length) out.push({ key: 'd', letter: 'D', cls: 'mk-d', title: `Duties: ${s.duties.map(d => d.name).join(', ')}` });
   return out;
 }
+
+/**
+ * The strip's filters (David, 2 Nov): kept in the roster URL (`role`, `hours=left`) like the rest of the roster's state,
+ * so they survive dropping someone onto a shift (the server action returns to `back`) and picking another shift.
+ */
+export type StripFilter = { role: string; hoursLeft: boolean };
+export function parseStripFilter(sp: { role?: string; hours?: string }): StripFilter {
+  const role = (sp.role ?? '').trim().slice(0, 100);
+  return { role, hoursLeft: sp.hours === 'left' };
+}
+
+/** The current roster URL with new strip filters; everything else kept, old messages dropped. */
+export function withStripFilter(current: string, f: StripFilter): string {
+  const u = new URL(current.startsWith('/roster') ? current : '/roster', 'http://roster.local');
+  if (f.role) u.searchParams.set('role', f.role); else u.searchParams.delete('role');
+  if (f.hoursLeft) u.searchParams.set('hours', 'left'); else u.searchParams.delete('hours');
+  u.searchParams.delete('done');
+  u.searchParams.delete('error');
+  return `${u.pathname}${u.search}`;
+}
+
+/** A shift picked for assigning several at once (David, 2 Nov): its local date and start time. */
+export type PickedShift = { id: string; date: string; start: string };
+
+/** Picked shifts in date order, each with a short label: "Fri 6 Nov", plus the start time when two share a day. */
+export function pickedInOrder(picks: PickedShift[]): (PickedShift & { label: string })[] {
+  const sorted = [...picks].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+  const perDay = new Map<string, number>();
+  for (const p of sorted) perDay.set(p.date, (perDay.get(p.date) ?? 0) + 1);
+  return sorted.map(p => ({ ...p, label: `${shortDate(p.date)}${(perDay.get(p.date) ?? 0) > 1 ? ` ${p.start}` : ''}` }));
+}
+
+/**
+ * A reason worded for a list about one person: "Sol Oakley is already rostered …" → "already rostered …",
+ * "Sol Oakley doesn't have the role Barista" → "doesn't have the role Barista". Anything else is kept as it is.
+ */
+export function reasonFor(name: string, message: string): string {
+  const parts = message.split(/\.\s+/).map(m => m.trim().replace(/\.$/, '')).filter(Boolean);
+  return parts.map(m => {
+    if (!name || !m.startsWith(`${name} `)) return m;
+    const rest = m.slice(name.length + 1);
+    if (rest.startsWith('is ')) return rest.slice(3);
+    return /^[a-z]/.test(rest) ? rest : m;
+  }).join('; ');
+}
+
+export type AssignOutcome = { label: string; ok: boolean; message?: string };
+
+/**
+ * What the office is told after putting one person on several shifts: how many went on, then each one that didn't
+ * and why (the API's own reason). Nothing assigned is an error; otherwise a success that lists the rest.
+ */
+export function multiAssignMessage(name: string, results: AssignOutcome[], count: (n: number) => string): { done?: string; error?: string } {
+  const ok = results.filter(r => r.ok).length;
+  const failed = results.filter(r => !r.ok);
+  const notLine = failed.length ? `Not assigned: ${failed.map(r => `${r.label}${r.message ? ` (${reasonFor(name, r.message)})` : ''}`).join(', ')}.` : '';
+  if (!ok) return { error: `${name} wasn't assigned. ${notLine}` };
+  return { done: `Assigned ${name} to ${count(ok)}. Confirm once they have agreed.${notLine ? ` ${notLine}` : ''}` };
+}
+
+/** One shift's `GET /shifts/:id/candidates` row, as the right-click menu needs it. */
+export type MenuCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; warnings: { message: string }[]; blocks: { message: string }[] };
+export type BestPerson = { workerId: string; name: string; hours: number; canDo: number; of: number; note: string | null; blocked: boolean };
+
+/**
+ * The best people for one or more shifts (right-click on a card, David 2 Nov). For one shift this keeps the API's order
+ * (ready first, then free, then fewest hours). For several, people who can do the most of them come first, then
+ * the API's order on average. Up to `top` who can do at least one, then up to `blockedShown` who can do none, greyed.
+ */
+export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3): BestPerson[] {
+  const by = new Map<string, { c: MenuCandidate; canDo: number; rank: number; warn: string | null; block: string | null }>();
+  for (const list of lists) {
+    list.forEach((c, i) => {
+      const e = by.get(c.workerId) ?? { c, canDo: 0, rank: 0, warn: null, block: null };
+      e.rank += i;
+      if (c.eligible) { e.canDo += 1; e.warn ??= c.warnings[0]?.message ?? null; } else e.block ??= c.blocks[0]?.message ?? null;
+      by.set(c.workerId, e);
+    });
+  }
+  const all = [...by.values()].sort((a, b) => b.canDo - a.canDo || a.rank - b.rank || a.c.name.localeCompare(b.c.name));
+  const of = lists.length;
+  const row = (e: (typeof all)[number]): BestPerson => ({
+    workerId: e.c.workerId, name: e.c.name, hours: e.c.weekHours, canDo: e.canDo, of, blocked: e.canDo === 0,
+    note: e.canDo === 0 ? (e.block ? reasonFor(e.c.name, e.block) : null)
+      : e.canDo < of ? `can do ${e.canDo} of ${of}${e.block ? `; ${reasonFor(e.c.name, e.block)}` : ''}`
+      : e.warn ? reasonFor(e.c.name, e.warn) : null,
+  });
+  return [...all.filter(e => e.canDo > 0).slice(0, top), ...all.filter(e => e.canDo === 0).slice(0, blockedShown)].map(row);
+}
