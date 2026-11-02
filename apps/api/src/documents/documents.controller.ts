@@ -112,7 +112,7 @@ export class DocumentsController {
 
 async function credentialOf(db: PoolClient, workerId: string, credentialId: string) {
   const r = await db.query('select 1 from worker_credentials where id = $1 and worker_id = $2', [credentialId, workerId]);
-  if (!r.rowCount) throw new NotFoundException('credential not found');
+  if (!r.rowCount) throw new NotFoundException('{Credential} not found');
 }
 
 async function event(db: PoolClient, tenantId: string, credentialId: string, userId: string, action: string, details: object) {

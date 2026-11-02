@@ -45,16 +45,16 @@ export class CoverRulesController {
   @Post('cover-rules')
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const credentialTypeId = body?.credentialTypeId;
-    if (typeof credentialTypeId !== 'string' || !UUID.test(credentialTypeId)) throw new BadRequestException('Choose a credential');
+    if (typeof credentialTypeId !== 'string' || !UUID.test(credentialTypeId)) throw new BadRequestException('Choose {a credential}');
     const facilityId = body?.facilityId === undefined || body?.facilityId === null || body?.facilityId === '' ? null : body.facilityId;
     if (facilityId !== null && (typeof facilityId !== 'string' || !UUID.test(facilityId))) throw new BadRequestException('Choose {a site}');
     return withTenant(this.pool, t.tenantId, async db => {
       const ct = (await db.query<{ active: boolean }>('select active from credential_types where id = $1', [credentialTypeId])).rows[0];
-      if (!ct?.active) throw new BadRequestException('That credential is switched off or no longer exists');
+      if (!ct?.active) throw new BadRequestException('That {credential} is switched off or no longer exists');
       if (facilityId && !(await db.query('select 1 from facilities where id = $1', [facilityId])).rowCount) throw new BadRequestException('Choose {a site}');
       const existing = (await db.query<{ id: string; active: boolean }>(
         'select id, active from site_cover_rules where credential_type_id = $1 and facility_id is not distinct from $2', [credentialTypeId, facilityId])).rows[0];
-      if (existing?.active) throw new BadRequestException('There is already a rule for that credential there');
+      if (existing?.active) throw new BadRequestException('There is already a rule for that {credential} there');
       const id = existing
         ? (await db.query<{ id: string }>('update site_cover_rules set active = true where id = $1 returning id', [existing.id])).rows[0].id
         : (await db.query<{ id: string }>('insert into site_cover_rules(tenant_id, facility_id, credential_type_id) values ($1,$2,$3) returning id',

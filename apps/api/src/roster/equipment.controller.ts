@@ -35,7 +35,7 @@ const TYPE_FROM = `equipment_types et left join credential_types ct on ct.id = e
 
 async function checkCredentialType(db: PoolClient, id: string | null | undefined) {
   if (id && !(await db.query('select 1 from credential_types where id = $1 and active', [id])).rowCount) {
-    throw new BadRequestException('Choose an operator credential');
+    throw new BadRequestException('Choose an operator {credential}');
   }
 }
 
@@ -58,7 +58,7 @@ export class EquipmentTypesController {
   @Post()
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { required: true, max: 80 })!;
-    const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator credential') ?? null;
+    const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator {credential}') ?? null;
     const vehicle = bool(body, 'vehicle') ?? false;
     return withTenant(this.pool, t.tenantId, async db => {
       await checkCredentialType(db, op);
@@ -67,7 +67,7 @@ export class EquipmentTypesController {
           'insert into equipment_types(tenant_id, name, operator_credential_type_id, is_vehicle) values ($1,$2,$3,$4) returning id', [t.tenantId, name, op, vehicle])).rows[0];
         return (await db.query(`select ${TYPE_COLS} from ${TYPE_FROM} where et.id = $1`, [id])).rows[0];
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException(`There is already an equipment type called ${name}`);
+        if (isUnique(e)) throw new BadRequestException(`There is already {an equipment} type called ${name}`);
         throw e;
       }
     });
@@ -77,7 +77,7 @@ export class EquipmentTypesController {
   @Patch(':id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { max: 80 });
-    const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator credential');
+    const op = uuidOrNull(body, 'operatorCredentialTypeId', 'an operator {credential}');
     const active = body?.active;
     if (active !== undefined && typeof active !== 'boolean') throw new BadRequestException('Active must be true or false');
     const vehicle = bool(body, 'vehicle');
@@ -89,9 +89,9 @@ export class EquipmentTypesController {
                   operator_credential_type_id = case when $4 then $5::uuid else operator_credential_type_id end,
                   is_vehicle = coalesce($6, is_vehicle)
             where id = $1`, [id, name, active ?? null, op !== undefined, op ?? null, vehicle]);
-        if (!r.rowCount) throw new NotFoundException('Equipment type not found');
+        if (!r.rowCount) throw new NotFoundException('{Equipment} type not found');
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException(`There is already an equipment type called ${name}`);
+        if (isUnique(e)) throw new BadRequestException(`There is already {an equipment} type called ${name}`);
         throw e;
       }
       return (await db.query(`select ${TYPE_COLS} from ${TYPE_FROM} where et.id = $1`, [id])).rows[0];
@@ -140,15 +140,15 @@ export class EquipmentController {
   @Roles('owner', 'admin')
   @Post()
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
-    const typeId = uuidOrNull(body, 'equipmentTypeId', 'an equipment type');
-    if (!typeId) throw new BadRequestException('Choose an equipment type');
+    const typeId = uuidOrNull(body, 'equipmentTypeId', '{an equipment} type');
+    if (!typeId) throw new BadRequestException('Choose {an equipment} type');
     const name = text(body, 'name', { required: true, max: 80 })!;
     const assetNumber = text(body, 'assetNumber', { max: 40 });
     const registration = text(body, 'registration', { max: 20 })?.toUpperCase() ?? null;
     const home = uuidOrNull(body, 'homeFacilityId', 'a home site') ?? null;
     const notes = text(body, 'notes', { max: 1000 });
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from equipment_types where id = $1 and active', [typeId])).rowCount) throw new BadRequestException('Choose an equipment type');
+      if (!(await db.query('select 1 from equipment_types where id = $1 and active', [typeId])).rowCount) throw new BadRequestException('Choose {an equipment} type');
       if (home && !(await db.query('select 1 from facilities where id = $1', [home])).rowCount) throw new BadRequestException('Choose a home {site}');
       try {
         const { id } = (await db.query<{ id: string }>(
@@ -156,7 +156,7 @@ export class EquipmentController {
            values ($1,$2,$3,$4,$5,$6,$7) returning id`, [t.tenantId, typeId, name, assetNumber, registration, home, notes])).rows[0];
         return this.one(db, t.tenantId, id);
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException('There is already equipment with that name or asset number');
+        if (isUnique(e)) throw new BadRequestException('There is already {equipment} with that name or asset number');
         throw e;
       }
     });
@@ -164,7 +164,7 @@ export class EquipmentController {
 
   private async one(db: PoolClient, tenantId: string, id: string) {
     const row = (await db.query(`select ${EQ_COLS} from ${EQ_FROM} where e.id = $1`, [id])).rows[0];
-    if (!row) throw new NotFoundException('Equipment not found');
+    if (!row) throw new NotFoundException('{Equipment} not found');
     const [withChecks] = await this.withChecks(db, tenantId, [row]);
     const history = (await db.query(
       `select id, name, to_char(due_on, 'YYYY-MM-DD') as "dueOn", notes, created_at as "recordedAt", superseded_at as "supersededAt"
@@ -208,9 +208,9 @@ export class EquipmentController {
                   notes = case when $10 then $11 else notes end, updated_at = now()
             where id = $1`,
           [id, name, status, has('assetNumber'), assetNumber, has('registration'), registration, home !== undefined, home ?? null, has('notes'), notes]);
-        if (!r.rowCount) throw new NotFoundException('Equipment not found');
+        if (!r.rowCount) throw new NotFoundException('{Equipment} not found');
       } catch (e) {
-        if (isUnique(e)) throw new BadRequestException('There is already equipment with that name or asset number');
+        if (isUnique(e)) throw new BadRequestException('There is already {equipment} with that name or asset number');
         throw e;
       }
       return this.one(db, t.tenantId, id);
@@ -225,7 +225,7 @@ export class EquipmentController {
     const dueOn = date(body, 'dueOn', { required: true })!;
     const notes = text(body, 'notes', { max: 500 });
     return withTenant(this.pool, t.tenantId, async db => {
-      if (!(await db.query('select 1 from equipment where id = $1 for update', [id])).rowCount) throw new NotFoundException('Equipment not found');
+      if (!(await db.query('select 1 from equipment where id = $1 for update', [id])).rowCount) throw new NotFoundException('{Equipment} not found');
       await db.query(`update equipment_checks set superseded_at = now() where equipment_id = $1 and lower(name) = lower($2) and superseded_at is null`, [id, name]);
       await db.query(
         `insert into equipment_checks(tenant_id, equipment_id, name, due_on, notes, recorded_by) values ($1,$2,$3,$4,$5,$6)`,
@@ -260,17 +260,17 @@ export class ShiftEquipmentController {
   @Post('equipment')
   @HttpCode(200)
   book(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const equipmentId = uuidOrNull(body, 'equipmentId', 'equipment');
-    if (!equipmentId) throw new BadRequestException('Choose equipment');
+    const equipmentId = uuidOrNull(body, 'equipmentId', '{equipment}');
+    if (!equipmentId) throw new BadRequestException('Choose {equipment}');
     return withTenant(this.pool, t.tenantId, async db => {
       // Locking the shift serialises this with assigning a person; locking the equipment stops two bookings at once.
       const shift = (await db.query<{ status: string; needs_person: boolean }>('select status, needs_person from shifts where id = $1 for update', [id])).rows[0];
       if (!shift) throw new NotFoundException('{Shift} not found');
       if (shift.status === 'cancelled') throw new ConflictException('This {shift} is cancelled');
-      if (!(await db.query('select 1 from equipment where id = $1 for update', [equipmentId])).rowCount) throw new BadRequestException('Choose equipment');
+      if (!(await db.query('select 1 from equipment where id = $1 for update', [equipmentId])).rowCount) throw new BadRequestException('Choose {equipment}');
       if ((await db.query(
         `select 1 from shift_assignments where shift_id = $1 and equipment_id = $2 and status in ('assigned', 'confirmed')`, [id, equipmentId])).rowCount) {
-        throw new ConflictException('That equipment is already on this {shift}');
+        throw new ConflictException('That {equipment} is already on this {shift}');
       }
       const [check] = await equipmentForShift(db, t.tenantId, id, [equipmentId]);
       if (!check.eligible) throw new ConflictException(check.blocks.map(b => b.message).join('. '));
@@ -292,7 +292,7 @@ export class ShiftEquipmentController {
       const r = await db.query(
         `update shift_assignments set status = 'removed', ended_at = now()
           where shift_id = $1 and equipment_id = $2 and resource_kind = 'equipment' and status in ('assigned', 'confirmed')`, [id, equipmentId]);
-      if (!r.rowCount) throw new ConflictException('That equipment isn\'t on this {shift}');
+      if (!r.rowCount) throw new ConflictException('That {equipment} isn\'t on this {shift}');
       // An equipment-only shift goes back to open when nothing is left on it.
       await db.query(
         `update shifts set status = 'open', updated_at = now()

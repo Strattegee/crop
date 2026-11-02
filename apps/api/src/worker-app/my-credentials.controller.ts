@@ -99,7 +99,7 @@ export class MyCredentialsController {
   @Post()
   add(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const typeId = text(body, 'credentialTypeId', { required: true, max: 40 })!;
-    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose a credential');
+    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose {a credential}');
     const fields = {
       number: text(body, 'number', { max: 100 }),
       issuedBy: text(body, 'issuedBy', { max: 120 }),
@@ -114,8 +114,8 @@ export class MyCredentialsController {
       const type = (await db.query<{ name: string; category: string; has_expiry: boolean; has_number: boolean }>(
         'select name, category, has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
       if (!type) throw new NotFoundException('Not found: choose again');
-      if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this credential');
-      if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this credential');
+      if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this {credential}');
+      if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this {credential}');
       const today = (await complianceContext(db, t.tenantId)).today;
       const dates = myCredentialDatesRefusal(fields.issueDate, fields.expiryDate, today);
       if (dates) throw new BadRequestException(dates);
@@ -165,7 +165,7 @@ export class MyCredentialsController {
     const c = (await db.query<{ verification: string; files: number }>(
       `select c.verification, (select count(*)::int from credential_documents d where d.worker_credential_id = c.id and d.removed_at is null) as files
          from worker_credentials c where c.id = $1 and c.worker_id = $2`, [id, w.id])).rows[0];
-    if (!c) throw new NotFoundException('Credential not found');
+    if (!c) throw new NotFoundException('{Credential} not found');
     const refusal = myEvidenceRefusal(c.verification, c.files, (await wordsFor(db)).lower(T.credential));
     if (refusal) throw new ConflictException(refusal);
   }

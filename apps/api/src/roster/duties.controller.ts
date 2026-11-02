@@ -26,14 +26,14 @@ function requirementsField(body: Record<string, unknown>): Requirement[] | null 
   const v = body?.requirements;
   if (v === undefined || v === null) return null;
   if (!Array.isArray(v)) throw new BadRequestException('Requirements must be a list');
-  if (v.length > MAX_REQUIREMENTS) throw new BadRequestException(`Choose ${MAX_REQUIREMENTS} credentials or fewer`);
+  if (v.length > MAX_REQUIREMENTS) throw new BadRequestException(`Choose ${MAX_REQUIREMENTS} {credentials} or fewer`);
   const seen = new Set<string>();
   return v.map(x => {
     const r = (x ?? {}) as Record<string, unknown>;
-    if (typeof r.credentialTypeId !== 'string' || !UUID.test(r.credentialTypeId)) throw new BadRequestException('Choose a credential for each requirement');
+    if (typeof r.credentialTypeId !== 'string' || !UUID.test(r.credentialTypeId)) throw new BadRequestException('Choose {a credential} for each requirement');
     const severity = r.severity === undefined || r.severity === null ? 'hard' : r.severity;
     if (severity !== 'hard' && severity !== 'warning' && severity !== 'optional') throw new BadRequestException('Each requirement must be "must have", "should have" or "optional"');
-    if (seen.has(r.credentialTypeId)) throw new BadRequestException('Each credential can only be listed once');
+    if (seen.has(r.credentialTypeId)) throw new BadRequestException('Each {credential} can only be listed once');
     seen.add(r.credentialTypeId);
     return { credentialTypeId: r.credentialTypeId, severity };
   });
@@ -42,7 +42,7 @@ function requirementsField(body: Record<string, unknown>): Requirement[] | null 
 async function setRequirements(db: PoolClient, tenantId: string, dutyId: string, reqs: Requirement[]) {
   if (reqs.length) {
     const found = (await db.query<{ n: number }>('select count(*)::int as n from credential_types where id = any($1)', [reqs.map(r => r.credentialTypeId)])).rows[0].n;
-    if (found !== reqs.length) throw new BadRequestException('One of the credentials no longer exists');
+    if (found !== reqs.length) throw new BadRequestException('One of the {credentials} no longer exists');
   }
   await db.query('delete from shift_duty_requirements where duty_id = $1', [dutyId]);
   for (const r of reqs) {

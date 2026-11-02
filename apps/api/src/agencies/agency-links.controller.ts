@@ -375,7 +375,7 @@ export class AgencyLinksController {
         }
         const own = (await db.query<{ active: boolean; catalogue_code: string | null }>(
           'select active, catalogue_code from credential_types where id = $1', [m.credentialTypeId])).rows[0];
-        if (!own?.active) throw new BadRequestException(`Choose one of your credentials for ${req.name}`);
+        if (!own?.active) throw new BadRequestException(`Choose one of your {credentials} for ${req.name}`);
         const by = req.catalogueCode && own.catalogue_code === req.catalogueCode ? 'code' : 'hand';
         await db.query(
           `insert into agency_credential_maps(tenant_id, connection_id, employer_credential_type_id, employer_type_name, credential_type_id, matched_by, matched_by_name)

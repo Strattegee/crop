@@ -42,8 +42,8 @@ function stepsField(body: Record<string, unknown>): StepInput[] | null {
     if (!STEP_KINDS.includes(kind as StepKind)) throw new BadRequestException(`Step ${i + 1}: choose what kind of step it is`);
     let credentialTypeId: string | null = null;
     if (kind === 'credential') {
-      if (typeof s.credentialTypeId !== 'string' || !UUID.test(s.credentialTypeId)) throw new BadRequestException(`Step ${i + 1}: choose the credential`);
-      if (types.has(s.credentialTypeId)) throw new BadRequestException('Each credential can only be a step once');
+      if (typeof s.credentialTypeId !== 'string' || !UUID.test(s.credentialTypeId)) throw new BadRequestException(`Step ${i + 1}: choose the {credential}`);
+      if (types.has(s.credentialTypeId)) throw new BadRequestException('Each {credential} can only be a step once');
       types.add(s.credentialTypeId);
       credentialTypeId = s.credentialTypeId;
     }
@@ -72,7 +72,7 @@ async function setSteps(db: PoolClient, tenantId: string, checklistId: string, s
   const typeNames = new Map<string, string>();
   if (typeIds.length) {
     const rows = (await db.query<{ id: string; name: string }>('select id, name from credential_types where id = any($1)', [typeIds])).rows;
-    if (rows.length !== typeIds.length) throw new BadRequestException('One of the credentials no longer exists');
+    if (rows.length !== typeIds.length) throw new BadRequestException('One of the {credentials} no longer exists');
     for (const r of rows) typeNames.set(r.id, r.name);
   }
   const existing = (await db.query<{ id: string; kind: string }>('select id, kind from onboarding_steps where checklist_id = $1 and removed_at is null', [checklistId])).rows;

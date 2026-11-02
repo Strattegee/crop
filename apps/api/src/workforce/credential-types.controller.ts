@@ -64,7 +64,7 @@ export class CredentialTypesController {
             text(body, 'verificationMethod', { max: 300 }), url],
         )).rows[0];
       } catch (err) {
-        if ((err as { code?: string }).code === '23505') throw new BadRequestException(`There is already a credential type called ${name}`);
+        if ((err as { code?: string }).code === '23505') throw new BadRequestException(`There is already {a credential} type called ${name}`);
         throw err;
       }
     });
@@ -85,7 +85,7 @@ export class CredentialTypesController {
         [id, text(body, 'name', { max: 120 }), oneOf(body, 'category', CATEGORIES), bool(body, 'hasNumber'), bool(body, 'hasExpiry'),
           bool(body, 'needsEvidence'), text(body, 'verificationMethod', { max: 300 }), url, bool(body, 'active')],
       )).rows[0];
-      if (!row) throw new NotFoundException('credential type not found');
+      if (!row) throw new NotFoundException('{Credential} type not found');
       return row;
     });
   }
@@ -141,10 +141,10 @@ export class CredentialRequirementsController {
     const scope = oneOf(body, 'scope', ['all_workers', 'role'] as const, { required: true })!;
     const role = scope === 'role' ? text(body, 'role', { required: true, max: 40 }) : null;
     const severity = oneOf(body, 'severity', ['hard', 'warning', 'optional'] as const) ?? 'hard';
-    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose a credential');
+    if (!/^[0-9a-f-]{36}$/i.test(typeId)) throw new BadRequestException('Choose {a credential}');
     return withTenant(this.pool, t.tenantId, async db => {
       const exists = await db.query('select 1 from credential_types where id = $1', [typeId]);
-      if (!exists.rowCount) throw new NotFoundException('credential type not found');
+      if (!exists.rowCount) throw new NotFoundException('{Credential} type not found');
       const row = (await db.query(
         `insert into credential_requirements(tenant_id, credential_type_id, scope, role, severity) values ($1,$2,$3,$4,$5)
          on conflict (tenant_id, credential_type_id, scope, coalesce(role, '')) do update set severity = excluded.severity
