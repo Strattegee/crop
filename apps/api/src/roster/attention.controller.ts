@@ -10,6 +10,7 @@ import { coverGapsBetween } from './cover-data.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { equipmentForShift } from './equipment-data.js';
 import { SHIFT_COLS, SHIFT_FROM } from './roster.controller.js';
+import { fillWords, wordsFor } from '../terms/words.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_DAYS = 7;
@@ -91,10 +92,11 @@ export class AttentionController {
       if (missing.length) {
         for (const r of (await db.query<Row>(`select ${SHIFT_COLS}, 0 as "offersExpired" from ${SHIFT_FROM} where s.id = any($1)`, [missing])).rows) byId.set(r.id, r);
       }
+      const words = await wordsFor(db);
       const items = attentionItems(facts, now, undefined, gaps).map(i => {
         const r = byId.get(i.shiftId)!;
         return {
-          ...i,
+          ...i, title: fillWords(i.title, words), detail: fillWords(i.detail, words),
           shift: {
             id: r.id, facilityId: r.facilityId, facilityName: r.facilityName, areaName: r.areaName, role: r.role, localDate: r.localDate,
             localStart: r.localStart, localEnd: r.localEnd, shiftLetter: r.shiftLetter, status: r.status, workerName: r.workerName,

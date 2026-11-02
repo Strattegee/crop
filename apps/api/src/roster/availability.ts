@@ -54,7 +54,7 @@ export function availabilityReason(name: string, localDate: string, localStart: 
     return {
       code: 'availability',
       message: onDate.length
-        ? `${name} isn't available for ${PERIOD_WORDS[period]} shifts on ${fmt(localDate)}`
+        ? `${name} isn't available for ${PERIOD_WORDS[period]} {shifts} on ${fmt(localDate)}`
         : `${name} isn't available on ${fmt(localDate)}`,
     };
   }
@@ -64,7 +64,7 @@ export function availabilityReason(name: string, localDate: string, localStart: 
   return {
     code: 'availability',
     message: usual.length
-      ? `${name} isn't usually available for ${PERIOD_WORDS[period]} shifts on ${WEEKDAYS[weekday - 1]}`
+      ? `${name} isn't usually available for ${PERIOD_WORDS[period]} {shifts} on ${WEEKDAYS[weekday - 1]}`
       : `${name} doesn't usually work on ${WEEKDAYS[weekday - 1]}`,
   };
 }

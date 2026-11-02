@@ -535,3 +535,10 @@ Newest first. One entry per working session or scheduled run.
 - Next: the reasons shown in lists (why someone can't work a shift) in the business's words; other unheld items.
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.
 - (2 Nov, with David) CROP now wears Milos's colours and logo on staging: navy top bar with the orange dot mark and CROP in Poppins, orange main buttons with navy text, his greys, greens and reds, and a new phone app icon. Each person can switch to dark mode (or match their computer) from the menu under their initials. The logo is redrawn from his preview until his final files arrive; the roster's stage colours are unchanged.
+
+## 2026-11-02 afternoon, 3:15pm Melbourne (scheduled run)
+
+- Shipped: the reasons CROP gives for who can or can't work a shift now use each business's own words, as do the Needs attention list's headings and notes (on the roster, the Dashboard and the daily email). A café that says Jobs and Team members sees "Bea's RSA will have expired by the job date", "A female team member was requested for this job" and "Nobody on this job"; equipment reasons ("overdue by the job date") and agency notes ("with suppliers: 1 supplier asked") likewise. A business that hasn't chosen its own words sees exactly what it saw before.
+- Not checked in a browser (no local sign-in in this run); every test passes, including a new one for a business with its own words.
+- Next: the worker app's remaining fixed labels; other unheld items.
+- Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; the shorter-link question; Apple's approval for iPhone builds.

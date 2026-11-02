@@ -82,8 +82,8 @@ export function offerNote(s: Pick<AttentionShift, 'offersPending' | 'offersExpir
   else if (s.offersExpired) parts.push(`offer to ${people(s.offersExpired)} ran out with no reply`);
   else if (!s.agency) parts.push('not offered to anyone yet');
   if (s.agency) {
-    const asked = s.agency.asked === 0 ? 'with agencies, none asked yet' : `with agencies: ${s.agency.asked === 1 ? '1 agency' : `${s.agency.asked} agencies`} asked, nobody put forward yet`;
-    const next = s.agency.nextAt ? `; the next is asked in ${inShort(s.agency.nextAt, now)}` : s.agency.asked ? '; every agency has been asked' : '';
+    const asked = s.agency.asked === 0 ? 'with {agencies}, none asked yet' : `with {agencies}: ${s.agency.asked === 1 ? '1 {agency}' : `${s.agency.asked} {agencies}`} asked, nobody put forward yet`;
+    const next = s.agency.nextAt ? `; the next is asked in ${inShort(s.agency.nextAt, now)}` : s.agency.asked ? '; every {agency} has been asked' : '';
     parts.push(asked + next);
   }
   const text = parts.join('; ');
@@ -114,21 +114,21 @@ export function attentionItems(shifts: AttentionShift[], now: Date, urgentHours 
     if (at <= now.getTime()) continue;
     const base = { shiftId: s.id, urgent: at - now.getTime() < urgentHours * 3_600_000, startsIn: startsIn(s.startsAt, now), at };
     if (s.workerName && s.personBlocks.length) {
-      out.push({ ...base, kind: 'person_blocked', title: `${s.workerName} can't work this shift now`, detail: s.personBlocks.join(' ') });
+      out.push({ ...base, kind: 'person_blocked', title: `${s.workerName} can't work this {shift} now`, detail: s.personBlocks.join(' ') });
     }
     for (const e of s.equipmentBlocks) {
-      out.push({ ...base, kind: 'equipment_blocked', title: `${e.name} can't be used on this shift now`, detail: e.reasons.join(' ') });
+      out.push({ ...base, kind: 'equipment_blocked', title: `${e.name} can't be used on this {shift} now`, detail: e.reasons.join(' ') });
     }
     if (s.equipmentOnly) {
-      if (s.equipmentMissing) out.push({ ...base, kind: 'open', title: 'No equipment booked', detail: 'Book equipment or cancel the shift' });
+      if (s.equipmentMissing) out.push({ ...base, kind: 'open', title: 'No {equipment} booked', detail: 'Book {equipment} or cancel the {shift}' });
       continue;
     }
     if (!s.workerName) {
-      out.push({ ...base, kind: 'open', title: 'Nobody on this shift', detail: offerNote(s, now) });
+      out.push({ ...base, kind: 'open', title: 'Nobody on this {shift}', detail: offerNote(s, now) });
     } else if (s.assignmentStatus === 'assigned' && !s.personBlocks.length) {
       out.push(s.agencyName
-        ? { ...base, kind: 'unconfirmed', title: `Approve ${s.workerName} from ${s.agencyName}?`, detail: `${s.agencyName} put them forward; approve or decline on the shift` }
-        : { ...base, kind: 'unconfirmed', title: `${s.workerName} hasn't confirmed`, detail: 'Waiting for them to agree to the shift' });
+        ? { ...base, kind: 'unconfirmed', title: `Approve ${s.workerName} from ${s.agencyName}?`, detail: `${s.agencyName} put them forward; approve or decline on the {shift}` }
+        : { ...base, kind: 'unconfirmed', title: `${s.workerName} hasn't confirmed`, detail: 'Waiting for them to agree to the {shift}' });
     }
   }
   return out

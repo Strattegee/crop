@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { fillReasons, wordsFor } from '../terms/words.js';
 import { credentialFactsByWorker } from '../workforce/compliance-data.js';
 import { agencyCredentialsForShifts } from './agency-credentials.js';
 import { loadSettings } from '../workforce/settings.js';
@@ -70,13 +71,14 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
   const agencyCreds = p ? (await agencyCredentialsForShifts(db, [shiftId])).get(`${shiftId}:${p.worker_id}`) : undefined;
   const person = p ? { name: p.name, credentials: agencyCreds ?? (await credentialFactsByWorker(db, [p.worker_id])).get(p.worker_id) ?? [] } : null;
 
+  const words = await wordsFor(db);
   return items.map(i => ({
     equipmentId: i.id, name: i.name, typeName: i.type_name, status: i.status,
-    ...equipmentEligibility(shift, {
+    ...fillReasons(equipmentEligibility(shift, {
       name: i.name, status: i.status, checks: checks.get(i.id) ?? [], others: others.get(i.id) ?? [],
       operator: i.op_id ? { credentialTypeId: i.op_id, typeName: i.op_name! } : null, person, windowDays: settings.expiringWindowDays,
       equipmentOnly: !needsPerson,
-    }),
+    }), words),
   }));
 }
 

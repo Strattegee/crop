@@ -72,3 +72,14 @@ export function fillWords(text: string, w: Words = DEFAULT_WORDS): string {
 export function hasWordTokens(text: string): boolean {
   return [...text.matchAll(TOKEN)].some(m => FILLERS.has(m[1]));
 }
+
+/**
+ * Fills the word tokens in eligibility reasons (blocks and warnings), in place, and returns the same object.
+ * Reasons are written with tokens (`'… by the {shift} date'`) by the pure rules, and filled where they are worked out
+ * (`eligibilityForFacts`, `equipmentForShift`), so every list, error and email shows the business's words.
+ */
+export function fillReasons<T extends { blocks: { message: string }[]; warnings: { message: string }[] }>(e: T, w: Words): T {
+  for (const r of e.blocks) r.message = fillWords(r.message, w);
+  for (const r of e.warnings) r.message = fillWords(r.message, w);
+  return e;
+}

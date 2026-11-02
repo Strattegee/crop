@@ -42,7 +42,7 @@ describe('shift eligibility', () => {
     });
     expect(r.eligible).toBe(false);
     expect(r.blocks.map(b => b.code)).toEqual(['credential', 'right_to_work']);
-    expect(r.blocks[0].message).toBe("Ana Example's Food handling will have expired by the shift date");
+    expect(r.blocks[0].message).toBe("Ana Example's Food handling will have expired by the {shift} date");
     expect(r.warnings.map(w => w.message)).toEqual(["Ana Example's First aid expires soon", "Ana Example's Flu vaccination is missing"]);
   });
 
@@ -57,12 +57,12 @@ describe('shift eligibility', () => {
   });
 
   it('blocks going over a visa limit in any fortnight starting on a Monday', () => {
-    // 40 hours already in the week before: the fortnight 26 Oct–8 Nov would reach 48 with this shift (allowed) …
+    // 40 hours already in the week before: the fortnight 26 Oct–8 Nov would reach 48 with this {shift} (allowed) …
     const before = [other('a', '2026-10-27T21:00:00Z', '2026-10-28T05:00:00Z', '2026-10-28', 40)];
     expect(shiftEligibility(shift, { ...base, others: before, hoursPerFortnight: 48 }).eligible).toBe(true);
     // … but one more hour is over.
     const r = shiftEligibility(shift, { ...base, others: [...before, other('b', '2026-11-08T21:00:00Z', '2026-11-08T22:00:00Z', '2026-11-08', 1)], hoursPerFortnight: 48 });
-    expect(r.blocks).toEqual([{ code: 'visa_hours', message: expect.stringMatching(/allows 48 hours a fortnight; this shift would make 49 hours in the fortnight from Mon 26 Oct/) }]);
+    expect(r.blocks).toEqual([{ code: 'visa_hours', message: expect.stringMatching(/allows 48 hours a fortnight; this {shift} would make 49 hours in the fortnight from Mon 26 Oct/) }]);
     // Hours in the following fortnight count too.
     const later = [other('c', '2026-11-11T21:00:00Z', '2026-11-12T05:00:00Z', '2026-11-12', 41)];
     expect(shiftEligibility(shift, { ...base, others: later, hoursPerFortnight: 48 }).blocks[0].message).toMatch(/fortnight from Mon 2 Nov/);
@@ -75,7 +75,7 @@ describe('shift eligibility', () => {
     const before = other('e', '2026-11-04T08:00:00Z', '2026-11-04T13:00:00Z', '2026-11-04', 5); // ends 8 hours before
     const r = shiftEligibility(shift, { ...base, others: [before] });
     expect(r.eligible).toBe(true);
-    expect(r.warnings).toEqual([{ code: 'rest', message: "Ana Example would have 8 hours' rest between this shift and 2026-11-04 shift (minimum 10)" }]);
+    expect(r.warnings).toEqual([{ code: 'rest', message: "Ana Example would have 8 hours' rest between this {shift} and 2026-11-04 shift (minimum 10)" }]);
     const after = other('f', '2026-11-05T12:00:00Z', '2026-11-05T18:00:00Z', '2026-11-05', 6); // starts 7 hours after
     expect(shiftEligibility(shift, { ...base, others: [after] }).warnings[0].message).toMatch(/7 hours' rest/);
     expect(shiftEligibility(shift, { ...base, others: [after], minRestHours: 0 }).warnings).toEqual([]);

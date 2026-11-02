@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import { fillReasons, wordsFor } from '../terms/words.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { addDays, type RequirementRule } from '../workforce/compliance.js';
 import type { TermDates } from './employment.js';
@@ -148,6 +149,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   const leave = await leaveByWorker(db, ids, shift.localDate);
   const employment = await termsByWorker(db, ids);
 
+  const words = await wordsFor(db);
   const weekFrom = mondayOf(shift.localDate);
   const weekTo = addDays(weekFrom, 6);
   return workers.map(w => {
@@ -165,6 +167,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
       e.blocks.push({ code: 'credential', message });
       e.eligible = false;
     }
+    fillReasons(e, words);
     const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
     return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100,
       available: !e.warnings.some(x => x.code === 'availability'), ...e };

@@ -20,8 +20,8 @@ describe('gender requested on a shift (David, 30 Oct)', () => {
     expect(genderReason('Ana Example', null, 'M')).toBeNull();
     expect(genderReason('Ana Example', 'F', undefined)).toBeNull();
     expect(genderReason('Ben Example', 'F', 'M')).toEqual({
-      code: 'gender', message: 'A female worker was requested for this shift; Ben Example is recorded as male' });
-    expect(genderReason('Cal Example', 'M', null)?.message).toBe("A male worker was requested for this shift; Cal Example's gender isn't recorded");
+      code: 'gender', message: 'A female {worker} was requested for this {shift}; Ben Example is recorded as male' });
+    expect(genderReason('Cal Example', 'M', null)?.message).toBe("A male {worker} was requested for this {shift}; Cal Example's gender isn't recorded");
     const base = { workerName: null, equipmentName: null, via: 'office' };
     expect(changeSummary({ ...base, kind: 'gender_changed', detail: 'F' })).toBe('Female worker requested');
     expect(changeSummary({ ...base, kind: 'gender_changed', detail: null })).toBe('Gender request removed');

@@ -65,6 +65,7 @@ describe('API error messages use the business\'s words', () => {
     await http().put('/terms').set(as('admin')).send({ terms: [
       { code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1020, singular: 'Venue', plural: 'Venues' }, { code: 1030, singular: 'Section', plural: 'Sections' },
       { code: 1050, singular: 'Certificate', plural: 'Certificates' }, { code: 1060, singular: 'Plant', plural: 'Plant' }, { code: 1070, singular: 'Stock item', plural: 'Stock' },
+      { code: 1010, singular: 'Team member', plural: 'Team' },
     ] }).expect(200);
   });
 
@@ -95,6 +96,20 @@ describe('API error messages use the business\'s words', () => {
     expect((await http().post(`/workers/${ana}/credentials`).set(as('admin')).send({ credentialTypeId: 'nope' }).expect(400)).body.message).toBe('Choose a certificate');
     expect((await http().post(`/workers/${ana}/credentials`).set(as('admin')).send({ credentialTypeId: missing }).expect(404)).body.message).toBe('Certificate type not found');
     expect((await http().get(`/equipment/${missing}`).set(as('other')).expect(404)).body.message).toBe('Equipment not found');
+  });
+
+  it('words the reasons in who-can-work lists and Needs attention with them', async () => {
+    const site = (await http().post('/facilities').set(as('admin')).send({ name: 'Garden Bar', state: 'VIC' }).expect(201)).body.id;
+    await http().post('/workers').set(as('admin')).send({ firstName: 'Bea', lastName: 'Example', email: 'bea@example.com', roles: ['Waiter'] }).expect(201);
+    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+    const [job] = (await http().post('/shifts').set(as('admin'))
+      .send({ facilityId: site, role: 'Waiter', date: soon, startTime: '10:00', endTime: '16:00', genderRequested: 'F' }).expect(201)).body.ids;
+    const list = (await http().get(`/shifts/${job}/candidates`).set(as('admin')).expect(200)).body.candidates as Array<{ name: string; warnings: Array<{ message: string }> }>;
+    const bea = list.find(c => c.name === 'Bea Example')!;
+    expect(bea.warnings.map(w => w.message)).toContain("A female team member was requested for this job; Bea Example's gender isn't recorded");
+    const attention = (await http().get(`/roster/attention?facilityId=${site}`).set(as('admin')).expect(200)).body.items as Array<{ title: string }>;
+    expect(attention.map(i => i.title)).toContain('Nobody on this job');
+    expect(attention.map(i => `${i.title} ${(i as { detail?: string }).detail}`).join(' ')).not.toMatch(/\{[a-z]/i);
   });
 
   it('keeps CROP\'s words for a business that hasn\'t chosen its own', async () => {
