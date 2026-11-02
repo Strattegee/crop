@@ -7,12 +7,14 @@ import { PlaceFields } from '../../../../lib/place-fields';
 import { Notices } from '../../notices';
 import { addFacility, updateClient } from '../actions';
 import { T, words } from '../../../../lib/terms';
+import { rankChip } from '../../../../lib/client-orders';
+import { ClientAllocationFields } from '../client-fields';
 
 export const dynamic = 'force-dynamic';
 
 type ClientDetail = {
   id: string; name: string; abn: string | null; status: string; billingContactName: string | null; billingEmail: string | null;
-  phone: string | null; notes: string | null;
+  phone: string | null; notes: string | null; confirmsBookings: boolean; rank: number | null;
   facilities: { id: string; name: string; suburb: string | null; state: string | null; active: boolean; areaCount: number }[];
 };
 
@@ -26,7 +28,8 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
     <>
       <p style={{ margin: '0 0 8px' }}><Link href="/clients">← Clients</Link></p>
       <h1>{c.name}</h1>
-      <p className="muted" style={{ marginTop: 0 }}><Badge label={CLIENT_STATUS[c.status]} />{c.abn && <> · ABN {c.abn}</>}{c.billingEmail && <> · {c.billingEmail}</>}</p>
+      <p className="muted" style={{ marginTop: 0 }}><Badge label={CLIENT_STATUS[c.status]} />{c.abn && <> · ABN {c.abn}</>}{c.billingEmail && <> · {c.billingEmail}</>}
+        {rankChip(c.rank) && <> · <span className="rank-chip">{rankChip(c.rank)}</span></>}{c.confirmsBookings && <> · Confirms each booking</>}</p>
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -73,6 +76,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
             <label>Billing contact<input name="billingContactName" defaultValue={c.billingContactName ?? ''} maxLength={200} /></label>
             <label>Billing email<input name="billingEmail" type="email" defaultValue={c.billingEmail ?? ''} maxLength={200} /></label>
             <label>Phone<input name="phone" defaultValue={c.phone ?? ''} maxLength={30} /></label>
+            <ClientAllocationFields client={tw.lower(T.client)} shift={tw.lower(T.shift)} confirmsBookings={c.confirmsBookings} rank={c.rank} />
             <label style={{ flexBasis: '100%' }}>Notes<textarea name="notes" defaultValue={c.notes ?? ''} maxLength={2000} rows={3} /></label>
             <button type="submit" className="btn">Save</button>
           </form>
@@ -81,3 +85,4 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
     </>
   );
 }
+

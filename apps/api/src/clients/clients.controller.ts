@@ -4,13 +4,13 @@ import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
 import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
-import { email, oneOf, text } from '../common/validate.js';
+import { bool, email, int, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { normaliseAbn } from './abn.js';
 
 const STATUSES = ['active', 'on_hold', 'inactive'] as const;
 const COLS = `c.id, c.name, c.abn, c.status, c.billing_contact_name as "billingContactName", c.billing_email as "billingEmail",
-  c.phone, c.notes, c.created_at as "createdAt"`;
+  c.phone, c.notes, c.confirms_bookings as "confirmsBookings", c.rank, c.created_at as "createdAt"`;
 
 function abn(body: Record<string, unknown>): string | null | undefined {
   if (!body || !('abn' in body)) return undefined;
@@ -26,7 +26,11 @@ const duplicate = (err: unknown) => {
   throw err;
 };
 
-/** Clients: the organisations your agency supplies workers to (spec ORG-2). */
+/**
+ * Clients: the organisations your agency supplies workers to (spec ORG-2). Set-up (David, 2 Nov; migration 0069):
+ * `confirmsBookings` (the client confirms each booking before it counts as filled) and `rank` (1 = most loyal …
+ * 7 = a fill-in, last option; null = not ranked), which orders the allocation screen.
+ */
 @ApiBearerAuth()
 @Controller('clients')
 export class ClientsController {
@@ -45,11 +49,12 @@ export class ClientsController {
   @Post()
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const values = [t.tenantId, text(body, 'name', { required: true, max: 200 }), abn(body) ?? null,
-      text(body, 'billingContactName', { max: 200 }), email(body, 'billingEmail'), text(body, 'phone', { max: 30 }), text(body, 'notes', { max: 2000 })];
+      text(body, 'billingContactName', { max: 200 }), email(body, 'billingEmail'), text(body, 'phone', { max: 30 }), text(body, 'notes', { max: 2000 }),
+      bool(body, 'confirmsBookings') ?? false, int(body, 'rank', 1, 7)];
     return withTenant(this.pool, t.tenantId, async db =>
       (await db.query(
-        `insert into clients as c (tenant_id, name, abn, billing_contact_name, billing_email, phone, notes)
-         values ($1,$2,$3,$4,$5,$6,$7) returning ${COLS}`, values,
+        `insert into clients as c (tenant_id, name, abn, billing_contact_name, billing_email, phone, notes, confirms_bookings, rank)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${COLS}`, values,
       ).catch(duplicate)).rows[0]);
   }
 
@@ -81,11 +86,14 @@ export class ClientsController {
            billing_contact_name = case when $6 then $7 else billing_contact_name end,
            billing_email = case when $8 then $9 else billing_email end,
            phone = case when $10 then $11 else phone end,
-           notes = case when $12 then $13 else notes end, updated_at = now()
+           notes = case when $12 then $13 else notes end,
+           confirms_bookings = coalesce($14, confirms_bookings),
+           rank = case when $15 then $16 else rank end, updated_at = now()
          where id = $1 returning ${COLS}`,
         [id, text(body, 'name', { max: 200 }), oneOf(body, 'status', STATUSES), a !== undefined, a ?? null,
           has('billingContactName'), text(body, 'billingContactName', { max: 200 }), has('billingEmail'), email(body, 'billingEmail'),
-          has('phone'), text(body, 'phone', { max: 30 }), has('notes'), text(body, 'notes', { max: 2000 })],
+          has('phone'), text(body, 'phone', { max: 30 }), has('notes'), text(body, 'notes', { max: 2000 }),
+          bool(body, 'confirmsBookings'), has('rank'), int(body, 'rank', 1, 7)],
       ).catch(duplicate)).rows[0];
       if (!row) throw new NotFoundException('client not found');
       return row;

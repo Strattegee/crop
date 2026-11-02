@@ -8,7 +8,9 @@ import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/bu
 import {
   agencyFill, agencyFillNext, agencyFillWithdraw, outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
+  clientConfirmed, undoClientConfirmed,
 } from './actions';
+import { clientConfirmLine } from '../../../lib/client-orders';
 import { UNCHECKED, uncheckedNote } from '../../../lib/outside-agency';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
@@ -45,6 +47,8 @@ type Shift = {
   agencyName?: string | null;
   /** Named by an agency not on CROP and put on by the office (migration 0060): CROP hasn't checked them. */
   agencyUnchecked?: boolean;
+  /** On an order whose client confirms each booking, and when they confirmed this person (migration 0069). */
+  clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null;
 };
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
 type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' | 'optional' }[] };
@@ -1048,6 +1052,19 @@ export default async function RosterPage({ searchParams }: {
                   {selected.agencyUnchecked && (
                     <p className="notice small" style={{ margin: '4px 0 0' }}>{uncheckedNote(selected.agencyName ?? tw.one(T.agency))}</p>
                   )}
+                  {(() => {
+                    const cc = clientConfirmLine(selected, tw.lower(T.client), when);
+                    if (!cc) return null;
+                    return (
+                      <div className="panel-row" style={{ marginTop: 4 }}>
+                        <span className={cc.waiting ? 'notice small' : 'muted small'}>{cc.text}</span>
+                        <form action={(cc.waiting ? clientConfirmed : undoClientConfirmed).bind(null, selected.id)}>
+                          <input type="hidden" name="back" value={here} />
+                          <button className={cc.waiting ? 'btn small' : 'btn small secondary'}>{cc.waiting ? `${tw.one(T.client)} confirmed` : 'Undo'}</button>
+                        </form>
+                      </div>
+                    );
+                  })()}
                   {selected.agencyName && agencyState?.placement && agencyState.placement.workerName === selected.workerName && (
                     <p className="muted small" style={{ margin: '4px 0 0' }}>
                       Put forward by {agencyState.placement.agencyName}{agencyState.placement.putForwardByName ? ` (${agencyState.placement.putForwardByName})` : ''} {when(agencyState.placement.createdAt)}, checked by them against your requirements.

@@ -53,6 +53,18 @@ export async function confirm(shiftId: string, f: FormData) {
   await attempt(back(f), () => api(`/shifts/${shiftId}/confirm`, { method: 'POST' }), 'Booked.');
 }
 
+/** Records the client's yes for the person booked on a shift from their order (their client confirms bookings, migration 0069). */
+export async function clientConfirmed(shiftId: string, f: FormData) {
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' }), `Recorded: the ${tw.lower(T.client)} confirmed.`);
+}
+
+/** Takes back a client confirmation recorded by mistake. */
+export async function undoClientConfirmed(shiftId: string, f: FormData) {
+  const tw = await words();
+  await attempt(back(f), () => api(`/shifts/${shiftId}/client-confirmed/undo`, { method: 'POST' }), `Taken back: waiting for the ${tw.lower(T.client)} to confirm again.`);
+}
+
 export async function unassign(shiftId: string, f: FormData) {
   const tw = await words();
   const pulledOut = f.get('pulledOut') === '1';

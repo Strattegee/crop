@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ConflictException, Get, HttpCode, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnApplicationShutdown, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -7,10 +7,10 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 import { queueNotification } from '../notifications/notify.js';
 import { actorOf } from '../roster/publishing.js';
-import { SHIFT_COLS, SHIFT_FROM } from '../roster/roster.controller.js';
+import { SHIFT_COLS, SHIFT_FROM, shiftById } from '../roster/roster.controller.js';
 import { UUID, insertShifts, parseShiftRequest } from '../roster/shift-create.js';
 import { wordsFor } from '../terms/words.js';
-import { CHANNEL_WORDS, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type Channel, type OrderCounts } from './client-orders.js';
+import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
 
 const whole = (v: string | undefined, def: number, min: number, max: number) => {
   const n = v === undefined || v === '' ? def : Number(v);
@@ -63,7 +63,7 @@ export class ClientOrdersController {
         `select o.id, o.client_id as "clientId", c.name as "clientName", o.facility_id as "facilityId", f.name as "facilityName",
                 o.channel, o.requested_by_name as "requestedByName", o.requested_by_email as "requestedByEmail", o.requested_by_phone as "requestedByPhone",
                 o.client_reference as "clientReference", o.notes, o.confirm_to_client as "confirmToClient", o.created_at as "createdAt",
-                n.total, n.booked, n.assigned, n.open, n.cancelled, n.first_starts_at as "firstStartsAt",
+                n.total, n.booked, n.assigned, n.open, n.cancelled, n."toConfirm", n.first_starts_at as "firstStartsAt",
                 to_char(n.first_starts_at at time zone f.timezone, 'YYYY-MM-DD') as "firstLocalDate",
                 to_char(n.last_starts_at at time zone f.timezone, 'YYYY-MM-DD') as "lastLocalDate",
                 (select count(*)::int from client_order_confirmations x where x.order_id = o.id) as "confirmationsSent"
@@ -71,7 +71,11 @@ export class ClientOrdersController {
            cross join lateral (
              select count(*)::int as total, count(*) filter (where s.status = 'booked')::int as booked,
                     count(*) filter (where s.status = 'assigned')::int as assigned, count(*) filter (where s.status = 'open')::int as open,
-                    count(*) filter (where s.status = 'cancelled')::int as cancelled, min(s.starts_at) as first_starts_at, max(s.starts_at) as last_starts_at
+                    count(*) filter (where s.status = 'cancelled')::int as cancelled,
+                    count(*) filter (where s.status = 'booked' and c.confirms_bookings and not exists (
+                      select 1 from shift_assignments sa where sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status = 'confirmed'
+                         and sa.worker_id = s.client_confirmed_worker_id))::int as "toConfirm",
+                    min(s.starts_at) as first_starts_at, max(s.starts_at) as last_starts_at
                from shifts s where s.client_order_id = o.id) n
           where o.created_at >= now() - make_interval(days => $1)
           order by o.created_at desc limit 200`, [days])).rows;
@@ -80,25 +84,76 @@ export class ClientOrdersController {
     });
   }
 
-  /** Shifts at clients' sites still to come in the next `days` (1–31, default 14), soonest first, with the order they came from. */
+  /**
+   * Shifts at clients' sites still to come in the next `days` (1–31, default 14), soonest first and, at the same time,
+   * by the client's rank (1 first, unranked last), with the order they came from. Shifts on an order whose client
+   * confirms bookings are "client to confirm" once booked, until the office records the client's yes.
+   */
   @Roles(...OFFICE_ROLES)
   @Get('allocations/client-shifts')
   clientShifts(@Tenant() t: Membership, @Query('days') daysQ?: string, @Query('clientId') clientId?: string) {
     const days = whole(daysQ, 14, 1, 31);
     const client = clientId && UUID.test(clientId) ? clientId : null;
     return withTenant(this.pool, t.tenantId, async db => {
-      const shifts = (await db.query<{ status: string; offersPending: number }>(
-        `select ${SHIFT_COLS}, c.id as "clientId", c.name as "clientName", s.client_order_id as "orderId",
+      const shifts = (await db.query<{ status: string; offersPending: number; clientConfirms: boolean; clientConfirmedAt: string | null }>(
+        `select ${SHIFT_COLS}, c.id as "clientId", c.name as "clientName", c.rank as "clientRank", s.client_order_id as "orderId",
                 o.client_reference as "clientReference", o.requested_by_name as "requestedByName", o.channel as "orderChannel"
            from ${SHIFT_FROM} join clients c on c.id = f.client_id left join client_orders o on o.id = s.client_order_id
           where s.needs_person and s.status <> 'cancelled' and s.ends_at > now() and s.starts_at < now() + make_interval(days => $1)
             and ($2::uuid is null or c.id = $2)
-          order by s.starts_at, c.name, f.name, a.name nulls first, s.role limit 500`, [days, client])).rows;
+          order by s.starts_at, c.rank nulls last, c.name, f.name, a.name nulls first, s.role limit 500`, [days, client])).rows;
       const rows = shifts.map(s => ({ ...s, stage: clientShiftStage(s) }));
-      const counts = { open: 0, offered: 0, assigned: 0, booked: 0 };
+      const counts = Object.fromEntries(CLIENT_SHIFT_STAGES.map(k => [k, 0])) as Record<ClientShiftStage, number>;
       for (const r of rows) counts[r.stage]++;
       return { days, counts, shifts: rows };
     });
+  }
+
+  /**
+   * Records that the client confirmed the person booked on a shift from their order (their client confirms bookings).
+   * Not a roster change: nothing goes in the shift log and the after-publishing rules don't apply; the audit log
+   * keeps who and when. If the client says no, the office removes the person as usual.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('shifts/:id/client-confirmed')
+  @HttpCode(200)
+  clientConfirmed(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    const actor = actorOf(auth);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const s = await this.lockForClient(db, id);
+      const problem = clientConfirmRefusal(s);
+      if (problem) throw new ConflictException(problem);
+      await db.query('update shifts set client_confirmed_at = now(), client_confirmed_by = $2, client_confirmed_worker_id = $3 where id = $1',
+        [id, (actor.name ?? '').slice(0, 200) || null, s.workerId]);
+      return shiftById(db, id);
+    }, actor);
+  }
+
+  /** Takes back a client confirmation recorded by mistake (before the shift starts): the shift is "client to confirm" again. */
+  @Roles(...OFFICE_ROLES)
+  @Post('shifts/:id/client-confirmed/undo')
+  @HttpCode(200)
+  undoClientConfirmed(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const s = await this.lockForClient(db, id);
+      if (!s.clientConfirmedAt) throw new ConflictException('The {client} hasn’t confirmed this booking');
+      if (s.started) throw new ConflictException('This {shift} has already started');
+      await db.query('update shifts set client_confirmed_at = null, client_confirmed_by = null, client_confirmed_worker_id = null where id = $1', [id]);
+      return shiftById(db, id);
+    }, actorOf(auth));
+  }
+
+  /** Locks the shift row and returns what the client-confirmation rules need (the confirmation counts only for the person on it now). */
+  private async lockForClient(db: PoolClient, id: string) {
+    const s = (await db.query<{ onOrder: boolean; clientConfirms: boolean; status: string; started: boolean; clientConfirmedAt: string | null; workerId: string | null }>(
+      `select s.client_order_id is not null as "onOrder", coalesce(c.confirms_bookings, false) as "clientConfirms", s.status::text as status,
+              s.starts_at <= now() as started, sa.worker_id as "workerId",
+              case when sa.worker_id is not null and s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt"
+         from shifts s left join client_orders o on o.id = s.client_order_id left join clients c on c.id = o.client_id
+         left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status = 'confirmed'
+        where s.id = $1 for update of s`, [id])).rows[0];
+    if (!s) throw new NotFoundException('{Shift} not found');
+    return s;
   }
 }
 
@@ -114,7 +169,7 @@ export async function clientAllocationSummary(db: PoolClient) {
 type Due = { tenant_id: string; shift_id: string; worker_id: string };
 
 /**
- * Emails the client when a shift on their order is booked: every minute, the booked shifts whose order wants the
+ * Emails the client when a shift on their order is booked (asking them to confirm when the client confirms bookings): every minute, the booked shifts whose order wants the
  * client told and hasn't been (`app_client_confirmations_due`), then in each business the email and its record, in one
  * transaction. Off with CLIENT_CONFIRM=off or NOTIFY_DISPATCH=off (tests call runOnce).
  */
@@ -160,8 +215,8 @@ export class ClientConfirmations implements OnApplicationBootstrap, OnApplicatio
     return withTenant(this.pool, d.tenant_id, async db => {
       // Checked again in the business: still booked to this person, not started, and the order still wants it.
       const r = (await db.query<{ orderId: string; to: string; contactName: string; clientReference: string | null; personName: string; role: string;
-        siteName: string; areaName: string | null; localDate: string; localStart: string; localEnd: string; businessName: string }>(
-        `select o.id as "orderId", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
+        siteName: string; areaName: string | null; localDate: string; localStart: string; localEnd: string; businessName: string; askToConfirm: boolean }>(
+        `select o.id as "orderId", (select c.confirms_bookings from clients c where c.id = o.client_id) as "askToConfirm", o.requested_by_email as to, o.requested_by_name as "contactName", o.client_reference as "clientReference",
                 coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName", a.name as "areaName",
                 to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
                 to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",

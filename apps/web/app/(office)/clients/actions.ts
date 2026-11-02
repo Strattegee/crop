@@ -9,7 +9,8 @@ export async function addClient(f: FormData) {
   try {
     id = (await api<{ id: string }>('/clients', {
       method: 'POST',
-      body: { name: str(f, 'name'), abn: str(f, 'abn'), billingContactName: str(f, 'billingContactName'), billingEmail: str(f, 'billingEmail'), phone: str(f, 'phone') },
+      body: { name: str(f, 'name'), abn: str(f, 'abn'), billingContactName: str(f, 'billingContactName'), billingEmail: str(f, 'billingEmail'), phone: str(f, 'phone'),
+        confirmsBookings: f.get('confirmsBookings') === 'on', rank: str(f, 'rank') ? Number(str(f, 'rank')) : null },
     })).id;
   } catch (err) {
     fail('/clients', err);
@@ -23,6 +24,7 @@ export async function updateClient(id: string, f: FormData) {
     body: {
       name: str(f, 'name'), status: str(f, 'status'), abn: str(f, 'abn') ?? null, phone: str(f, 'phone') ?? null,
       billingContactName: str(f, 'billingContactName') ?? null, billingEmail: str(f, 'billingEmail') ?? null, notes: str(f, 'notes') ?? null,
+      confirmsBookings: f.get('confirmsBookings') === 'on', rank: str(f, 'rank') ? Number(str(f, 'rank')) : null,
     },
   }), 'Client saved.');
 }
