@@ -34,11 +34,11 @@ describe('needs attention: rules', () => {
     // With agencies (employer-side escalation): who has been asked and when the next one is.
     const now = new Date('2026-11-02T09:00:00Z');
     expect(offerNote({ offersPending: 0, offersExpired: 0, pulledOutName: null, agency: { asked: 1, nextAt: new Date('2026-11-02T09:20:00Z') } }, now))
-      .toBe('With agencies: 1 agency asked, nobody put forward yet; the next is asked in 20 min');
+      .toBe('With {agencies}: 1 {agency} asked, nobody put forward yet; the next is asked in 20 min');
     expect(offerNote({ offersPending: 2, offersExpired: 0, pulledOutName: null, agency: { asked: 3, nextAt: null } }, now))
-      .toBe('Offered to 2 people, no reply yet; with agencies: 3 agencies asked, nobody put forward yet; every agency has been asked');
+      .toBe('Offered to 2 people, no reply yet; with {agencies}: 3 {agencies} asked, nobody put forward yet; every {agency} has been asked');
     expect(offerNote({ offersPending: 0, offersExpired: 0, pulledOutName: null, agency: { asked: 0, nextAt: new Date('2026-11-02T11:00:00Z') } }, now))
-      .toBe('With agencies, none asked yet; the next is asked in 2 hours');
+      .toBe('With {agencies}, none asked yet; the next is asked in 2 hours');
   });
 
   it('puts urgent items first, then blocked, open and unconfirmed, then by start', () => {
@@ -61,10 +61,10 @@ describe('needs attention: rules', () => {
       ['machine', 'equipment_blocked', false],
       ['later-open', 'open', false],
     ]);
-    expect(items[0]).toMatchObject({ title: 'Nobody on this shift', detail: 'Offered to 2 people, no reply yet', startsIn: 'starts in 10 hours' });
+    expect(items[0]).toMatchObject({ title: 'Nobody on this {shift}', detail: 'Offered to 2 people, no reply yet', startsIn: 'starts in 10 hours' });
     expect(items[2].title).toBe("Ana Example hasn't confirmed");
-    expect(items[3]).toMatchObject({ title: "Ben Sample can't work this shift now", detail: 'Ben Sample is on leave that day.' });
-    expect(items[4].title).toBe("Forklift 1 can't be used on this shift now");
+    expect(items[3]).toMatchObject({ title: "Ben Sample can't work this {shift} now", detail: 'Ben Sample is on leave that day.' });
+    expect(items[4].title).toBe("Forklift 1 can't be used on this {shift} now");
   });
 
   it('counts items by kind for the Dashboard', () => {

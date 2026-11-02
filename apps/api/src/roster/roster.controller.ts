@@ -8,6 +8,7 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, gender, int, oneOf, text } from '../common/validate.js';
 import { genderReason } from './eligibility.js';
+import { fillWords, wordsFor } from '../terms/words.js';
 import { APP_POOL } from '../database/database.module.js';
 import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { equipmentForShift } from './equipment-data.js';
@@ -566,7 +567,8 @@ export class ShiftsController {
       if (shift.equipmentOnly && requested) throw new BadRequestException('Nobody works {an equipment}-only {shift}');
       if (shift.genderRequested !== requested) await db.query('update shifts set gender_requested = $2, updated_at = now() where id = $1', [id, requested]);
       const after = await shiftById(db, id);
-      const personWarning = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined)?.message ?? null;
+      const reason = genderReason(after.workerName ?? '', requested, after.workerId ? after.workerGender : undefined);
+      const personWarning = reason ? fillWords(reason.message, await wordsFor(db)) : null;
       return { ...after, personWarning };
     });
   }

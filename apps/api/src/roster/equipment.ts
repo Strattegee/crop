@@ -60,7 +60,7 @@ export function equipmentEligibility(shift: ShiftFacts, e: EquipmentInput): Elig
   for (const c of [...e.checks].sort((a, b) => a.dueOn.localeCompare(b.dueOn))) {
     const state = checkState(c.dueOn, shift.localDate, e.windowDays);
     if (state === 'overdue') {
-      blocks.push({ code: 'equipment_check', message: `${e.name}'s ${c.name} will be overdue by the shift date (due ${fmtDate(c.dueOn)})` });
+      blocks.push({ code: 'equipment_check', message: `${e.name}'s ${c.name} will be overdue by the {shift} date (due ${fmtDate(c.dueOn)})` });
     } else if (state === 'due_soon') {
       warnings.push({ code: 'equipment_check', message: `${e.name}'s ${c.name} is due soon (${fmtDate(c.dueOn)})` });
     }
@@ -72,7 +72,7 @@ export function equipmentEligibility(shift: ShiftFacts, e: EquipmentInput): Elig
   if (e.operator && !e.equipmentOnly) {
     const need: OperatorNeed = { equipmentName: e.name, ...e.operator };
     if (!e.person) {
-      warnings.push({ code: 'operator', message: `${e.name} needs an operator holding a ${e.operator.typeName}; nobody is on this shift yet` });
+      warnings.push({ code: 'operator', message: `${e.name} needs an operator holding a ${e.operator.typeName}; nobody is on this {shift} yet` });
     } else {
       const r = operatorReason(e.person.name, e.person.credentials, need, shift.localDate, e.windowDays);
       if (r) (r.hard ? blocks : warnings).push(r.reason);

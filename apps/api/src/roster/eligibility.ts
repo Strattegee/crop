@@ -41,8 +41,8 @@ export function genderReason(name: string, requested: Gender | null | undefined,
   return {
     code: 'gender',
     message: personGender
-      ? `A ${GENDER_WORD[requested]} worker was requested for this shift; ${name} is recorded as ${GENDER_WORD[personGender]}`
-      : `A ${GENDER_WORD[requested]} worker was requested for this shift; ${name}'s gender isn't recorded`,
+      ? `A ${GENDER_WORD[requested]} {worker} was requested for this {shift}; ${name} is recorded as ${GENDER_WORD[personGender]}`
+      : `A ${GENDER_WORD[requested]} {worker} was requested for this {shift}; ${name}'s gender isn't recorded`,
   };
 }
 
@@ -91,7 +91,7 @@ const PROBLEM_TEXT: Record<ComplianceIssue['problem'], string> = {
   missing: 'is missing',
   rejected: 'was rejected',
   unverified: "isn't verified yet",
-  expired: 'will have expired by the shift date',
+  expired: 'will have expired by the {shift} date',
   expiring: 'expires soon',
   no_work_rights: "doesn't have confirmed work rights (VEVO)",
 };
@@ -163,7 +163,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
       if (total > p.hoursPerFortnight) {
         blocks.push({
           code: 'visa_hours',
-          message: `${p.name}'s visa allows ${p.hoursPerFortnight} hours a fortnight; this shift would make ${round(total)} hours in the fortnight from ${fmtDate(f.from)}`,
+          message: `${p.name}'s visa allows ${p.hoursPerFortnight} hours a fortnight; this {shift} would make ${round(total)} hours in the fortnight from ${fmtDate(f.from)}`,
         });
         break;
       }
@@ -181,7 +181,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
         : tooClose.startsAt.getTime() - shift.endsAt.getTime();
       warnings.push({
         code: 'rest',
-        message: `${p.name} would have ${round(gap / 3_600_000)} hours' rest between this shift and ${tooClose.label} (minimum ${p.minRestHours})`,
+        message: `${p.name} would have ${round(gap / 3_600_000)} hours' rest between this {shift} and ${tooClose.label} (minimum ${p.minRestHours})`,
       });
     }
   }

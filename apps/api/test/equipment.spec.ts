@@ -37,7 +37,7 @@ describe('equipment eligibility', () => {
 
   it('blocks a date overdue on the shift date and warns when due soon', () => {
     const r = equipmentEligibility(shift, { ...base, checks: [{ name: 'Service', dueOn: '2026-11-20' }, { name: 'Registration', dueOn: '2026-11-04' }] });
-    expect(r.blocks).toEqual([{ code: 'equipment_check', message: "Forklift 2's Registration will be overdue by the shift date (due Wed 4 Nov)" }]);
+    expect(r.blocks).toEqual([{ code: 'equipment_check', message: "Forklift 2's Registration will be overdue by the {shift} date (due Wed 4 Nov)" }]);
     expect(r.warnings).toEqual([{ code: 'equipment_check', message: "Forklift 2's Service is due soon (Fri 20 Nov)" }]);
   });
 
@@ -50,7 +50,7 @@ describe('equipment eligibility', () => {
 
   it('needs an operator holding a current, verified credential', () => {
     expect(equipmentEligibility(shift, withOperator)).toMatchObject({
-      eligible: true, warnings: [{ code: 'operator', message: 'Forklift 2 needs an operator holding a Forklift licence; nobody is on this shift yet' }],
+      eligible: true, warnings: [{ code: 'operator', message: 'Forklift 2 needs an operator holding a Forklift licence; nobody is on this {shift} yet' }],
     });
     const person = (credentials: CredentialFacts[]) => ({ ...withOperator, person: { name: 'Ana Example', credentials } });
     expect(equipmentEligibility(shift, person([licence()]))).toEqual({ eligible: true, blocks: [], warnings: [] });

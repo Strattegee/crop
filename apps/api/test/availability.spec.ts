@@ -33,14 +33,14 @@ describe('availability and leave: rules', () => {
   it('warns from the weekly pattern', () => {
     const a = facts([[6, ['am']], [7, []]]);
     expect(availabilityReason('Ana', '2026-11-07', '07:00', a)).toBeNull();
-    expect(availabilityReason('Ana', '2026-11-07', '22:00', a)?.message).toBe("Ana isn't usually available for night shifts on Saturdays");
+    expect(availabilityReason('Ana', '2026-11-07', '22:00', a)?.message).toBe("Ana isn't usually available for night {shifts} on Saturdays");
     expect(availabilityReason('Ana', '2026-11-08', '07:00', a)?.message).toBe("Ana doesn't usually work on Sundays");
   });
 
   it('lets a date entry replace the pattern', () => {
     const a = facts([[6, ['am']]], [['2026-11-07', ['night']], ['2026-11-14', []]]);
     expect(availabilityReason('Ana', '2026-11-07', '22:00', a)).toBeNull();
-    expect(availabilityReason('Ana', '2026-11-07', '07:00', a)?.message).toBe("Ana isn't available for AM shifts on Sat 7 Nov");
+    expect(availabilityReason('Ana', '2026-11-07', '07:00', a)?.message).toBe("Ana isn't available for AM {shifts} on Sat 7 Nov");
     expect(availabilityReason('Ana', '2026-11-14', '07:00', a)?.message).toBe("Ana isn't available on Sat 14 Nov");
   });
 
