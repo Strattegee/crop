@@ -5,7 +5,7 @@
  *
  * Keep NOTICE_VERSION the same as VERSION in docs/legal/build.py (a test checks the web's LEGAL_VERSION carries it).
  */
-export const NOTICE_VERSION = '0.1 (draft), 24 October 2026';
+export const NOTICE_VERSION = '0.2 (draft), 2 November 2026';
 export const NOTICE_PATH = '/legal/worker-notice';
 
 export type NoticeState = 'new' | 'changed' | 'seen';
