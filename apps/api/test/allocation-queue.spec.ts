@@ -155,7 +155,7 @@ describe('allocation queue: API', () => {
     await http().post(`/shifts/${ids.clientToConfirm}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200);
     await http().post(`/shifts/${ids.clientToConfirm}/confirm`).set(as('alloc')).expect(200);
     // Fully booked today (Hillview).
-    ids.booked = await order({ clientId: ids.hill, facilityId: ids.hillSite, date: ahead(3), startTime: '13:00', endTime: '17:00' });
+    ids.booked = await order({ clientId: ids.hill, facilityId: ids.hillSite, date: ahead(3), startTime: '09:00', endTime: '13:00' }); // within 3 days at any hour
     await http().post(`/shifts/${ids.booked}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
     await http().post(`/shifts/${ids.booked}/confirm`).set(as('alloc')).expect(200);
     // Pulled out.
@@ -209,7 +209,12 @@ describe('allocation queue: API', () => {
     expect(hill.regions).toEqual([{ name: 'NSW', count: 2 }]);
     expect(hill.shifts.every(s => s.clientName === 'Hillview Care')).toBe(true);
     expect((await queue('?days=14')).shifts.map(s => s.id)).toContain(ids.far);
-    expect((await queue('?days=1')).counts.all).toBe(2);
+    // Within a day: the two starting soon; never one two days out in the evening. (Early-morning shifts two UTC dates ahead
+    // can fall within 24 hours late in the UTC day, so the count isn't fixed.)
+    const day = (await queue('?days=1')).shifts.map(s => s.id);
+    expect(day).toEqual(expect.arrayContaining([ids.soonHill, ids.soonBay]));
+    expect(day).not.toContain(ids.workerToConfirm);
+    expect(day).not.toContain(ids.far);
     await http().get('/allocations/queue?days=0').set(as('alloc')).expect(400);
     await http().get('/allocations/queue?days=15').set(as('alloc')).expect(400);
   });

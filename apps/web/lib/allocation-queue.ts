@@ -145,3 +145,42 @@ export function hereLine(h: { shiftsHere: number; lastHere: string | null } | nu
 
 /** Two letters for a person: "OD" for "Oscar Diaz". */
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]!.toUpperCase()).join('') || '?';
+
+/** Releasing several at once (layout C's idea inside the queue, 2 Nov): at most this many shifts per press. */
+export const BULK_MAX = 20;
+/** At most this many people are offered one shift when it is released to the bank. */
+export const RELEASE_MAX = 50;
+
+/**
+ * Who gets an offer from the queue: `top` = the best five, `release` = everyone who can work it (up to 50); never
+ * anyone whose offer is still waiting, nor the person who pulled out of it.
+ */
+export function releasePick<C extends { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null }>(
+  cands: C[], how: 'top' | 'release', pulledOutName: string | null,
+): string[] {
+  return bestPeople(cands, how === 'top' ? 5 : RELEASE_MAX, pulledOutName).map(c => c.workerId);
+}
+
+/** The rows a band can release in one go: still New (nobody on it, nothing offered), in queue order, at most BULK_MAX. */
+export function releasableRows<R extends { id: string; stage: QueueStage }>(rows: R[]): R[] {
+  return rows.filter(r => r.stage === 'new').slice(0, BULK_MAX);
+}
+
+/** One shift's outcome when releasing several: how many were offered it, or why it wasn't released. */
+export type BulkResult = { label: string; offered: number; reason?: string };
+
+/**
+ * The message after releasing several: "Released 3 shifts to the bank: 41 offers sent. The first to accept each one gets
+ * it." plus "Not released (1): Tuesday 3 November 07:00 Carer: Nobody else can work it." `w` = the business's words.
+ */
+export function bulkReleaseMessage(results: BulkResult[], w: { bank: string; shift: string; shifts: string } = { bank: 'bank', shift: 'shift', shifts: 'shifts' }): { ok: boolean; text: string } {
+  const done = results.filter(r => !r.reason && r.offered > 0);
+  const left = results.filter(r => r.reason || r.offered === 0);
+  const offers = done.reduce((n, r) => n + r.offered, 0);
+  const notes = left.length
+    ? ` Not released (${left.length}): ${left.slice(0, 5).map(r => `${r.label}: ${(r.reason ?? 'Nobody else can work it').replace(/\.$/, '')}`).join('; ')}${left.length > 5 ? `; and ${left.length - 5} more` : ''}.`
+    : '';
+  if (!done.length) return { ok: false, text: `Nothing released.${notes}` };
+  const n = done.length === 1 ? `1 ${w.shift}` : `${done.length} ${w.shifts}`;
+  return { ok: true, text: `Released ${n} to the ${w.bank}: ${offers} ${offers === 1 ? 'offer' : 'offers'} sent. The first to accept each one gets it.${notes}` };
+}

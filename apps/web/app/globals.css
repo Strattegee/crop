@@ -744,6 +744,13 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-starts.amber { color: var(--warn); font-weight: 600; }
 .q-band { display: flex; align-items: center; gap: 10px; padding: 0 12px; height: 26px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .q-band b { color: var(--text); }
+.q-band { position: relative; }
+.q-bulk { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.q-band-hint + .q-bulk { margin-left: 8px; }
+.q-bulk summary { cursor: pointer; color: var(--accent); font-weight: 600; list-style: none; }
+.q-bulk summary::-webkit-details-marker { display: none; }
+.q-bulk-pop { position: absolute; right: 8px; top: 26px; z-index: 20; width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.15); padding: 10px 12px; font-size: 13px; font-weight: 400; }
+.q-bulk-pop p { margin: 0 0 8px; }
 .q-band-hint { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .qb-soon, .qb-started { background: var(--qs-band-soon); color: var(--qs-band-soon-fg); }
 .qb-soon b, .qb-started b { color: var(--qs-band-soon-fg); }

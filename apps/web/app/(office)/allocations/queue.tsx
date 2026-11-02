@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { T, type Words } from '../../../lib/terms';
 import {
-  DAY_CHOICES, QUEUE_BANDS, QUEUE_TABS, bandTitle, bestPeople, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
+  DAY_CHOICES, QUEUE_BANDS, QUEUE_TABS, bandTitle, bestPeople, releasableRows, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
   type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
 } from '../../../lib/allocation-queue';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
 import { assign, clientConfirmed, confirm, offer, recordReply, unassign, undoClientConfirmed } from '../roster/actions';
 import { AgencyFillSection, type AgencyFillState } from '../roster/agency-fill-section';
-import { offerFromQueue } from './actions';
+import { offerFromQueue, releaseMany } from './actions';
 import { QueueLive } from './queue-live';
 
 export type QueueRow = {
@@ -100,6 +100,7 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
                   <div className={`q-band qb-${b.band}`} role="row">
                     <span>{bandTitle(b.band)} <b>{b.rows.length}</b></span>
                     {(b.band === 'soon' || b.band === 'started') && <span className="q-band-hint">soonest first; higher-ranked {tw.lower(T.client, true)} first at the same time</span>}
+                    <BulkRelease tw={tw} qw={qw} rows={releasableRows(b.rows)} here={here} title={bandTitle(b.band).toLowerCase()} />
                   </div>
                   {b.rows.map(r => {
                     const st = startsIn(r.startsAt, now, r);
@@ -135,6 +136,27 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         {panel && <FillPanel tw={tw} qw={qw} panel={panel} here={here} closeHref={href({ shift: null })} now={now} when={when} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Release N new": offers every New shift in a band to everyone who can work it, in one press (layout C's release in
+ * bulk, inside the queue). Opens a small confirm first (`data-hold` stops the 20-second refresh while it's open).
+ */
+function BulkRelease({ tw, qw, rows, here, title }: { tw: Words; qw: QueueWords; rows: { id: string }[]; here: string; title: string }) {
+  if (rows.length < 2) return null;
+  const n = `${rows.length} ${qw.shifts}`;
+  return (
+    <details className="q-bulk" data-hold>
+      <summary>Release {rows.length} new</summary>
+      <form action={releaseMany} className="q-bulk-pop">
+        <input type="hidden" name="back" value={here} />
+        {rows.map(r => <input key={r.id} type="hidden" name="shiftId" value={r.id} />)}
+        <p>Offer the {n} still new in <strong>{title}</strong> to everyone who can work each one, as its own Release button would.</p>
+        <p className="muted small">Each person gets a message for every {tw.lower(T.shift)} they can work; the first to accept each one gets it. Any that someone fills meanwhile are skipped.</p>
+        <button className="btn small">Release {n} to the {qw.bank}</button>
+      </form>
+    </details>
   );
 }
 

@@ -2,7 +2,8 @@
 
 import { api, ApiError } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
-import { contactSavedNote, parsePlace } from '../../../lib/client-orders';
+import { BULK_MAX, bulkReleaseMessage, releasePick, type BulkResult } from '../../../lib/allocation-queue';
+import { contactSavedNote, dayLabel, parsePlace } from '../../../lib/client-orders';
 import { T, words } from '../../../lib/terms';
 import { addShiftsDates, addShiftsUntil, addShiftsWhen } from '../roster/view';
 
@@ -102,15 +103,49 @@ export async function offerFromQueue(shiftId: string, how: 'top' | 'release', f:
   let offered = 0;
   await attempt(backTo(f), async () => {
     const { shift, candidates } = await api<{ shift: { pulledOutName: string | null }; candidates: BankCandidate[] }>(`/shifts/${shiftId}/bank-fill?everyone=true`);
-    // Not the person who just pulled out of it.
-    const free = candidates.filter(c => c.eligible && c.offer?.status !== 'pending' && c.name !== shift.pulledOutName);
-    const pick = (how === 'top' ? free.slice(0, 5) : free.slice(0, 50)).map(c => c.workerId);
+    const pick = releasePick(candidates, how, shift.pulledOutName); // never the person who just pulled out of it
     if (!pick.length) throw new ApiError(409, `Nobody else can work this ${tw.lower(T.shift)} right now. Try ${tw.lower(T.agency, true)}, or open it in the ${tw.lower(T.roster)} to see why.`);
     await api(`/shifts/${shiftId}/offers`, { method: 'POST', body: { workerIds: pick } });
     offered = pick.length;
   }, () => how === 'top'
     ? `Offered to the top ${offered}. The first to accept gets it.`
     : `Released to the ${tw.lower(T.bank)}: offered to ${offered} ${offered === 1 ? 'person' : 'people'}. The first to accept gets it.`);
+}
+
+type BulkShift = { status: string; role: string; localDate: string; localStart: string; offersPending: number; pulledOutName: string | null };
+
+/**
+ * Releases several New shifts to the bank in one press (layout C's "release in bulk" inside the queue, 2 Nov): each
+ * shift is offered to everyone who can work it, exactly as its own Release button would, one after another in queue
+ * order, carrying on past any that can't be released (someone got there first, nobody can work it, the week is locked).
+ * At most BULK_MAX shifts per press.
+ */
+export async function releaseMany(f: FormData) {
+  const tw = await words();
+  const ids = [...new Set(f.getAll('shiftId').map(String).filter(id => /^[0-9a-f-]{36}$/i.test(id)))].slice(0, BULK_MAX);
+  const results: BulkResult[] = [];
+  let msg = { ok: false, text: '' };
+  await attempt(backTo(f), async () => {
+    if (!ids.length) throw new ApiError(400, `No ${tw.lower(T.shift, true)} to release.`);
+    for (const id of ids) {
+      let label = `A ${tw.lower(T.shift)}`;
+      try {
+        const { shift, candidates } = await api<{ shift: BulkShift; candidates: BankCandidate[] }>(`/shifts/${id}/bank-fill?everyone=true`);
+        label = `${dayLabel(shift.localDate)} ${shift.localStart} ${shift.role}`;
+        if (shift.status !== 'open') { results.push({ label, offered: 0, reason: 'Someone is on it now' }); continue; }
+        if (shift.offersPending > 0) { results.push({ label, offered: 0, reason: 'Already offered' }); continue; }
+        const pick = releasePick(candidates, 'release', shift.pulledOutName);
+        if (!pick.length) { results.push({ label, offered: 0, reason: 'Nobody else can work it' }); continue; }
+        await api(`/shifts/${id}/offers`, { method: 'POST', body: { workerIds: pick } });
+        results.push({ label, offered: pick.length });
+      } catch (err) {
+        if (err && typeof err === 'object' && 'digest' in err) throw err; // sign-in redirect
+        results.push({ label, offered: 0, reason: err instanceof ApiError ? err.message : 'Something went wrong' });
+      }
+    }
+    msg = bulkReleaseMessage(results, { bank: tw.lower(T.bank), shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true) });
+    if (!msg.ok) throw new ApiError(409, msg.text);
+  }, () => msg.text);
 }
 
 /** Records that the signed-in person has this shift open on Allocations (shown to others as their initials; never a lock). */
