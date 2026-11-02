@@ -29,7 +29,14 @@ or wording; we design our own.
    To build with the screen: a quick filter by region or office that stays on while someone works, and making it plain
    who is working on what (without locks that are taken by accident).
 
-## Direction under discussion (not yet chosen by David)
+## Decision (2 Nov, David): layout A
+
+David chose **A, urgent queue with a fill panel**. Built 2 Nov (see CLAUDE.md "Allocation queue" and the backlog). C may come
+later as a second view for releasing many shifts at once. Also decided the same day: a shift for a client who confirms
+bookings is final only once both the client and the worker have said yes, in either order ("Worker to confirm" /
+"Client to confirm").
+
+## The three layouts that were considered
 
 A design canvas with three layouts: https://claude.ai/artifact/FrMuqNf8rBpJovjf3TP3NE
 
@@ -39,5 +46,4 @@ A design canvas with three layouts: https://claude.ai/artifact/FrMuqNf8rBpJovjf3
 - **B. Stage board.** Columns by stage (unfilled, offered, allocated, client to confirm, booked) with cards moving across.
 - **C. Group and release in bulk.** Shifts grouped (by site, role or time) and released to many people at once.
 
-Until David chooses, the data and API are ready for any of them: stages including "client to confirm", client rank, and
-`GET /allocations/client-shifts`.
+

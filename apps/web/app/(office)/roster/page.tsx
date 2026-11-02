@@ -6,7 +6,7 @@ import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  agencyFill, agencyFillNext, agencyFillWithdraw, outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
   clientConfirmed, undoClientConfirmed,
 } from './actions';
@@ -14,7 +14,7 @@ import { clientConfirmLine } from '../../../lib/client-orders';
 import { UNCHECKED, uncheckedNote } from '../../../lib/outside-agency';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
-import { minutesWords, requestStepChoices } from '../../../lib/agency-timing';
+import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
@@ -62,15 +62,6 @@ type FacilityDetail = Facility & { areas: { id: string; name: string; active: bo
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; letter?: string | null; startTime: string; endTime: string; active: boolean };
 type Reason = { code: string; message: string };
 type Candidate = { workerId: string; name: string; employmentType: string | null; weekHours: number; eligible: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null };
-/** `GET /shifts/:id/agency-fill` (migration 0040). */
-type AgencyFillState = {
-  request: { id: string; status: 'open' | 'filled' | 'withdrawn' | 'expired'; note: string | null; stepMinutes: number | null; createdByName: string | null; createdAt: string; closedReason: string | null } | null;
-  rounds: { id: string; agencyName: string; position: number; dueAt: string; sentAt: string | null; state: 'sent' | 'waiting' | 'skipped'; skippedReason: string | null; dueIn: string | null }[];
-  next: { agencyName: string; dueIn: string } | null;
-  activeAgencies: number; canRequest: boolean; problem: string | null;
-  timing?: { band: 'soon' | 'today' | 'later'; bandWords: string; defaultMinutes: number; defaultWords: string };
-  placement: { agencyName: string; workerName: string; status: 'waiting' | 'booked' | 'declined' | 'removed' | 'pulled_out' | 'cancelled'; state: string; putForwardByName: string | null; createdAt: string; confirmedCredentials?: string[] } | null;
-};
 /** Agencies not on CROP (migration 0059): who it can be emailed to, what the email lists, what was sent. */
 type OutsideReq = { name: string; levelWords: string; forWhat: string | null };
 type OutsideState = {
@@ -1361,55 +1352,3 @@ function OutsideAgencySection({ st, shiftId, role, here, when, tw }: { st: Outsi
 }
 
 /** The shift panel's Agency fill part: send to agencies in order, see who has it and who's next, bring forward or take back. */
-function AgencyFillSection({ st, shiftId, here, when, tw }: { st: AgencyFillState; shiftId: string; here: string; when: (iso: string) => string; tw: Words }) {
-  const agencies = tw.lower(T.agency, true);
-  const open = st.request?.status === 'open' ? st.request : null;
-  const closed = st.request && !open ? st.request : null;
-  return (
-    <div className="agencyfill" style={{ marginTop: 12 }}>
-      <p style={{ margin: '0 0 6px' }}><strong>{tw.one(T.agency)} fill</strong> <span className="muted">· send it to your {agencies} when your own staff can&apos;t cover it</span></p>
-      {open && (
-        <>
-          <p className="small" style={{ margin: '0 0 4px' }}>
-            With {agencies} since {when(open.createdAt)}{open.createdByName ? ` (${open.createdByName})` : ''}.
-            {open.stepMinutes && st.rounds.length > 1 ? ` ${minutesWords(open.stepMinutes)} between each.` : ''}{open.note ? ` Note: ${open.note}` : ''}
-          </p>
-          {st.rounds.map(r => (
-            <div key={r.id} className="panel-row small">
-              <span>{r.position}. {r.agencyName}</span>
-              <span className="muted">{r.state === 'sent' ? `has it since ${when(r.sentAt!)}` : r.state === 'waiting' ? `gets it ${r.dueIn}` : r.skippedReason ?? 'skipped'}</span>
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            {st.next && (
-              <form action={agencyFillNext.bind(null, shiftId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Send to {st.next.agencyName} now</button></form>
-            )}
-            <form action={agencyFillWithdraw.bind(null, shiftId)}><input type="hidden" name="back" value={here} /><button className="btn small secondary">Take it back</button></form>
-          </div>
-          <p className="muted small" style={{ margin: '6px 0 0' }}>Putting someone on it yourself takes it back from the {agencies} too.</p>
-        </>
-      )}
-      {!open && closed && (
-        <p className="muted small" style={{ margin: '0 0 6px' }}>
-          Last sent {when(closed.createdAt)}: {st.placement ? `${st.placement.agencyName} put forward ${st.placement.workerName} (${st.placement.state.toLowerCase()})` : closed.closedReason ?? closed.status}.
-        </p>
-      )}
-      {!open && st.canRequest && (
-        <form action={agencyFill.bind(null, shiftId)} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="hidden" name="back" value={here} />
-          <label className="sr-only" htmlFor="agencyNote">Note for the {agencies}</label>
-          <input id="agencyNote" name="note" maxLength={300} placeholder={`Note for the ${agencies} (optional)`} style={{ flex: '1 1 180px' }} />
-          {st.timing && st.activeAgencies > 1 && (
-            <label className="small">Next {tw.lower(T.agency)} after{' '}
-              <select name="stepMinutes" defaultValue="" title={`Your usual for a ${tw.lower(T.shift)} that ${st.timing.bandWords} (Settings → ${tw.many(T.agency)})`}>
-                {requestStepChoices(st.timing.defaultMinutes).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            </label>
-          )}
-          <button className="btn small">Send to {agencies}</button>
-        </form>
-      )}
-      {!open && !st.canRequest && st.problem && <p className="muted small" style={{ margin: 0 }}>{st.problem}</p>}
-    </div>
-  );
-}

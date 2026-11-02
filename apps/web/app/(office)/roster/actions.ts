@@ -15,9 +15,10 @@ import {
 } from './view';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
+/** Where a form returns to: the roster, or Allocations (its fill panel reuses these actions). */
 const back = (f: FormData) => {
   const b = str(f, 'back') ?? '/roster';
-  return b.startsWith('/roster') ? b : '/roster';
+  return b.startsWith('/roster') || b.startsWith('/allocations') ? b : '/roster';
 };
 
 export async function createShifts(f: FormData) {
