@@ -10,6 +10,7 @@ import { AgencyOfferLinksController, AgencyOffersController } from './agencies/a
 import { AuthModule } from './auth/auth.module.js';
 import { ClientsController } from './clients/clients.controller.js';
 import { ClientConfirmations, ClientOrdersController } from './clients/client-orders.controller.js';
+import { AllocationQueueController } from './clients/allocation-queue.controller.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -43,7 +44,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

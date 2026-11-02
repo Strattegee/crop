@@ -2,8 +2,11 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { businessZone, todayIn, whenIn } from '../../../lib/business';
 import { orderPlaces } from '../../../lib/client-orders';
-import { ClientShiftsSection, type ClientOrder, type ClientShifts } from './client-shifts';
-import { T, words } from '../../../lib/terms';
+import { parseQueueParams, queueHref, type QueueParams } from '../../../lib/allocation-queue';
+import { NewOrderForm, RecentOrders, type ClientOrder } from './client-shifts';
+import { QueueScreen, type Panel, type PanelCandidate, type PanelOffer, type PanelShift, type Queue, type QueueRow } from './queue';
+import type { AgencyFillState } from '../roster/agency-fill-section';
+import { T, words, type Words } from '../../../lib/terms';
 import { Notices } from '../notices';
 import { AgencyAttentionList, type AgencyAttention } from './agency-attention';
 import { offerToPeople, pullOut, putForward, recordYes, withdrawOffers } from './actions';
@@ -32,33 +35,89 @@ type Summary = { agencyLinks: number; open: number; hasClients?: boolean; client
 type Site = { id: string; name: string; clientId: string | null; clientName: string | null; active: boolean };
 
 /**
- * Allocations (function code 2200). Client shifts first (client orders, 2 Nov): orders typed in from the business's
- * clients and their shifts still to fill, each with Find staff (the roster's shift panel). Then, for a business that
- * supplies employers on CROP (agency fill), the requests employers have sent it, soonest first, with what each needs
- * and this business's people checked against it (ready first), each with Put forward (migration 0042: booked straight
- * away or waiting for the employer's approval, as the employer chose). Closed ones show who went.
+ * Allocations (function code 2200). For a business with clients: the allocation queue (David chose layout A, 2 Nov):
+ * client shifts still needing work, most urgent first, with a fill panel beside the one open (`shift=`), stage tabs
+ * and region chips in the URL; "+ New order" and "Completed and history" are views of their own. For a business that
+ * supplies employers on CROP (agency fill), "Requests from employers" lists what employers sent it, with its people
+ * checked against each (ready first) to put forward or offer.
  */
-export default async function AllocationsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
+export default async function AllocationsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [summary, tw, zone, sp] = await Promise.all([api<Summary>('/allocations/summary').catch(() => null), words(), businessZone(), searchParams]);
   const hasAgency = (summary?.agencyLinks ?? 0) > 0;
   const hasClients = Boolean(summary?.hasClients);
-  const [list, attention] = hasAgency
-    ? await Promise.all([api<Request[]>('/agency-requests?status=all'), api<AgencyAttention>('/allocations/attention').catch(() => null)])
-    : [[] as Request[], null];
-  const clientPart = hasClients ? await (async () => {
-    const [sites, roles, data, orders] = await Promise.all([
-      api<Site[]>('/facilities').catch(() => [] as Site[]),
-      api<{ name: string; active?: boolean }[]>('/roles').catch(() => []),
-      api<ClientShifts>('/allocations/client-shifts?days=14').catch(() => null),
-      api<ClientOrder[]>('/client-orders?days=30').catch(() => [] as ClientOrder[]),
-    ]);
-    const clientSites = sites.filter(f => f.clientId && f.active).slice(0, 60);
-    const withAreas = await Promise.all(clientSites.map(async f =>
-      ({ ...f, areas: (await api<{ areas: { id: string; name: string; active: boolean }[] }>(`/facilities/${f.id}`).catch(() => ({ areas: [] }))).areas })));
-    const roleNames = [...new Set(roles.filter(r => r.active !== false).map(r => r.name))].sort();
-    return { places: orderPlaces(withAreas), roles: roleNames, data, orders };
-  })() : null;
+  const parsed = parseQueueParams(sp);
+  const p: QueueParams = { ...parsed, view: !hasClients && hasAgency ? 'employers' : parsed.view === 'employers' && !hasAgency ? 'queue' : parsed.view };
   const when = whenIn(zone);
+  const error = typeof sp.error === 'string' ? sp.error : undefined;
+  const done = typeof sp.done === 'string' ? sp.done : undefined;
+  const tab = (view: QueueParams['view'], label: string) => (
+    <Link className={`q-view${p.view === view ? ' on' : ''}`} href={queueHref({ ...p, shift: null }, { view })} aria-current={p.view === view ? 'page' : undefined}>{label}</Link>
+  );
+  return (
+    <div className="alloc-page">
+      <div className="q-header">
+        <h1>Allocations</h1>
+        {hasClients && hasAgency && (
+          <nav className="q-views" aria-label="What to show">
+            {tab('queue', `${tw.one(T.client)} ${tw.lower(T.shift, true)}`)}
+            {tab('employers', 'Requests from employers')}
+          </nav>
+        )}
+        {hasClients && (
+          <div className="q-header-right">
+            {p.view === 'queue' ? <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'history' })}>Completed and history</Link>
+              : <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'queue' })}>Back to the queue</Link>}
+            <Link className="btn small" href={queueHref({ ...p, shift: null }, { view: 'new' })}>+ New order</Link>
+          </div>
+        )}
+      </div>
+      <Notices error={error} done={done} />
+      {!hasClients && !hasAgency && (
+        <p className="muted">Nothing to allocate yet. Give a {tw.lower(T.site)} a {tw.lower(T.client)} to take their orders here.</p>
+      )}
+      {hasClients && p.view === 'queue' && <ClientQueue tw={tw} p={p} when={when} />}
+      {hasClients && p.view === 'new' && <NewOrder tw={tw} today={todayIn(zone)} />}
+      {hasClients && p.view === 'history' && (
+        <RecentOrders tw={tw} orders={await api<ClientOrder[]>('/client-orders?days=30').catch(() => [] as ClientOrder[])} when={when} />
+      )}
+      {hasAgency && p.view === 'employers' && <AgencyRequests tw={tw} when={when} />}
+    </div>
+  );
+}
+
+/** The allocation queue and the open shift's fill panel. */
+async function ClientQueue({ tw, p, when }: { tw: Words; p: QueueParams; when: (iso: string) => string }) {
+  const qs = new URLSearchParams({ days: String(p.days), ...(p.stage !== 'all' ? { stage: p.stage } : {}), ...(p.region ? { region: p.region } : {}), ...(p.clientId ? { clientId: p.clientId } : {}) });
+  const [q, clients, fill, agency] = await Promise.all([
+    api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
+    api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),
+    p.shift ? api<{ shift: PanelShift; candidates: PanelCandidate[]; offers: PanelOffer[] }>(`/shifts/${p.shift}/bank-fill?everyone=true`).catch(() => null) : Promise.resolve(null),
+    p.shift ? api<AgencyFillState>(`/shifts/${p.shift}/agency-fill`).catch(() => null) : Promise.resolve(null),
+  ]);
+  const row: QueueRow | null = q?.shifts.find(r => r.id === p.shift) ?? null;
+  const panel: Panel | null = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency } : null;
+  return (
+    <QueueScreen tw={tw} p={p} q={q} clients={clients.filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name))}
+      panel={panel} now={Date.now()} when={when} />
+  );
+}
+
+/** "+ New order": the order form, with every client site and area as one choice. */
+async function NewOrder({ tw, today }: { tw: Words; today: string }) {
+  const [sites, roles] = await Promise.all([
+    api<Site[]>('/facilities').catch(() => [] as Site[]),
+    api<{ name: string; active?: boolean }[]>('/roles').catch(() => []),
+  ]);
+  const clientSites = sites.filter(f => f.clientId && f.active).slice(0, 60);
+  const withAreas = await Promise.all(clientSites.map(async f =>
+    ({ ...f, areas: (await api<{ areas: { id: string; name: string; active: boolean }[] }>(`/facilities/${f.id}`).catch(() => ({ areas: [] }))).areas })));
+  const roleNames = [...new Set(roles.filter(r => r.active !== false).map(r => r.name))].sort();
+  return <NewOrderForm tw={tw} places={orderPlaces(withAreas)} roles={roleNames} today={today} />;
+}
+
+/** Requests from employers on CROP (agency fill), each with this business's people checked against it. */
+async function AgencyRequests({ tw, when }: { tw: Words; when: (iso: string) => string }) {
+  const [list, attention] = await Promise.all([api<Request[]>('/agency-requests?status=all'), api<AgencyAttention>('/allocations/attention').catch(() => null)]);
   const open = list.filter(r => r.status === 'open');
   // Each open request's people, checked against the employer's requirements as matched to this business's credentials.
   const people = new Map(await Promise.all(open.map(async r =>
@@ -70,17 +129,6 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   const now = Date.now();
   return (
     <>
-      <h1>Allocations</h1>
-      <Notices error={sp.error} done={sp.done} />
-      {clientPart && (
-        <ClientShiftsSection tw={tw} places={clientPart.places} roles={clientPart.roles} data={clientPart.data} orders={clientPart.orders}
-          today={todayIn(zone)} when={when} />
-      )}
-      {!hasClients && !hasAgency && (
-        <p className="muted">Nothing to allocate yet. Give a {tw.lower(T.site)} a {tw.lower(T.client)} to take their orders here.</p>
-      )}
-      {hasAgency && <>
-      {hasClients && <h2 style={{ marginTop: 24 }}>Requests from employers on CROP</h2>}
       <p className="muted">
         {tw.one(T.shift)} requests from the employers you supply, soonest first. Times are the site&apos;s local time.
         Under each request are your {tw.lower(T.worker, true)} who meet the employer&apos;s requirements and your own rules, ready first.
@@ -218,7 +266,6 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
           </table>
         </div>
       )}
-      </>}
     </>
   );
 }

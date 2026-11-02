@@ -80,14 +80,42 @@ export async function createClientOrder(f: FormData) {
         confirmToClient: f.get('confirmToClient') === 'on',
       },
     })).created;
-  }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. Fill them below with Find staff.`);
+  }, () => `Order saved: ${tw.count(created, T.shift)} added${startDate ? addShiftsWhen(addShiftsDates(startDate, endDate, weekdays)) : ''}. They're in the queue now.`);
 }
 
-/** Records the client's yes on Allocations, allocated or booked (their client confirms bookings; both sides must say yes). */
-export async function clientConfirmedHere(shiftId: string) {
+type BankCandidate = { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null };
+const backTo = (f: FormData) => {
+  const b = str(f, 'back') ?? '/allocations';
+  return b.startsWith('/allocations') ? b : '/allocations';
+};
+
+/**
+ * Offers a shift from the allocation queue to people who can work it (David, 2 Nov): `top` = the best five not already
+ * waiting on an offer, `release` = everyone who can work it ("release to the bank", up to 50). Text and email as for
+ * any offer; the first to accept is booked. Who can work it is the API's own ranked list, checked again when offering;
+ * the person who pulled out of it isn't asked again.
+ */
+export async function offerFromQueue(shiftId: string, how: 'top' | 'release', f: FormData) {
   const tw = await words();
-  let status = '';
-  await attempt('/allocations', async () => {
-    status = (await api<{ status: string }>(`/shifts/${shiftId}/client-confirmed`, { method: 'POST' })).status;
-  }, () => status === 'booked' ? `Recorded: the ${tw.lower(T.client)} confirmed. It's booked.` : `Recorded: the ${tw.lower(T.client)} confirmed. Waiting for the ${tw.lower(T.worker)} to confirm.`);
+  let offered = 0;
+  await attempt(backTo(f), async () => {
+    const { shift, candidates } = await api<{ shift: { pulledOutName: string | null }; candidates: BankCandidate[] }>(`/shifts/${shiftId}/bank-fill?everyone=true`);
+    // Not the person who just pulled out of it.
+    const free = candidates.filter(c => c.eligible && c.offer?.status !== 'pending' && c.name !== shift.pulledOutName);
+    const pick = (how === 'top' ? free.slice(0, 5) : free.slice(0, 50)).map(c => c.workerId);
+    if (!pick.length) throw new ApiError(409, `Nobody else can work this ${tw.lower(T.shift)} right now. Try ${tw.lower(T.agency, true)}, or open it in the ${tw.lower(T.roster)} to see why.`);
+    await api(`/shifts/${shiftId}/offers`, { method: 'POST', body: { workerIds: pick } });
+    offered = pick.length;
+  }, () => how === 'top'
+    ? `Offered to the top ${offered}. The first to accept gets it.`
+    : `Released to the ${tw.lower(T.bank)}: offered to ${offered} ${offered === 1 ? 'person' : 'people'}. The first to accept gets it.`);
+}
+
+/** Records that the signed-in person has this shift open on Allocations (shown to others as their initials; never a lock). */
+export async function markPresence(shiftId: string): Promise<void> {
+  try {
+    await api(`/allocations/presence/${shiftId}`, { method: 'POST' });
+  } catch {
+    // Presence is a nicety: never get in the way.
+  }
 }

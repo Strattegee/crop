@@ -1,19 +1,9 @@
 import Link from 'next/link';
 import type { Words } from '../../../lib/terms';
 import { T } from '../../../lib/terms';
-import { CHANNELS, STAGES, askedLine, canRecordClientYes, byDay, findStaffHref, rankChip, stageLabel, type PlaceGroup, type Stage } from '../../../lib/client-orders';
-import { clientConfirmedHere, createClientOrder } from './actions';
+import { CHANNELS, type PlaceGroup } from '../../../lib/client-orders';
+import { createClientOrder } from './actions';
 
-export type ClientShift = {
-  id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string;
-  breakMinutes: number; workerName: string | null; clientName: string; orderId: string | null; clientReference: string | null; requestedByName: string | null;
-  orderChannel: string | null; offersPending: number; stage: Stage; notes: string | null; genderRequested: 'F' | 'M' | null;
-  /** The client's rank (1 = most loyal … 7 = fill-in), null when not ranked (migration 0069). */
-  clientRank: number | null;
-  /** The client confirms each booking (both sides must say yes, David 2 Nov). */
-  clientConfirms?: boolean;
-};
-export type ClientShifts = { days: number; counts: Record<Stage, number>; shifts: ClientShift[] };
 export type ClientOrder = {
   id: string; clientName: string; facilityName: string; channelWords: string; requestedByName: string; requestedByEmail: string | null; requestedByPhone: string | null;
   clientReference: string | null; notes: string | null; confirmToClient: boolean; createdAt: string; firstLocalDate: string | null; lastLocalDate: string | null;
@@ -23,18 +13,14 @@ export type ClientOrder = {
 const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
 
 /**
- * Client shifts (David, 2 Nov): a New order form for what a client asked for by email, phone or their portal, the
- * client shifts still to come grouped by day with their stage and a Find staff link to the roster's shift panel,
- * then recent orders.
+ * New order (client orders, 2 Nov): what a client asked for by email, phone or their portal. Opened from Allocations'
+ * "+ New order" button.
  */
-export function ClientShiftsSection({ tw, places, roles, data, orders, today, when }: {
-  tw: Words; places: PlaceGroup[]; roles: string[]; data: ClientShifts | null; orders: ClientOrder[]; today: string; when: (iso: string) => string;
-}) {
-  const shift = tw.lower(T.shift), shifts = tw.lower(T.shift, true), client = tw.lower(T.client), Client = tw.one(T.client), Worker = tw.one(T.worker);
+export function NewOrderForm({ tw, places, roles, today }: { tw: Words; places: PlaceGroup[]; roles: string[]; today: string }) {
+  const shift = tw.lower(T.shift), shifts = tw.lower(T.shift, true), client = tw.lower(T.client);
   return (
-    <>
-      <details className="card client-order" open={!data || data.shifts.length === 0}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>New order</summary>
+    <div className="card client-order">
+        <h2>New order</h2>
         <p className="muted small">Type in what a {client} asked for by email, phone or their portal. Each person wanted is a {shift} on the roster, linked to this order. When one is booked, the person who asked can be emailed who is going.</p>
         {places.length === 0 ? (
           <p className="muted">Give a {tw.lower(T.site)} a {client} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
@@ -91,56 +77,15 @@ export function ClientShiftsSection({ tw, places, roles, data, orders, today, wh
             <button type="submit" className="btn">Save order</button>
           </form>
         )}
-      </details>
-
-      <div className="card">
-        <h2>{tw.one(T.client)} {shifts} in the next {data?.days ?? 14} days</h2>
-        {!data ? <p className="muted">Couldn&apos;t load the {client} {shifts}.</p> : data.shifts.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>Nothing to fill. New orders show here.</p>
-        ) : (
-          <>
-            <p className="small client-counts">
-              {STAGES.filter(k => (k !== 'client_to_confirm' && k !== 'worker_to_confirm') || data.counts[k] > 0).map(k => (
-                <span key={k} className={`cstage cstage-${k}`}>{stageLabel(k, Client, Worker)} {data.counts[k] ?? 0}</span>
-              ))}
-            </p>
-            {byDay(data.shifts).map(g => (
-              <section key={g.date} className="client-day">
-                <h3>{g.label}</h3>
-                {g.shifts.map(s => {
-                  const asked = askedLine(s);
-                  const rank = rankChip(s.clientRank);
-                  return (
-                    <div key={s.id} className="client-shift">
-                      <span className={`cstage cstage-${s.stage}`}>{stageLabel(s.stage, Client, Worker)}{s.stage === 'offered' && s.offersPending > 1 ? ` to ${s.offersPending}` : ''}</span>
-                      <span className="client-shift-what">
-                        <strong>{s.localStart}–{s.localEnd}</strong> {s.role}
-                        <span className="muted"> · {[s.clientName, s.facilityName, s.areaName].filter(Boolean).join(' · ')}</span>
-                        {rank && <> <span className="rank-chip" title={`${Client} rank: 1 = most loyal, 7 = fill-in`}>{rank}</span></>}
-                        {s.workerName && <> · <strong>{s.workerName}</strong></>}
-                        {(asked || s.genderRequested) && (
-                          <span className="muted small client-shift-asked">
-                            {asked && <>Asked by {asked}</>}{asked && s.genderRequested ? ' · ' : ''}
-                            {s.genderRequested === 'F' ? 'Female requested' : s.genderRequested === 'M' ? 'Male requested' : ''}
-                          </span>
-                        )}
-                      </span>
-                      {canRecordClientYes(s) && (
-                        <form action={clientConfirmedHere.bind(null, s.id)}>
-                          <button className="btn small" title={`Record that the ${client} said yes to ${s.workerName ?? 'this person'}${s.stage === 'assigned' ? ` (they still confirm too)` : ''}. If they said no, open it and remove the person.`}>{Client} confirmed</button>
-                        </form>
-                      )}
-                      <Link className="btn small secondary" href={findStaffHref(s)}>{s.stage === 'booked' || s.stage === 'client_to_confirm' || s.stage === 'worker_to_confirm' ? 'Open' : 'Find staff'}</Link>
-                    </div>
-                  );
-                })}
-              </section>
-            ))}
-          </>
-        )}
       </div>
+  );
+}
 
-      {orders.length > 0 && (
+/** Recent orders with how many of their shifts are filled: Allocations' "Completed and history". */
+export function RecentOrders({ tw, orders, when }: { tw: Words; orders: ClientOrder[]; when: (iso: string) => string }) {
+  if (!orders.length) return <p className="muted">No orders in the last 30 days.</p>;
+  return (
+    <>
         <div className="card" style={{ overflowX: 'auto' }}>
           <h2>Recent orders</h2>
           <table>
@@ -162,7 +107,6 @@ export function ClientShiftsSection({ tw, places, roles, data, orders, today, wh
             </tbody>
           </table>
         </div>
-      )}
     </>
   );
 }
