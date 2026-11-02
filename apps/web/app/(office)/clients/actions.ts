@@ -68,3 +68,23 @@ export async function addArea(facilityId: string, f: FormData) {
 export async function setAreaActive(facilityId: string, areaId: string, active: boolean) {
   await attempt(`/facilities/${facilityId}`, () => api(`/facilities/${facilityId}/areas/${areaId}`, { method: 'PATCH', body: { active } }));
 }
+
+/** Saved client contacts (migration 0072): the client's people who order shifts. Every office role. */
+export async function addContact(clientId: string, f: FormData) {
+  await attempt(`/clients/${clientId}`, () => api(`/clients/${clientId}/contacts`, {
+    method: 'POST',
+    body: { name: str(f, 'name'), position: str(f, 'position'), email: str(f, 'email'), phone: str(f, 'phone'), notes: str(f, 'notes') },
+  }), 'Contact saved. Pick them under Who asked when taking an order.');
+}
+
+export async function updateContact(clientId: string, contactId: string, f: FormData) {
+  await attempt(`/clients/${clientId}`, () => api(`/client-contacts/${contactId}`, {
+    method: 'PATCH',
+    body: { name: str(f, 'name'), position: str(f, 'position') ?? null, email: str(f, 'email') ?? null, phone: str(f, 'phone') ?? null, notes: str(f, 'notes') ?? null },
+  }), 'Contact saved.');
+}
+
+export async function setContactActive(clientId: string, contactId: string, active: boolean) {
+  await attempt(`/clients/${clientId}`, () => api(`/client-contacts/${contactId}`, { method: 'PATCH', body: { active } }),
+    active ? 'Contact switched on.' : 'Contact switched off. Orders taken from them keep their details.');
+}

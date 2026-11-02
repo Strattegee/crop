@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { ClientConfirmations } from '../src/clients/client-orders.controller.js';
-import { clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, waitsForClient } from '../src/clients/client-orders.js';
+import { clientChangeEmail, clientConfirmRefusal, contactProblem, parseContact, whoAsked, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, waitsForClient } from '../src/clients/client-orders.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -18,15 +18,32 @@ describe('client orders: rules (David, 2 Nov)', () => {
   it('checks the order’s own fields', () => {
     expect(parseOrder({ clientId: CLIENT, requestedByName: ' Pat Ward ', requestedByEmail: 'Pat@Bayside.Example', channel: 'phone' })).toEqual({
       clientId: CLIENT, channel: 'phone', requestedByName: 'Pat Ward', requestedByEmail: 'pat@bayside.example', requestedByPhone: null,
-      clientReference: null, orderNotes: null, confirmToClient: true,
+      clientReference: null, orderNotes: null, confirmToClient: true, contactId: null, saveContact: false,
     });
     expect(parseOrder({ clientId: CLIENT, requestedByName: 'Pat' }).channel).toBe('other');
     expect(parseOrder({ clientId: CLIENT, requestedByName: 'Pat', confirmToClient: false }).confirmToClient).toBe(false);
     expect(() => parseOrder({ requestedByName: 'Pat' })).toThrow('Choose {a client}');
     expect(() => parseOrder({ clientId: CLIENT })).toThrow('Who asked is required');
+    // A saved contact stands in for who asked; saving a contact is only for typed details.
+    expect(parseOrder({ clientId: CLIENT, contactId: CLIENT, saveContact: true })).toMatchObject({ contactId: CLIENT, requestedByName: '', saveContact: false });
+    expect(parseOrder({ clientId: CLIENT, requestedByName: 'Pat', saveContact: true }).saveContact).toBe(true);
+    expect(() => parseOrder({ clientId: CLIENT, contactId: 'x' })).toThrow(/saved contact/);
     expect(() => parseOrder({ clientId: CLIENT, requestedByName: 'Pat', channel: 'fax' })).toThrow(/email, phone, portal or other/);
     expect(() => parseOrder({ clientId: CLIENT, requestedByName: 'Pat', requestedByEmail: 'nope' })).toThrow('Their email must be an email address');
     expect(() => parseOrder({ clientId: CLIENT, requestedByName: 'Pat', clientReference: 'x'.repeat(61) })).toThrow(/Their reference is too long/);
+  });
+
+  it('fills who asked from a saved contact, typed details winning', () => {
+    const contact = { name: 'Pat Ward', email: 'pat@bayside.example', phone: '0400 000 000' };
+    expect(whoAsked({ requestedByName: '', requestedByEmail: null, requestedByPhone: null }, contact)).toEqual(contact);
+    expect(whoAsked({ requestedByName: '', requestedByEmail: null, requestedByPhone: '03 9000 0000' }, contact)).toEqual({ ...contact, phone: '03 9000 0000' });
+    expect(whoAsked({ requestedByName: 'Sam', requestedByEmail: null, requestedByPhone: null }, null)).toEqual({ name: 'Sam', email: null, phone: null });
+    expect(contactProblem({ clientId: CLIENT, active: true }, CLIENT)).toBeNull();
+    expect(contactProblem(undefined, CLIENT)).toMatch(/wasn’t found/);
+    expect(contactProblem({ clientId: 'other', active: true }, CLIENT)).toMatch(/another \{client\}/);
+    expect(contactProblem({ clientId: CLIENT, active: false }, CLIENT)).toMatch(/switched off/);
+    expect(parseContact({ name: ' Pat ', email: 'PAT@X.EXAMPLE' })).toEqual({ name: 'Pat', position: null, email: 'pat@x.example', phone: null, notes: null });
+    expect(() => parseContact({})).toThrow('Name is required');
   });
 
   it('says why an order can’t go on that client and site', () => {
@@ -497,6 +514,49 @@ describe('client orders: API', () => {
     await http().post(`/shifts/${quiet}/cancel`).set(as('alloc')).send({ reason: 'Not needed' }).expect(200);
     expect(await confirmations().runOnce()).toBe(0);
     expect(await changes()).toBe(0);
+  });
+
+  it('saves client contacts and takes an order from one (migration 0072)', async () => {
+    await http().post(`/clients/${ids.hill}/contacts`).set(as('worker')).send({ name: 'Jo Bloggs' }).expect(403);
+    const jo = (await http().post(`/clients/${ids.hill}/contacts`).set(as('alloc')).send({ name: 'Jo Bloggs', position: 'Nurse unit manager', email: 'Jo@Hillview.Example', phone: '0400 111 222' }).expect(201)).body;
+    expect(jo).toMatchObject({ clientId: ids.hill, name: 'Jo Bloggs', email: 'jo@hillview.example', active: true });
+    const twice = await http().post(`/clients/${ids.hill}/contacts`).set(as('alloc')).send({ name: 'jo bloggs' }).expect(400);
+    expect(twice.body.message).toBe('This client already has a contact of that name');
+    expect((await http().get(`/clients/${ids.hill}`).set(as('alloc')).expect(200)).body.contacts.map((c: { name: string }) => c.name)).toEqual(['Jo Bloggs']);
+    expect((await http().get('/client-contacts').set(as('alloc')).expect(200)).body).toEqual([expect.objectContaining({ id: jo.id, clientName: 'Hillview Care' })]);
+    expect((await http().get('/client-contacts').set(as('nosy')).expect(200)).body).toEqual([]);
+    await http().patch(`/client-contacts/${jo.id}`).set(as('nosy')).send({ phone: null }).expect(404);
+
+    // An order from the contact: their details are copied onto the order; a typed phone wins.
+    const hillOrder = (extra: Record<string, unknown>) => order({ clientId: ids.hill, facilityId: ids.hillSite, areaId: undefined, date: ahead(20), requestedByName: undefined, requestedByEmail: undefined, ...extra });
+    const r = (await http().post('/client-orders').set(as('alloc')).send(hillOrder({ contactId: jo.id, requestedByPhone: '03 9000 0000' })).expect(201)).body;
+    expect(r).toMatchObject({ contactId: jo.id, contactSaved: false, created: 1 });
+    const row = (await owner.query('select requested_by_name, requested_by_email, requested_by_phone, contact_id from client_orders where id = $1', [r.orderId])).rows[0];
+    expect(row).toEqual({ requested_by_name: 'Jo Bloggs', requested_by_email: 'jo@hillview.example', requested_by_phone: '03 9000 0000', contact_id: jo.id });
+
+    // Another client's contact, or a switched-off one, is refused and nothing is made.
+    const wrong = await http().post('/client-orders').set(as('alloc')).send(order({ contactId: jo.id, requestedByName: undefined })).expect(400);
+    expect(wrong.body.message).toMatch(/another client/);
+    await http().patch(`/client-contacts/${jo.id}`).set(as('alloc')).send({ active: false }).expect(200);
+    await http().post('/client-orders').set(as('alloc')).send(hillOrder({ contactId: jo.id })).expect(400);
+    expect((await http().get('/client-contacts').set(as('alloc')).expect(200)).body).toEqual([]);
+
+    // Typed details saved as a new contact; the same name again links the live one instead of adding another.
+    const typed = (await http().post('/client-orders').set(as('alloc')).send(hillOrder({ requestedByName: 'Lee Example', requestedByEmail: 'lee@hillview.example', saveContact: true })).expect(201)).body;
+    expect(typed.contactSaved).toBe(true);
+    const again = (await http().post('/client-orders').set(as('alloc')).send(hillOrder({ requestedByName: 'lee example', saveContact: true })).expect(201)).body;
+    expect(again).toMatchObject({ contactId: typed.contactId, contactSaved: false });
+    const lee = (await http().get(`/clients/${ids.hill}`).set(as('alloc')).expect(200)).body.contacts.find((c: { name: string }) => c.name === 'Lee Example');
+    expect(lee).toMatchObject({ email: 'lee@hillview.example', active: true });
+    // Editing a contact never changes the orders taken from it; every change is in the audit log.
+    await http().patch(`/client-contacts/${lee.id}`).set(as('alloc')).send({ email: 'lee.new@hillview.example' }).expect(200);
+    expect((await owner.query('select requested_by_email from client_orders where id = $1', [typed.orderId])).rows[0].requested_by_email).toBe('lee@hillview.example');
+    expect((await owner.query(`select count(*)::int as n from audit_log where table_name = 'client_contacts'`)).rows[0].n).toBeGreaterThanOrEqual(4);
+    // crop_app can't delete a contact.
+    const app_ = new Client({ connectionString: db.appUrl });
+    await app_.connect();
+    await expect(app_.query('delete from client_contacts')).rejects.toThrow(/permission denied/);
+    await app_.end();
   });
 });
 

@@ -10,7 +10,7 @@ import { actorOf } from '../roster/publishing.js';
 import { SHIFT_COLS, SHIFT_FROM, shiftById } from '../roster/roster.controller.js';
 import { UUID, insertShifts, parseShiftRequest } from '../roster/shift-create.js';
 import { wordsFor } from '../terms/words.js';
-import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type ChangeKind, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
+import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, contactProblem, whoAsked, type OrderFields, clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type ChangeKind, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
 
 const whole = (v: string | undefined, def: number, min: number, max: number) => {
   const n = v === undefined || v === '' ? def : Number(v);
@@ -42,15 +42,40 @@ export class ClientOrdersController {
         'select client_id as "clientId", active from facilities where id = $1', [req.facilityId])).rows[0];
       const problem = orderPlaceProblem(client, site, order.clientId);
       if (problem) throw new BadRequestException(problem);
+      const { contactId, contactSaved, who } = await this.resolveContact(db, t.tenantId, order);
       const orderId = (await db.query<{ id: string }>(
         `insert into client_orders(tenant_id, client_id, facility_id, channel, requested_by_name, requested_by_email, requested_by_phone,
-                                   client_reference, notes, confirm_to_client, created_by)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-        [t.tenantId, order.clientId, req.facilityId, order.channel, order.requestedByName, order.requestedByEmail, order.requestedByPhone,
-          order.clientReference, order.orderNotes, order.confirmToClient, auth.userId])).rows[0].id;
+                                   client_reference, notes, confirm_to_client, created_by, contact_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+        [t.tenantId, order.clientId, req.facilityId, order.channel, who.name, who.email, who.phone,
+          order.clientReference, order.orderNotes, order.confirmToClient, auth.userId, contactId])).rows[0].id;
       const made = await insertShifts(db, t.tenantId, auth.userId, req, orderId);
-      return { orderId, ...made };
+      return { orderId, contactId, contactSaved, ...made };
     }, actorOf(auth));
+  }
+
+  /**
+   * Who asked: a saved contact of the client (typed details win field by field), or what was typed, saved as a new
+   * contact when asked (an existing live contact of that name is linked instead of adding a second one).
+   */
+  private async resolveContact(db: PoolClient, tenantId: string, order: OrderFields) {
+    if (order.contactId) {
+      const c = (await db.query<{ clientId: string; active: boolean; name: string; email: string | null; phone: string | null }>(
+        'select client_id as "clientId", active, name, email, phone from client_contacts where id = $1', [order.contactId])).rows[0];
+      const problem = contactProblem(c, order.clientId);
+      if (problem) throw new BadRequestException(problem);
+      const who = whoAsked(order, c);
+      return { contactId: order.contactId, contactSaved: false, who: { ...who, name: who.name ?? c.name } };
+    }
+    const who = { name: order.requestedByName, email: order.requestedByEmail, phone: order.requestedByPhone };
+    if (!order.saveContact) return { contactId: null, contactSaved: false, who };
+    const existing = (await db.query<{ id: string }>(
+      'select id from client_contacts where client_id = $1 and active and lower(trim(name)) = lower(trim($2))', [order.clientId, who.name])).rows[0];
+    if (existing) return { contactId: existing.id, contactSaved: false, who };
+    const id = (await db.query<{ id: string }>(
+      'insert into client_contacts(tenant_id, client_id, name, email, phone) values ($1,$2,$3,$4,$5) returning id',
+      [tenantId, order.clientId, who.name, who.email, who.phone])).rows[0].id;
+    return { contactId: id, contactSaved: true, who };
   }
 
   /** Recent orders (`days`, default 30), newest first, with their shifts counted and a summary line. */

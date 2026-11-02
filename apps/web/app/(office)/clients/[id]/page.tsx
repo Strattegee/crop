@@ -5,9 +5,9 @@ import { Badge } from '../../../../lib/format';
 import { CLIENT_STATUS } from '../../../../lib/places';
 import { PlaceFields } from '../../../../lib/place-fields';
 import { Notices } from '../../notices';
-import { addFacility, updateClient } from '../actions';
+import { addContact, addFacility, setContactActive, updateClient, updateContact } from '../actions';
 import { T, words } from '../../../../lib/terms';
-import { rankChip } from '../../../../lib/client-orders';
+import { contactLine, rankChip, type ClientContact } from '../../../../lib/client-orders';
 import { ClientAllocationFields } from '../client-fields';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,7 @@ type ClientDetail = {
   id: string; name: string; abn: string | null; status: string; billingContactName: string | null; billingEmail: string | null;
   phone: string | null; notes: string | null; confirmsBookings: boolean; rank: number | null;
   facilities: { id: string; name: string; suburb: string | null; state: string | null; active: boolean; areaCount: number }[];
+  contacts?: ClientContact[];
 };
 
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
@@ -24,6 +25,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const [c, agency, settings] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' }))]);
   const home = settings.country ?? 'AU';
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
+  const contacts = c.contacts ?? [];
   return (
     <>
       <p style={{ margin: '0 0 8px' }}><Link href="/clients">← Clients</Link></p>
@@ -60,6 +62,53 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
             </form>
           </details>
         )}
+      </div>
+
+
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <h2>Contacts</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>The people at {c.name} who order {tw.lower(T.shift, true)}. Pick them under Who asked when taking an order; the booked email goes to the email here.</p>
+        {contacts.length === 0 ? <p className="muted">No contacts saved yet.</p> : (
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th></th></tr></thead>
+            <tbody>
+              {contacts.map(k => (
+                <tr key={k.id} style={{ opacity: k.active === false ? 0.5 : 1 }}>
+                  <td>{contactLine(k, false)}{k.active === false && <span className="muted"> · switched off</span>}{k.notes && <div className="muted small">{k.notes}</div>}</td>
+                  <td>{k.email ?? '–'}</td>
+                  <td>{k.phone ?? '–'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <details>
+                      <summary style={{ cursor: 'pointer' }}>Edit</summary>
+                      <form action={updateContact.bind(null, c.id, k.id)} className="form-row" style={{ marginTop: 8 }}>
+                        <label>Name<input name="name" required maxLength={120} defaultValue={k.name} /></label>
+                        <label>Position<input name="position" maxLength={120} defaultValue={k.position ?? ''} /></label>
+                        <label>Email<input name="email" type="email" maxLength={200} defaultValue={k.email ?? ''} /></label>
+                        <label>Phone<input name="phone" maxLength={40} defaultValue={k.phone ?? ''} /></label>
+                        <label style={{ flexBasis: '100%' }}>Notes<input name="notes" maxLength={500} defaultValue={k.notes ?? ''} /></label>
+                        <button type="submit" className="btn">Save</button>
+                      </form>
+                      <form action={setContactActive.bind(null, c.id, k.id, k.active === false)} style={{ marginTop: 8 }}>
+                        <button type="submit" className="btn secondary">{k.active === false ? 'Switch on' : 'Switch off'}</button>
+                      </form>
+                    </details>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <details style={{ marginTop: 12 }} open={contacts.length === 0}>
+          <summary style={{ cursor: 'pointer' }}>Add a contact</summary>
+          <form action={addContact.bind(null, c.id)} className="form-row" style={{ marginTop: 12 }}>
+            <label>Name<input name="name" required maxLength={120} /></label>
+            <label>Position <span className="muted">(optional)</span><input name="position" maxLength={120} placeholder="e.g. Nurse unit manager" /></label>
+            <label>Email<input name="email" type="email" maxLength={200} /></label>
+            <label>Phone<input name="phone" maxLength={40} /></label>
+            <label style={{ flexBasis: '100%' }}>Notes <span className="muted">(optional)</span><input name="notes" maxLength={500} /></label>
+            <button type="submit" className="btn">Add contact</button>
+          </form>
+        </details>
       </div>
 
       {canEdit && (

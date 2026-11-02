@@ -575,3 +575,11 @@ Newest first. One entry per working session or scheduled run.
 - Next: client contacts saved per client; the "group and release in bulk" allocation view.
 - Question for David: tell the client when an unfilled shift on their order is cancelled too?
 - Waiting on David: the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
+
+## 2026-11-03 early, 12:40am Melbourne (scheduled run)
+
+- Shipped: saved client contacts. Each client's page has a Contacts card (name, position, email, phone, a short note; edit, switch off, never deleted). When taking an order, once the client and site are chosen, their contacts appear under Who asked to pick instead of typing; anything typed beside a picked contact wins (for example a different phone). New details can be saved as a contact with one tick, and the same name again links the saved one instead of making a second. Orders keep the details they were taken with, so editing or switching off a contact never rewrites an order. Allocators can add and edit contacts, since they take the orders.
+- Privacy policy and DPA say businesses may save their clients' contacts (no worker information involved, so the worker notice is unchanged).
+- Not checked in a browser (no local sign-in in this run); every test passes, including new ones for contacts on orders, refusals (another client's or a switched-off contact) and the audit log.
+- Next: the "group and release in bulk" allocation view (C); other unheld items.
+- Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.

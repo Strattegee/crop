@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { Words } from '../../../lib/terms';
 import { T } from '../../../lib/terms';
-import { CHANNELS, sentLine, type PlaceGroup } from '../../../lib/client-orders';
+import { sentLine, type ClientContact, type PlaceGroup } from '../../../lib/client-orders';
+import { WhoAsked } from './who-asked';
 import { createClientOrder } from './actions';
 
 export type ClientOrder = {
@@ -16,7 +17,7 @@ const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'sho
  * New order (client orders, 2 Nov): what a client asked for by email, phone or their portal. Opened from Allocations'
  * "+ New order" button.
  */
-export function NewOrderForm({ tw, places, roles, today }: { tw: Words; places: PlaceGroup[]; roles: string[]; today: string }) {
+export function NewOrderForm({ tw, places, roles, today, contacts }: { tw: Words; places: PlaceGroup[]; roles: string[]; today: string; contacts: ClientContact[] }) {
   const shift = tw.lower(T.shift), shifts = tw.lower(T.shift, true), client = tw.lower(T.client);
   return (
     <div className="card client-order">
@@ -60,17 +61,7 @@ export function NewOrderForm({ tw, places, roles, today }: { tw: Words; places: 
               </select>
             </label>
             <label style={{ flex: '2 1 280px' }}>Note on the {shifts} <span className="muted">(optional)</span><input name="notes" maxLength={1000} /></label>
-            <fieldset className="weekdays client-order-who">
-              <legend>Who asked</legend>
-              <label>Name<input name="requestedByName" required maxLength={120} /></label>
-              <label>Email <span className="muted">(for the booked email)</span><input name="requestedByEmail" type="email" maxLength={200} /></label>
-              <label>Phone <span className="muted">(optional)</span><input name="requestedByPhone" maxLength={40} /></label>
-              <label style={{ flex: '0 1 130px' }}>How
-                <select name="channel" defaultValue="email">{CHANNELS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
-              </label>
-              <label style={{ flex: '0 1 160px' }}>Their reference <span className="muted">(optional)</span><input name="clientReference" maxLength={60} /></label>
-              <label style={{ flex: '2 1 280px' }}>Order notes <span className="muted">(optional, for the office)</span><input name="orderNotes" maxLength={1000} /></label>
-            </fieldset>
+            <WhoAsked contacts={contacts} client={client} />
             <label className="inline" style={{ flex: '1 1 100%' }}>
               <input type="checkbox" name="confirmToClient" defaultChecked />Email the {client} when filled (the person&apos;s name, {tw.lower(T.role)} and the {shift})
             </label>
