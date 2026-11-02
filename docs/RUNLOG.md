@@ -591,3 +591,12 @@ Newest first. One entry per working session or scheduled run.
 - Next: the "group and release in bulk" allocation view (C); showing past work in the roster's right-click menu.
 - Questions for David: should people who know the site be suggested first? Distance from the site would need addresses turned into map positions (an outside service).
 - Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
+
+## 2026-11-03 morning, 6:15am Melbourne (scheduled run)
+
+- Shipped: releasing several shifts at once from Allocations (the "release in bulk" idea from layout C, inside the queue David chose). Each time band (started, within 2 hours, later today, tomorrow, later) with two or more New shifts has "Release N new" in its heading. A small confirm explains it, then each of those shifts (up to 20 a press) is offered to everyone who can work it, exactly as its own Release button would. Any that someone fills or offers meanwhile, or that nobody can work, are skipped and named in the message. The region and client filters narrow what a band holds, so one client's or one office's shifts can go together.
+- Fixed a test that failed in Melbourne's early morning (an 06:00 shift two UTC dates ahead fell within 24 hours); no change to the product.
+- Not checked in a browser (no local sign-in in this run); the band heading is covered by a render test and the wording by unit tests; every test passes.
+- Next: other unheld items (past work in the roster's right-click menu; "Only shifts I'm on").
+- Questions for David: is releasing by time band enough, or do you want layout C as its own screen grouped by site or role? Should people who know the site be suggested first?
+- Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
