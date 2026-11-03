@@ -48,6 +48,26 @@ function range(q: { from?: string; to?: string }) {
   return { from, to };
 }
 
+/**
+ * Whether the usual person (migration 0077, the "T" line) is away on the shift's local date: approved leave
+ * ('on_leave'), leave asked for ('leave_requested'), or they've said they can't work that part of the day
+ * ('not_available', a date entry first, else their usual week; nothing said = available). Never the leave kind.
+ */
+const USUAL_AWAY = `case when s.usual_worker_id is null then null
+    when exists (select 1 from leave_records lr where lr.worker_id = s.usual_worker_id and lr.status = 'approved'
+                  and (s.starts_at at time zone f.timezone)::date between lr.starts_on and lr.ends_on) then 'on_leave'
+    when exists (select 1 from leave_records lr where lr.worker_id = s.usual_worker_id and lr.status = 'requested'
+                  and (s.starts_at at time zone f.timezone)::date between lr.starts_on and lr.ends_on) then 'leave_requested'
+    when not (coalesce(
+        (select ad.periods from availability_dates ad where ad.worker_id = s.usual_worker_id and ad.on_date = (s.starts_at at time zone f.timezone)::date),
+        (select ap.periods from availability_patterns ap where ap.worker_id = s.usual_worker_id
+           and ap.weekday = extract(isodow from s.starts_at at time zone f.timezone)::int),
+        array['am', 'pm', 'night']::text[])
+      @> array[case when extract(hour from s.starts_at at time zone f.timezone) between 5 and 11 then 'am'
+                    when extract(hour from s.starts_at at time zone f.timezone) between 12 and 18 then 'pm' else 'night' end]::text[])
+      then 'not_available'
+  end`;
+
 export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
   s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", sc.letter as "shiftLetter", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
   s.starts_at as "startsAt", s.ends_at as "endsAt", s.break_minutes as "breakMinutes", f.timezone,
@@ -71,6 +91,9 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
                                group by m.item_id having sum(m.quantity) <> 0) x) as "itemCount",
   s.covering_worker_id as "coveringWorkerId",
   (select coalesce(cw.preferred_name, cw.first_name) || ' ' || cw.last_name from workers cw where cw.id = s.covering_worker_id) as "coveringName",
+  s.usual_worker_id as "usualWorkerId",
+  (select coalesce(uw.preferred_name, uw.first_name) || ' ' || uw.last_name from workers uw where uw.id = s.usual_worker_id) as "usualName",
+  ${USUAL_AWAY} as "usualAway",
   coalesce((select cc.confirms_bookings from client_orders co join clients cc on cc.id = co.client_id where co.id = s.client_order_id), false) as "clientConfirms",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_by end as "clientConfirmedBy"`;
@@ -460,6 +483,28 @@ export class ShiftsController {
         if (workerId === shift.workerId) throw new BadRequestException(`${shift.workerName} is working this {shift}, so it can't be covering them`);
       }
       if (shift.coveringWorkerId !== workerId) await db.query('update shifts set covering_worker_id = $2, updated_at = now() where id = $1', [id, workerId]);
+      return shiftById(db, id);
+    });
+  }
+
+  /**
+   * The person who usually works this shift (David, 3 Nov: the "T" line, migration 0077). Set automatically when a
+   * shift comes from a template or a copied week; the office can change or clear it (`workerId: null`). It records who
+   * normally works it, never puts anyone on or takes anyone off. Logged like any shift change (after-publishing rule).
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('shifts/:id/usual')
+  setUsual(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const workerId = uuidField(body ?? {}, 'workerId', 'person');
+    return this.tx(t, auth, async db => {
+      const shift = await shiftById(db, id);
+      if (shift.status === 'cancelled') throw new BadRequestException('This {shift} is cancelled');
+      if (shift.equipmentOnly) throw new BadRequestException('Nobody works {an equipment}-only {shift}, so it has no usual person');
+      if (workerId && workerId !== shift.usualWorkerId) {
+        const w = (await db.query<{ status: string }>('select status from workers where id = $1', [workerId])).rows[0];
+        if (!w || w.status !== 'active') throw new BadRequestException('Choose a person who is active');
+      }
+      if (shift.usualWorkerId !== workerId) await db.query('update shifts set usual_worker_id = $2, updated_at = now() where id = $1', [id, workerId]);
       return shiftById(db, id);
     });
   }

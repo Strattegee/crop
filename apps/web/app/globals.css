@@ -474,6 +474,12 @@ body:has(.roster-page.full) .appbar { display: none; }
 .mk.mk-e { background: #6d4c41; }
 .mk.mk-i { background: #1976d2; }
 .mk.mk-d { background: #ef6c00; }
+/* T = template (David, 3 Nov): grey like Steve's design; ringed amber when the usual person is away that day. */
+.mk.mk-t { background: var(--surface); color: var(--muted); border: 1px solid var(--border); line-height: 13px; }
+.mk.mk-t.warn { color: #8a5a00; border-color: #c98a1b; }
+.rcard .cv.tl-usual, .rcard .cv.tl-same, .tline.tl-usual, .tline.tl-same { color: var(--muted); font-weight: 500; }
+.rcard .cv.tl-same, .tline.tl-same { opacity: 0.75; }
+.tline.tl-away, .tline.tl-covering { color: #8a5a00; font-weight: 600; }
 .roster-legend .mk, .ribbon-key .mk { margin: 0 2px; vertical-align: middle; }
 /* Simple look keeps one line: the letters sit side by side at the start instead of stacking. */
 .ribbon.look-simple .rcard .mkcol { flex-direction: row; padding: 2px 3px; }
@@ -638,6 +644,9 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 :root[data-mode='dark'] .rcard.pulled .st, :root[data-mode='dark'] .rcard .dt { color: #c6a2e8; }
 :root[data-mode='dark'] .rcard.cancelled .st, :root[data-mode='dark'] .ribbon tr.row-cancelled th.who .name { color: #f0807a; }
 :root[data-mode='dark'] .rcard .cv { color: #e9b45c; }
+:root[data-mode='dark'] .rcard .cv.tl-usual, :root[data-mode='dark'] .rcard .cv.tl-same { color: var(--muted); }
+:root[data-mode='dark'] .tline.tl-away, :root[data-mode='dark'] .tline.tl-covering, :root[data-mode='dark'] .mk.mk-t.warn { color: #e9b45c; }
+:root[data-mode='dark'] .mk.mk-t.warn { border-color: #b07a1c; }
 :root[data-mode='dark'] .pcard-badge { background: rgba(30, 138, 76, 0.2); color: #8fdcae; border-color: #2c5b40; }
 :root[data-mode='dark'] .mk.mk-g.warn { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px #f0807a; }
 :root[data-mode='dark'] .topnav-menu a:hover, :root[data-mode='dark'] .topnav-menu .menu-button:hover { background: var(--hover); }

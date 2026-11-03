@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionsFor, assignable, canSetCovering, coveringChoices, coveringMessage, assignedMessage, assignQuestion, candidateMeta, candidateState, confirmLabel, mondayOf, offerable, offeredMessage,
-  pendingOffers, phoneLinks, requestKind, sentences, shiftWhen, stageOf, type Candidate, type ShiftDetail,
+  pendingOffers, phoneLinks, requestKind, sentences, shiftWhen, stageOf, usualLine, type Candidate, type ShiftDetail,
 } from '../src/shift';
 
 const shift: ShiftDetail = {
@@ -124,5 +124,14 @@ describe('the covering line from the phone', () => {
   it('says what the card will show', () => {
     expect(coveringMessage('Di Ede')).toBe('Shown as "Covering Di Ede". The reason they\'re away is never shown.');
     expect(coveringMessage(null)).toBe('It no longer says who it covers.');
+  });
+});
+
+describe('usualLine (the T line, David 3 Nov)', () => {
+  it('names the usual person and says when they are away, never the kind of leave', () => {
+    expect(usualLine({ usualName: 'Sandra Example' })).toBe('T Sandra Example');
+    expect(usualLine({ usualName: 'Sandra Example', usualAway: 'on_leave' })).toBe('T Sandra Example – On leave');
+    expect(usualLine({ usualName: 'Sandra Example', usualAway: 'not_available' })).toBe('T Sandra Example – Not available');
+    expect(usualLine({ usualName: null })).toBeNull();
   });
 });

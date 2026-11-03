@@ -7,7 +7,7 @@ import {
   dayChip, firstDay, openOn, publishedMessage, publishLabel, shiftLine, summaryLine, unfilled, weekDates, weekRowsShown, weekStateLine, weekTitle,
   type RosterShift, type WeekRow,
 } from './roster';
-import { mondayOf, stageOf } from './shift';
+import { mondayOf, stageOf, usualLine } from './shift';
 import { styles } from './styles';
 
 type Word = { one: string; many: string; lower: string; lowerMany: string };
@@ -90,7 +90,8 @@ export function RosterTab({ tenant, today, view, setView, word, people, siteWord
         accessibilityRole="button" accessibilityHint={`Opens the ${word.lower} to fill or change it`}>
         <Text style={[styles.muted, styles.small, { marginTop: 0 }]}>{shiftLine(s)}{!facilityId && sites.length > 1 ? ` · ${s.facilityName}` : ''}</Text>
         <Text style={styles.cardTitle}>{who}</Text>
-        {!!s.coveringName && <Text style={[styles.muted, styles.small]}>Covering {s.coveringName}</Text>}
+        {!!usualLine(s) && <Text style={[styles.muted, styles.small]}>{usualLine(s)}</Text>}
+        {!!s.coveringName && s.coveringWorkerId !== s.usualWorkerId && <Text style={[styles.muted, styles.small]}>Covering {s.coveringName}</Text>}
         <Text style={[styles.badge, TONE[stage.tone]]}>{stage.label}</Text>
       </Pressable>
     );
