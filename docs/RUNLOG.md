@@ -670,3 +670,6 @@ Newest first. One entry per working session or scheduled run.
 - Also checked: the remaining "today" dates in the API and web already use the business's time zone (nothing left to fix there).
 - Next: other unheld items (a cover rule per area if wanted; push for shift changes and cancellations if wanted).
 - Waiting on David: push credentials in the Expo project (Android via a free Firebase project; Apple push key once Apple approves), then a new app build and PUSH_SEND=on; someone local to check the New Zealand, US and UK credential names; sending texts outside Australia; a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; the app's Zitadel access token type (JWT); Apple's approval for iPhone builds.
+
+## 2026-11-03 morning (David's session)
+- Recorded David's answers to the first eight "decisions to make" in `docs/decisions/2026-11-03-david-answers.md` and added them to the backlog: live dashboard numbers by company, state and office; the T (template) line and Template tab; R requests from the app; client ordering and new-customer sign-up; who can see and change each field with nothing overwritten; 7-year retention as the working default; no age limit on the app.
