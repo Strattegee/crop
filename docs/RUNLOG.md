@@ -674,6 +674,11 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-11-03 morning (David's session)
 - Recorded David's answers to the first eight "decisions to make" in `docs/decisions/2026-11-03-david-answers.md` and added them to the backlog: live dashboard numbers by company, state and office; the T (template) line and Template tab; R requests from the app; client ordering and new-customer sign-up; who can see and change each field with nothing overwritten; 7-year retention as the working default; no age limit on the app.
 
+## 2026-11-03 evening (3 Nov, David: answers 2 and 3)
+- Shipped: the usual person and the automatic T line (answer 2, migration 0077). A shift made from a template or a copied week remembers who usually works it. Each card shows a grey T with their name: fainter when they're the one on it, and "– On leave", "– Leave requested" or "– Not available" when they're away that day (never the kind of leave). The office can change or clear it on the shift panel (logged like any change). Saving a week as a template keeps the usual person rather than whoever covered, and copying a week puts the usual person back on first, then whoever covered. The app's roster shows the same line.
+- Covering vs usual: covering stays the hand-set "Covering <name>" line; when it names the usual person only the usual line shows, so the same person is never on two T lines.
+- Checked in the preview (week by area, by person, Simple look, the shift panel; light, dark and phone width). Every test passes.
+
 ## 2026-11-03 evening (3 Nov, David: live numbers, part A)
 
 - Shipped: offices (branches). Settings › Offices adds a business's offices such as "VIC Melbourne Metro" (optional state), puts sites in them (there or on the site's own form) and attaches office people. Allocations now shows office chips when the business has offices: each person starts on their own offices' shifts and can pick All, one office or "No office"; without offices the state chips stay.

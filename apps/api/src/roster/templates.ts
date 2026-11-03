@@ -15,7 +15,13 @@ export interface Slot {
   shiftCodeId: string | null;
   role: string;
   needsPerson: boolean;
+  /** Who worked it (copying a week) or the template's person. */
   workerId: string | null;
+  /**
+   * Who usually works it (migration 0077): the template's person, or (copying a week) the source shift's usual person,
+   * else whoever worked it. Becomes the new shift's usual person (the T line) and is tried first for putting on.
+   */
+  usualWorkerId?: string | null;
   notes: string | null;
   /** Equipment usually booked on this shift. */
   equipmentIds: string[];

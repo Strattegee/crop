@@ -309,6 +309,46 @@ export function withShift(back: string, shiftId: string): string {
 /** Steve's "T" line on a card (migration 0035): the person the shift covers. Never why they're away. */
 export const coveringLine = (name: string) => `Covering ${name}`;
 
+/** Why the usual person isn't there that day (migration 0077, worked out by the API). Never the kind of leave. */
+export type UsualAway = 'on_leave' | 'leave_requested' | 'not_available';
+export const USUAL_AWAY_WORDS: Record<UsualAway, string> = { on_leave: 'On leave', leave_requested: 'Leave requested', not_available: 'Not available' };
+
+export type TLineShift = {
+  workerId?: string | null; usualWorkerId?: string | null; usualName?: string | null; usualAway?: UsualAway | null;
+  coveringWorkerId?: string | null; coveringName?: string | null;
+};
+/** same = the usual person is working it (greyed); usual = someone else or nobody is on it; away = the usual person is away. */
+export type TLine = { text: string; title: string; tone: 'same' | 'usual' | 'away' | 'covering' };
+
+/**
+ * The card's "T" (template) lines (David, 3 Nov): who usually works the shift, with " – On leave" / " – Leave requested" /
+ * " – Not available" when they're away that day (never the kind of leave), greyed when they're the one working it. The
+ * hand-set covering line (migration 0035) follows only when it names someone else, so the same person is never shown twice.
+ */
+export function tLines(s: TLineShift): TLine[] {
+  const out: TLine[] = [];
+  if (s.usualWorkerId && s.usualName) {
+    const away = s.usualAway ? USUAL_AWAY_WORDS[s.usualAway] : null;
+    const working = !!s.workerId && s.workerId === s.usualWorkerId;
+    out.push({
+      text: away ? `${s.usualName} – ${away}` : s.usualName,
+      title: `Usually worked by ${s.usualName}${away ? ` (${away.toLowerCase()} that day)` : working ? ' (on it)' : ''}`,
+      tone: away ? 'away' : working ? 'same' : 'usual',
+    });
+  }
+  if (s.coveringWorkerId && s.coveringName && s.coveringWorkerId !== s.usualWorkerId) {
+    out.push({ text: coveringLine(s.coveringName), title: coveringLine(s.coveringName), tone: 'covering' });
+  }
+  return out;
+}
+
+/** People offered as a shift's usual person: everyone on the roster by name, keeping the current one even if they've gone. */
+export function usualChoices(people: { id: string; name: string }[], current: { id: string | null; name: string | null }): { id: string; label: string }[] {
+  const list = people.map(p => ({ id: p.id, label: p.name }));
+  if (current.id && current.name && !list.some(p => p.id === current.id)) list.push({ id: current.id, label: current.name });
+  return list.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export type CoveringChoice = { id: string; label: string; away: boolean };
 
 /**
@@ -371,7 +411,7 @@ export function addShiftsWhen(dates: string[]): string {
 }
 
 /** What a card needs for its marker letters (David, 30 Oct). */
-export type MarkerShift = {
+export type MarkerShift = TLineShift & {
   genderRequested?: 'F' | 'M' | null; workerId?: string | null; workerName?: string | null; workerGender?: 'F' | 'M' | null;
   equipment?: { name: string; vehicle?: boolean }[]; itemCount?: number; duties?: { name: string }[];
 };
@@ -403,6 +443,9 @@ export function shiftMarkers(s: MarkerShift): Marker[] {
   if (other.length) out.push({ key: 'e', letter: 'E', cls: 'mk-e', title: `Equipment: ${other.map(e => e.name).join(', ')}` });
   if (s.itemCount) out.push({ key: 'i', letter: 'I', cls: 'mk-i', title: `${s.itemCount} ${s.itemCount === 1 ? 'item' : 'items'} given out or used` });
   if (s.duties?.length) out.push({ key: 'd', letter: 'D', cls: 'mk-d', title: `Duties: ${s.duties.map(d => d.name).join(', ')}` });
+  // T = template (David, 3 Nov): who usually works it; marked when they're away that day.
+  const t = tLines(s);
+  if (t.length) out.push({ key: 't', letter: 'T', cls: `mk-t${t.some(l => l.tone === 'away') ? ' warn' : ''}`, title: t.map(l => l.title).join('; ') });
   return out;
 }
 

@@ -40,7 +40,7 @@ export async function myOffices(db: PoolClient, userId: string): Promise<Set<str
 }
 
 /**
- * Offices (David, 3 Nov 2026, answer 1; migration 0077): the business's branches. Sites belong to at most one office
+ * Offices (David, 3 Nov 2026, answer 1; migration 0078): the business's branches. Sites belong to at most one office
  * (`PATCH /facilities/:id {officeId}`), office people are attached with `PUT /offices/:id/people`. Owners and
  * administrators change them; every office person can read them. Switched off, never deleted.
  */

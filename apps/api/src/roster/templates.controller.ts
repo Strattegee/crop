@@ -44,12 +44,15 @@ async function slotsFromWeek(db: PoolClient, facilityId: string, weekStart: stri
             to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "startTime",
             to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "endTime",
             s.break_minutes as "breakMinutes", s.area_id as "areaId", s.shift_code_id as "shiftCodeId", s.role,
-            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes, s.gender_requested as "genderRequested",
+            s.needs_person as "needsPerson", sa.worker_id as "workerId", s.notes,
+            -- Who usually works it (migration 0077): the shift's usual person, else whoever is on it (never an agency's person).
+            case when s.needs_person then coalesce(s.usual_worker_id, case when w.status = 'active' then sa.worker_id end) end as "usualWorkerId", s.gender_requested as "genderRequested",
             coalesce((select json_agg(se.equipment_id order by se.created_at) from shift_assignments se
                        where se.shift_id = s.id and se.resource_kind = 'equipment' and se.status in ('assigned', 'confirmed')), '[]'::json) as "equipmentIds",
             coalesce((select json_agg(dl.duty_id) from shift_duty_links dl where dl.shift_id = s.id), '[]'::json) as "dutyIds"
        from shifts s join facilities f on f.id = s.facility_id
        left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
+       left join workers w on w.id = sa.worker_id
       where s.facility_id = $1 and s.status <> 'cancelled'
         and (s.starts_at at time zone f.timezone)::date between $2 and $2::date + 6
       order by s.starts_at, s.role`, [facilityId, weekStart])).rows;
@@ -80,13 +83,18 @@ async function createFromSlots(
 ): Promise<ApplyResult> {
   if (slots.length > MAX_SHIFTS) throw new BadRequestException(`That would add more than ${(await wordsFor(db)).count(MAX_SHIFTS, T.shift)}`);
   const result: ApplyResult = { created: 0, assigned: 0, leftOpen: [], equipmentBooked: 0, equipmentLeftOff: [] };
+  // The usual people who are still active (someone who has left is no longer anyone's usual person).
+  const usualIds = [...new Set(slots.map(s => s.usualWorkerId).filter((x): x is string => !!x))];
+  const activeUsual = new Set(usualIds.length
+    ? (await db.query<{ id: string }>(`select id from workers where id = any($1) and status = 'active'`, [usualIds])).rows.map(r => r.id) : []);
   for (const p of planWeek(slots, weekStart)) {
+    const usual = p.needsPerson && p.usualWorkerId && activeUsual.has(p.usualWorkerId) ? p.usualWorkerId : null;
     const id = (await db.query<{ id: string }>(
-      `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person, gender_requested)
-       values ($1, $2, $3, $4, $5, ($6::date + $7::time) at time zone $8, ($6::date + $9::int + $10::time) at time zone $8, $11, $12, $13, $14, $15)
+      `insert into shifts(tenant_id, facility_id, area_id, shift_code_id, role, starts_at, ends_at, break_minutes, notes, created_by, needs_person, gender_requested, usual_worker_id)
+       values ($1, $2, $3, $4, $5, ($6::date + $7::time) at time zone $8, ($6::date + $9::int + $10::time) at time zone $8, $11, $12, $13, $14, $15, $16)
        returning id`,
       [tenantId, f.id, p.areaId, p.shiftCodeId, p.role, p.date, p.startTime, f.timezone, p.overnight ? 1 : 0, p.endTime,
-        p.breakMinutes, p.notes, auth.userId, p.needsPerson, p.needsPerson ? p.genderRequested ?? null : null])).rows[0].id;
+        p.breakMinutes, p.notes, auth.userId, p.needsPerson, p.needsPerson ? p.genderRequested ?? null : null, usual])).rows[0].id;
     result.created++;
     // Duties first, so eligibility for the usual person sees what the shift needs. Switched-off duties are dropped.
     if (p.dutyIds?.length) {
@@ -100,19 +108,30 @@ async function createFromSlots(
   return result;
 }
 
+/**
+ * Puts someone on the new shift: the usual person first, then (copying a week) whoever worked the source shift when
+ * that was someone else, e.g. the person covering while the usual person was on leave. The first one eligible goes on;
+ * when nobody can, the shift stays open with the first person's reason.
+ */
 async function putUsualPerson(db: PoolClient, tenantId: string, auth: AuthContext, id: string, p: PlannedShift, result: ApplyResult) {
-  if (!p.workerId || !p.needsPerson) return;
-  // Lock the person (as assigning does) so nothing else rosters them at the same time.
-  const w = (await db.query<{ status: string; name: string }>(
-    `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [p.workerId])).rows[0];
-  if (!w) return;
-  const open = (reason: string): LeftOpen => ({ date: p.date, startTime: p.startTime, role: p.role, workerName: w.name, reason });
-  if (w.status !== 'active') { result.leftOpen.push(open(`${w.name} isn't active`)); return; }
-  const [check] = await eligibilityForShift(db, tenantId, id, [p.workerId]);
-  if (!check?.eligible) { result.leftOpen.push(open(firstReason(check?.blocks ?? []))); return; }
-  await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1, $2, $3, $4)`, [tenantId, id, p.workerId, auth.userId]);
-  await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
-  result.assigned++;
+  if (!p.needsPerson) return;
+  const tries = [...new Set([p.usualWorkerId, p.workerId].filter((x): x is string => !!x))];
+  let first: LeftOpen | null = null;
+  for (const workerId of tries) {
+    // Lock the person (as assigning does) so nothing else rosters them at the same time.
+    const w = (await db.query<{ status: string; name: string }>(
+      `select status, coalesce(preferred_name, first_name) || ' ' || last_name as name from workers where id = $1 for update`, [workerId])).rows[0];
+    if (!w) continue;
+    const open = (reason: string): LeftOpen => ({ date: p.date, startTime: p.startTime, role: p.role, workerName: w.name, reason });
+    if (w.status !== 'active') { first ??= open(`${w.name} isn't active`); continue; }
+    const [check] = await eligibilityForShift(db, tenantId, id, [workerId]);
+    if (!check?.eligible) { first ??= open(firstReason(check?.blocks ?? [])); continue; }
+    await db.query(`insert into shift_assignments(tenant_id, shift_id, worker_id, assigned_by) values ($1, $2, $3, $4)`, [tenantId, id, workerId, auth.userId]);
+    await db.query(`update shifts set status = 'assigned', updated_at = now() where id = $1`, [id]);
+    result.assigned++;
+    return;
+  }
+  if (first) result.leftOpen.push(first);
 }
 
 async function bookUsualEquipment(db: PoolClient, tenantId: string, auth: AuthContext, id: string, p: PlannedShift, result: ApplyResult) {
@@ -207,9 +226,9 @@ export class RosterTemplatesController {
       await db.query(
         `insert into roster_template_shifts(id, tenant_id, template_id, weekday, start_time, end_time, break_minutes, area_id, shift_code_id, role, needs_person, worker_id, notes, gender_requested)
          select x.id, $1, $2, x.weekday, x."startTime"::time, x."endTime"::time, x."breakMinutes", x."areaId", x."shiftCodeId", x.role, x."needsPerson",
-                case when $4 and x."needsPerson" then x."workerId" end, x.notes, x."genderRequested"
+                case when $4 and x."needsPerson" then x."usualWorkerId" end, x.notes, x."genderRequested"
            from json_to_recordset($3::json) as x(id uuid, weekday int, "startTime" text, "endTime" text, "breakMinutes" int, "areaId" uuid,
-                "shiftCodeId" uuid, role text, "needsPerson" boolean, "workerId" uuid, notes text, "genderRequested" text)`,
+                "shiftCodeId" uuid, role text, "needsPerson" boolean, "usualWorkerId" uuid, notes text, "genderRequested" text)`,
         [t.tenantId, id, JSON.stringify(rows), people]);
       const duties = rows.flatMap(r => (r.dutyIds ?? []).map(d => ({ s: r.id, d })));
       if (duties.length) {
@@ -261,7 +280,8 @@ export class RosterTemplatesController {
       await checkTarget(db, f, weekStart, addToExisting);
       const slots = (await db.query<Slot>(
         `select weekday, to_char(start_time, 'HH24:MI') as "startTime", to_char(end_time, 'HH24:MI') as "endTime", break_minutes as "breakMinutes",
-                area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId", notes,
+                area_id as "areaId", shift_code_id as "shiftCodeId", role, needs_person as "needsPerson", worker_id as "workerId",
+                worker_id as "usualWorkerId", notes,
                 gender_requested as "genderRequested",
                 coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds",
                 coalesce((select json_agg(td.duty_id) from roster_template_duties td where td.template_shift_id = ts.id), '[]'::json) as "dutyIds"

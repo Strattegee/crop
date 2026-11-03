@@ -193,6 +193,15 @@ export async function setCovering(shiftId: string, f: FormData) {
   }, () => name ? `Now covering ${name}.` : 'Not covering anyone.');
 }
 
+/** The T line (David, 3 Nov): who usually works this shift; blank clears it. */
+export async function setUsual(shiftId: string, f: FormData) {
+  const workerId = str(f, 'workerId');
+  let name: string | null = null;
+  await attempt(back(f), async () => {
+    name = (await api<{ usualName: string | null }>(`/shifts/${shiftId}/usual`, { method: 'PUT', body: { workerId } })).usualName;
+  }, () => name ? `${name} is now the usual person.` : 'No usual person now.');
+}
+
 /** New day, times or break for a shift; refused (with the reason) when the person or equipment on it can't do them. */
 export async function setTimes(shiftId: string, f: FormData) {
   const brk = str(f, 'breakMinutes');

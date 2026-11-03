@@ -27,7 +27,8 @@ export function actorOf(auth: AuthContext): Actor {
 
 export type ChangeKind = 'created' | 'assigned' | 'booked' | 'confirmed' | 'unassigned' | 'pulled_out' | 'cancelled'
   | 'equipment_added' | 'equipment_removed' | 'times_changed' | 'notes_changed' | 'duty_added' | 'duty_removed'
-  | 'covering_set' | 'covering_cleared' | 'gender_changed' | 'role_changed' | 'area_changed';
+  | 'covering_set' | 'covering_cleared' | 'gender_changed' | 'role_changed' | 'area_changed'
+  | 'usual_set' | 'usual_cleared';
 
 /** One line of the change log in plain English. Never includes leave kinds or credential details. */
 export function changeSummary(c: { kind: ChangeKind; workerName: string | null; equipmentName: string | null; detail: string | null; via: string }): string {
@@ -51,6 +52,8 @@ export function changeSummary(c: { kind: ChangeKind; workerName: string | null; 
     case 'duty_removed': return c.detail ? `Duty removed: ${c.detail}` : 'Duty removed';
     case 'covering_set': return `Covering ${who}`;
     case 'covering_cleared': return `No longer covering ${who}`;
+    case 'usual_set': return `Usually worked by ${who}`;
+    case 'usual_cleared': return `${who} no longer the usual person`;
     case 'gender_changed': return c.detail === 'F' ? 'Female worker requested' : c.detail === 'M' ? 'Male worker requested' : 'Gender request removed';
     case 'role_changed': return c.detail ? `Role changed to ${c.detail}` : 'Role changed';
     case 'area_changed': return c.detail ? `Area changed to ${c.detail}` : 'Area removed';
