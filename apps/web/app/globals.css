@@ -431,10 +431,19 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-kpis strong { font-size: 18px; }
 @media (max-width: 900px) { .roster-trio { grid-template-columns: minmax(0, 1fr); } }
 /* Status and Publish sit in the title row (29 Oct): title · status (takes the spare room) · toolbar. */
-.roster-head { flex-wrap: wrap; justify-content: flex-start; gap: 10px 14px; }
+.roster-head { flex-wrap: wrap; justify-content: flex-start; gap: 10px 10px; }
 .roster-head > .roster-state { display: contents; }
 .roster-head > .roster-title { order: 1; }
-.roster-head > .roster-state > .states { order: 2; flex: 1 1 auto; font-size: 14px; gap: 6px 14px; }
+.roster-head > .roster-state > .states { order: 2; flex: 1 1 0; min-width: 0; font-size: 14px; gap: 6px 14px; }
+/* Template · Draft · Live · History (David, 3 Nov, after Steve's design): one segmented strip; Template is a link. */
+.roster-head > .roster-state > .roster-stages { order: 2; }
+.roster-stages { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; flex: 0 0 auto; }
+.roster-stages > * { padding: 4px 7px; color: var(--muted); background: var(--surface); border-right: 1px solid var(--border); text-decoration: none; white-space: nowrap; }
+.roster-stages > *:last-child { border-right: 0; }
+.roster-stages > a { color: var(--accent); }
+.roster-stages > a:hover { background: var(--hover); }
+.roster-stages > .on, .roster-stages > a[aria-current] { background: var(--sel-bg); color: var(--sel-text); }
+.roster-stages > .on.live { background: var(--ok-bg); color: var(--ok); }
 .roster-head > .roster-toolbar { order: 3; }
 .roster-head > .roster-state > .roster-tools { order: 4; margin-left: auto; }
 .tool-period-label { white-space: nowrap; }
@@ -478,6 +487,8 @@ body:has(.roster-page.full) .appbar { display: none; }
 .mk.mk-e { background: #6d4c41; }
 .mk.mk-i { background: #1976d2; }
 .mk.mk-d { background: #ef6c00; }
+.mk.mk-r { background: #827717; }
+.letters-form label > span { display: flex; gap: 6px; align-items: center; }
 /* T = template (David, 3 Nov): grey like Steve's design; ringed amber when the usual person is away that day. */
 .mk.mk-t { background: var(--surface); color: var(--muted); border: 1px solid var(--border); line-height: 13px; }
 .mk.mk-t.warn { color: #8a5a00; border-color: #c98a1b; }
@@ -830,3 +841,42 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   color: var(--bad); background: var(--bad-bg); border: 1px dashed var(--bad); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gapbar span { font-variant-numeric: tabular-nums; font-weight: 700; }
 .gapbar:hover { border-style: solid; }
+
+/* The Template tab (David, 3 Nov): a template as a week by area, with a panel to add or change its shifts. */
+.tpl-page .roster-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 8px; }
+.tpl-page .roster-head h1 { margin: 0; }
+.tpl-start > summary, .tpl-menu summary { cursor: pointer; font-weight: 600; }
+.tpl-start-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; margin-top: 8px; }
+.tpl-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; margin-top: 12px; }
+@media (max-width: 1000px) { .tpl-layout { grid-template-columns: minmax(0, 1fr); } }
+.tpl-week { min-width: 0; }
+.tpl-week-head, .tpl-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tpl-week-head h2, .tpl-panel-head h2 { margin: 0; font-size: 18px; }
+.tpl-menu { display: flex; flex-direction: column; gap: 10px; min-width: 240px; }
+.tpl-scroll { overflow-x: auto; margin: 10px 0; }
+.tpl-grid { display: grid; grid-template-columns: 110px repeat(7, minmax(120px, 1fr)); min-width: 960px; border-top: 1px solid var(--border); }
+.tpl-row { display: contents; }
+.tpl-corner, .tpl-day, .tpl-area, .tpl-cell { border-bottom: 1px solid var(--border); padding: 6px; }
+.tpl-corner, .tpl-day { font-weight: 600; font-size: 13px; background: var(--surface-2); }
+.tpl-day { display: flex; flex-direction: column; }
+.tpl-area { font-weight: 600; font-size: 13px; }
+.tpl-cell { display: flex; flex-direction: column; gap: 4px; border-left: 1px solid var(--border); min-height: 56px; }
+.tcard { display: flex; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); text-decoration: none; font-size: 12px; overflow: hidden; }
+.tcard:hover { background: var(--hover); }
+.tcard.sel { outline: 2px solid var(--orange); }
+.tcard .mkcol { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 2px; background: var(--surface-2); border-right: 1px solid var(--border); }
+.tcard .cbody { display: flex; flex-direction: column; padding: 3px 6px; min-width: 0; }
+.tcard .tm { font-weight: 700; }
+.tcard .rl { color: var(--muted); }
+.tcard .tl { color: var(--muted); overflow-wrap: anywhere; }
+.tcard .tl.none { font-style: italic; }
+.tcard .tl .mk { margin-right: 2px; }
+.tpl-add { align-self: flex-start; padding: 0 8px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); text-decoration: none; font-weight: 700; }
+.tpl-add:hover { color: var(--text); background: var(--hover); }
+.tpl-panel { position: sticky; top: 12px; }
+.tpl-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.tpl-form label:not(.inline) { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.tpl-form fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.tpl-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tpl-page .roster-head > .roster-title { order: 0; }
+.tpl-fill { border-top: 1px solid var(--border); padding-top: 10px; }

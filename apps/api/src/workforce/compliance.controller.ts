@@ -10,6 +10,7 @@ import { isCountry } from '../common/countries.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays } from './compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
+import { parseMarkerLetters } from '../roster/markers.js';
 import { loadSettings } from './settings.js';
 import { PUBLISHED_CHANGES, type PublishedChanges } from '../roster/publishing.js';
 import { STEP_LIMITS } from '../agencies/requests.js';
@@ -75,6 +76,9 @@ export class ComplianceController {
     const later = timing ? int(timing, 'laterMinutes', 1, STEP_LIMITS.laterMinutes) : null;
     return withTenant(this.pool, t.tenantId, async db => {
       const cur = await loadSettings(db, t.tenantId);
+      // Letters on roster cards (migration 0079): only the ones sent change; blank goes back to CROP's default.
+      const letters = body?.markerLetters === undefined ? null : parseMarkerLetters(body.markerLetters, cur.markerLetters);
+      if (letters && 'error' in letters) throw new BadRequestException(letters.error);
       await db.query(
         `insert into tenant_settings(tenant_id, expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes, country,
            agency_step_soon_minutes, agency_step_today_minutes, agency_step_later_minutes, shift_swaps) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -86,6 +90,7 @@ export class ComplianceController {
           published ?? cur.publishedChanges, country ?? cur.country,
           soon ?? cur.agencyTiming.soonMinutes, today ?? cur.agencyTiming.todayMinutes, later ?? cur.agencyTiming.laterMinutes, swaps ?? cur.shiftSwaps],
       );
+      if (letters) await db.query('update tenant_settings set marker_letters = $2 where tenant_id = $1', [t.tenantId, JSON.stringify(letters.store)]);
       return loadSettings(db, t.tenantId);
     });
   }

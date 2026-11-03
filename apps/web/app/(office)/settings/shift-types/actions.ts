@@ -2,6 +2,7 @@
 
 import { api } from '../../../../lib/api';
 import { attempt, str } from '../../../../lib/actions';
+import { MARKER_KINDS } from '../../../../lib/marker-letters';
 
 const BACK = '/settings/shift-types';
 const minutes = (f: FormData) => {
@@ -29,4 +30,10 @@ export async function saveShiftType(id: string, f: FormData) {
 
 export async function setShiftTypeActive(id: string, active: boolean) {
   await attempt(BACK, () => api(`/shift-codes/${id}`, { method: 'PATCH', body: { active } }), active ? 'Shift type switched on.' : 'Shift type switched off. It no longer appears when adding shifts.');
+}
+
+/** Letters on roster cards (migration 0079): blank goes back to CROP's letter. */
+export async function saveMarkerLetters(f: FormData) {
+  const markerLetters = Object.fromEntries(MARKER_KINDS.map(k => [k, str(f, k) ?? null]));
+  await attempt(BACK, () => api('/settings', { method: 'PATCH', body: { markerLetters } }), 'Letters saved. The roster shows them now.');
 }
