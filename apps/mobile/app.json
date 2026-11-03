@@ -35,6 +35,12 @@
           "photosPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0F1E3D"
+        }
       ]
     ],
     "owner": "strattegee",

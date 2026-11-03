@@ -49,6 +49,8 @@ services:
       CLICKSEND_USERNAME: ${CLICKSEND_USERNAME:-}
       CLICKSEND_API_KEY: ${CLICKSEND_API_KEY:-}
       CLICKSEND_FROM: ${CLICKSEND_FROM:-+61429804977}   # dedicated CROP number (not secret); .env can override
+      PUSH_SEND: ${PUSH_SEND:-}                 # "on" sends push to the app through Expo (David switches it on)
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-} # only if the Expo project requires access tokens for push
     depends_on:
       migrate: { condition: service_completed_successfully }
 

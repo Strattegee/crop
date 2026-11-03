@@ -129,12 +129,14 @@ export function swapAskedEmail(s: SwapView & { toFirstName: string; business: st
       ``,
       end,
     ]),
+    push: { title: subject, body: `You would work: ${swapShiftLine(s.shift)}. Open CROP to say yes or no.` },
   };
 }
 
 /** To the asker: the colleague said no. */
 export function swapDeclinedEmail(s: SwapView & { fromFirstName: string }, w: Words = DEFAULT_WORDS) {
   return {
+    push: { title: `${s.toName} can't take your ${w.lower(T.shift)}`, body: `${swapShiftLine(s.shift)}. It's still yours.` },
     subject: `${s.toName} can't take your ${w.lower(T.shift)}`,
     body: join([
       `Hi ${s.fromFirstName},`, ``,

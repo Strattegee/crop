@@ -47,4 +47,6 @@ Keys in `/srv/crop/.env`: `RESEND_API_KEY` (domain cropwms.com verified in Resen
 
 SMS is live on staging (27 Oct). The ClickSend username is the API username shown on ClickSend's **API Credentials** page (it isn't necessarily the email you log in with). Test a pair without saving it: `curl -s -u "$U:$K" https://rest.clicksend.com/v3/account` should say SUCCESS. Restart the API from a fresh login: values exported in your shell (for example after `. /srv/crop/.env`) override the env file when compose starts the containers.
 
+Push to the app (3 Nov): off until `PUSH_SEND=on` is set in `/srv/crop/.env`. Before switching it on, the Expo project `@strattegee/crop-worker` needs its Android (FCM) credentials and, after Apple's approval, its Apple push key (Expo dashboard → Credentials). Until then queued pushes show on the Messages page as "Push notifications are not switched on yet". `EXPO_ACCESS_TOKEN` is needed only if the Expo project turns on access tokens for push.
+
 Without logging in to the server: add `CLICKSEND_USERNAME` and `CLICKSEND_API_KEY` as GitHub repository secrets (Settings → Secrets and variables → Actions). Each deploy copies them into `/srv/crop/.env` (replacing old values) before starting the containers; re-run "Deploy staging" after adding them.

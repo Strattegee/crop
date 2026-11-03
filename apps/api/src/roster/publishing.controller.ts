@@ -9,7 +9,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
 import { actorOf, changeSummary, mondayOf, rosterMessage, weekState, type ChangeKind, type MyShift } from './publishing.js';
 import { contacts } from './offer-replies.js';
-import { queueNotification } from '../notifications/notify.js';
+import { queueNotification, queuePush } from '../notifications/notify.js';
 import { wordsFor } from '../terms/words.js';
 import { shiftById } from './roster.controller.js';
 
@@ -69,6 +69,7 @@ async function tellStaff(db: PoolClient, t: Membership, userId: string, w: { fac
     const key = `publish:${w.facilityId}:${weekStart}:v${version}:${id}`;
     if (c.email) { await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'roster_published', subject: m.subject, body: m.email, workerId: id, dedupeKey: `${key}:email`, createdBy: userId }); n++; }
     if (c.phone) { await queueNotification(db, t.tenantId, { channel: 'sms', to: c.phone, template: 'roster_published', body: m.sms, workerId: id, dedupeKey: `${key}:sms`, createdBy: userId }); n++; }
+    n += await queuePush(db, t.tenantId, { workerId: id, template: 'roster_published', ...m.push, dedupeKey: key, createdBy: userId });
   }
   return n;
 }

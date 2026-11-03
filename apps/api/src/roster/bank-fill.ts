@@ -34,8 +34,11 @@ export function offerMessage(firstName: string, business: string, s: OfferShift,
   const until = expiresLabel ? ` The offer is open until ${expiresLabel}.` : '';
   const subject = `${w.one(T.shift)} available: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`;
   const aShift = w.a(T.shift);
+  // Push goes only to someone with the app, where the offer waits under Offers.
+  const push = { title: subject, body: `${business} has ${aShift} for you: ${what}. Open CROP to accept or decline.${until}` };
   if (link) {
     return {
+      push,
       subject,
       email: `Hi ${firstName},\n\n${business} has ${aShift} available:\n\n${what}\n\nAccept or decline here: ${link}\n\nThe first person to accept is booked.${until} This link is just for you, so please don't forward it.\n\nThanks,\n${business}`,
       sms: `Hi ${firstName}, ${business} has ${aShift} for you: ${what}. Accept or decline: ${link} (first to accept gets it).${until}`,
@@ -43,6 +46,7 @@ export function offerMessage(firstName: string, business: string, s: OfferShift,
   }
   const sms = `Hi ${firstName}, ${business} has ${aShift} for you: ${what}. Contact ${business} if you'd like it; the first to accept gets it.${until}`;
   return {
+    push,
     subject,
     email: `Hi ${firstName},\n\n${business} has ${aShift} available:\n\n${what}\n\nContact ${business} if you'd like it. The first person to accept is booked.${until}\n\nThanks,\n${business}`,
     sms,

@@ -50,6 +50,7 @@
 | Zitadel | Sign-in and two-factor authentication | Name, email address, sign-in and security events | Australian region | \[CONFIRM\] |
 | Resend | Sending email | Name, email address, message content | \[CONFIRM REGION\] | \[CONFIRM\] |
 | ClickSend | Sending text messages | Mobile number, message content | \[CONFIRM REGION\] | \[CONFIRM\] |
+| Expo (650 Industries), passing to Apple Push Notification service and Google Firebase Cloud Messaging | Sending push notifications to the CROPwms app (switched on once the app is released) | The phone's push token, notification title and text | United States \[CONFIRM\] | Yes |
 | Cloudflare (Turnstile, when switched on) | Stopping automated spam on public forms | IP address and browser signals of people using the form | Global network | Yes |
 
-Messages never contain health information or document numbers. Push notifications for the worker app will be added to this register before the app is released.
+Messages, including push notifications, never contain health information or document numbers.
