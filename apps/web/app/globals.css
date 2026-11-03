@@ -830,3 +830,14 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   color: var(--bad); background: var(--bad-bg); border: 1px dashed var(--bad); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gapbar span { font-variant-numeric: tabular-nums; font-weight: 700; }
 .gapbar:hover { border-style: solid; }
+
+/* Log a call (David, 3 Nov): a small pop-up with the outcomes as buttons. */
+.log-call { position: relative; display: inline-block; }
+.log-call summary { cursor: pointer; list-style: none; color: var(--accent); font-size: 12px; white-space: nowrap; }
+.log-call summary::-webkit-details-marker { display: none; }
+.log-call-pop { position: absolute; right: 0; top: 20px; z-index: 30; width: min(300px, calc(100vw - 32px)); background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.log-call-pop input[name="note"] { width: 100%; }
+.log-call-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+.call-list { list-style: none; padding: 0; margin: 4px 0 0; }
+.call-list li { padding: 3px 0; border-bottom: 1px solid var(--divider); font-size: 13px; }

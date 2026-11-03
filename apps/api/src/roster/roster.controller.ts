@@ -13,6 +13,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { equipmentForShift } from './equipment-data.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
+import { CANCEL_KINDS } from './cancel.js';
 import { actorOf } from './publishing.js';
 import { withSiteHistory } from './site-history.js';
 import { MAX_RANGE_DAYS, UUID, daysBetween, insertShifts, parseShiftRequest, time, uuidField } from './shift-create.js';
@@ -69,7 +70,7 @@ const USUAL_AWAY = `case when s.usual_worker_id is null then null
   end`;
 
 export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facilityName", s.area_id as "areaId", a.name as "areaName",
-  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", sc.letter as "shiftLetter", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason",
+  s.shift_code_id as "shiftCodeId", sc.code as "shiftCode", sc.letter as "shiftLetter", s.role, s.status, not s.needs_person as "equipmentOnly", s.notes, s.cancelled_reason as "cancelledReason", s.cancel_kind as "cancelKind",
   s.starts_at as "startsAt", s.ends_at as "endsAt", s.break_minutes as "breakMinutes", f.timezone,
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
   to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
@@ -94,6 +95,7 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
   s.usual_worker_id as "usualWorkerId",
   (select coalesce(uw.preferred_name, uw.first_name) || ' ' || uw.last_name from workers uw where uw.id = s.usual_worker_id) as "usualName",
   ${USUAL_AWAY} as "usualAway",
+f.client_id as "clientId",
   coalesce((select cc.confirms_bookings from client_orders co join clients cc on cc.id = co.client_id where co.id = s.client_order_id), false) as "clientConfirms",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_by end as "clientConfirmedBy"`;
@@ -666,8 +668,10 @@ export class ShiftsController {
   @HttpCode(200)
   cancel(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { required: true, max: 300 })!;
+    // Why (David, 3 Nov): client cancelled / client withdrew / not filled / our mistake / other (the default).
+    const kind = oneOf(body, 'kind', CANCEL_KINDS) ?? 'other';
     return this.tx(t, auth, async db => {
-      await cancelShift(db, auth.userId, id, reason);
+      await cancelShift(db, auth.userId, id, reason, kind);
       return shiftById(db, id);
     });
   }

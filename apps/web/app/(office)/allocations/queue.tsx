@@ -5,10 +5,13 @@ import {
   type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
 } from '../../../lib/allocation-queue';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
-import { assign, clientConfirmed, confirm, offer, recordReply, unassign, undoClientConfirmed } from '../roster/actions';
+import { assign, cancelShift, clientConfirmed, confirm, offer, recordReply, unassign, undoClientConfirmed } from '../roster/actions';
 import { AgencyFillSection, type AgencyFillState } from '../roster/agency-fill-section';
 import { offerFromQueue, releaseMany } from './actions';
 import { QueueLive } from './queue-live';
+import { LogCall } from './log-call';
+import { callLine, callWith, type CallRow } from '../../../lib/calls';
+import { CancelKindField } from '../../../lib/cancel-kinds';
 
 export type QueueRow = {
   id: string; facilityId: string; facilityName: string; region: string | null; officeName?: string | null; areaName: string | null; role: string; status: string;
@@ -29,10 +32,10 @@ export type PanelCandidate = { workerId: string; name: string; weekHours: number
 export type PanelOffer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 export type PanelShift = {
   id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; status: string; localDate: string; localStart: string; localEnd: string;
-  startsAt: string; hours: number; workerName: string | null; assignmentStatus: string | null; agencyName: string | null; notes: string | null; genderRequested: 'F' | 'M' | null;
+  startsAt: string; hours: number; workerId?: string | null; workerName: string | null; assignmentStatus: string | null; agencyName: string | null; notes: string | null; genderRequested: 'F' | 'M' | null;
   clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null; offersPending: number; pulledOutName: string | null;
 };
-export type Panel = { shift: PanelShift; row: QueueRow | null; candidates: PanelCandidate[]; offers: PanelOffer[]; agency: AgencyFillState | null };
+export type Panel = { shift: PanelShift; row: QueueRow | null; candidates: PanelCandidate[]; offers: PanelOffer[]; agency: AgencyFillState | null; calls?: CallRow[]; today?: string };
 
 const GENDER = { F: 'Female requested', M: 'Male requested' } as const;
 
@@ -193,6 +196,12 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
       <div className="q-panel-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           {meta && <div className="muted small">{meta}</div>}
+          {r && (
+            <div className="small">
+              <LogCall back={here} shiftId={s.id} clientId={r.clientId} contactName={r.requestedByName}
+                who={r.requestedByName ? `${r.requestedByName} (${r.clientName})` : r.clientName} label={`Log a call with the ${client}`} />
+            </div>
+          )}
           <h2>{s.role}</h2>
           <div>{r?.clientName ? `${r.clientName} – ` : ''}{s.facilityName}{s.areaName ? `, ${s.areaName}` : ''}</div>
           <div className="muted small">{dayLabel(s.localDate)} · {s.localStart}–{s.localEnd} · {s.hours}&nbsp;h</div>
@@ -231,6 +240,7 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
               <form action={undoClientConfirmed.bind(null, s.id)}>{back}<button className="btn small secondary">Undo {client}&apos;s yes</button></form>
             )}
             <form action={unassign.bind(null, s.id)}>{back}<button className="btn small secondary">Remove</button></form>
+            {s.workerId && !s.agencyName && <LogCall back={here} shiftId={s.id} workerId={s.workerId} who={s.workerName} />}
             <form action={unassign.bind(null, s.id)}>{back}<input type="hidden" name="pulledOut" value="1" /><button className="btn small secondary" title={`They can't do it: the ${shift} needs someone again`}>They pulled out</button></form>
           </div>
         </div>
@@ -250,6 +260,7 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
                 <div className="q-person-btns">
                   <form action={offer.bind(null, s.id)}>{back}<input type="hidden" name="workerIds" value={c.workerId} /><button className="btn small secondary">Offer</button></form>
                   <form action={assign.bind(null, s.id, c.workerId)}>{back}<button className="btn small" data-key={i === 0 ? 'a' : undefined} title={i === 0 ? 'Shortcut: A' : undefined}>Assign</button></form>
+                  <LogCall back={here} shiftId={s.id} workerId={c.workerId} who={c.name} label="Call" />
                 </div>
               </div>
             ))}
@@ -279,6 +290,25 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
           {panel.agency && (panel.agency.activeAgencies > 0 || panel.agency.request) && <AgencyFillSection st={panel.agency} shiftId={s.id} here={here} when={when} tw={tw} />}
         </>
       ) : <p className="muted">This {shift} is {s.status}.</p>}
+      {(panel.calls ?? []).length > 0 && (
+        <div className="q-section">
+          <h3>Calls about this {shift}</h3>
+          <ul className="call-list">
+            {panel.calls!.map(c => <li key={c.id}><strong>{callWith(c)}</strong> <span className="muted">{callLine(c, panel.today ?? '')}</span></li>)}
+          </ul>
+        </div>
+      )}
+      {s.status !== 'cancelled' && (
+        <details className="q-section q-cancel" data-hold>
+          <summary className="small" style={{ cursor: 'pointer' }}>Cancel this {shift}</summary>
+          <form action={cancelShift.bind(null, s.id)} className="form-row" style={{ marginTop: 8 }}>
+            <input type="hidden" name="back" value={closeHref} />
+            <CancelKindField clientWord={tw.one(T.client)} forClient={Boolean(r?.clientId)} />
+            <label>Reason<input name="reason" required maxLength={300} placeholder={`e.g. ${tw.one(T.client)} rang: ward closed`} /></label>
+            <button className="btn small secondary">Cancel {shift}</button>
+          </form>
+        </details>
+      )}
       <div className="q-panel-foot">
         <Link href={findStaffHref(s)}>Open in the {tw.lower(T.roster)}</Link>
         <span className="muted small">for duties, times, history and everything else</span>

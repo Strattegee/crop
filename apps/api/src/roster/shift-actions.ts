@@ -1,3 +1,4 @@
+import type { CancelKind } from './cancel.js';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { eligibilityForShift } from './eligibility-data.js';
@@ -52,9 +53,10 @@ export async function removeWorker(db: PoolClient, shiftId: string, pulledOut: b
 }
 
 /** Cancels a shift with a reason: everyone comes off it and pending offers are withdrawn. */
-export async function cancelShift(db: PoolClient, by: string | null, shiftId: string, reason: string): Promise<void> {
+export async function cancelShift(db: PoolClient, by: string | null, shiftId: string, reason: string, kind: CancelKind = 'other'): Promise<void> {
   const r = await db.query(
-    `update shifts set status = 'cancelled', cancelled_reason = $2, updated_at = now() where id = $1 and status <> 'cancelled'`, [shiftId, reason]);
+    `update shifts set status = 'cancelled', cancelled_reason = $2, cancel_kind = $3, updated_at = now() where id = $1 and status <> 'cancelled'`,
+    [shiftId, reason, kind]);
   if (!r.rowCount) {
     if (!(await db.query('select 1 from shifts where id = $1', [shiftId])).rowCount) throw new NotFoundException('{Shift} not found');
     throw new ConflictException('This {shift} is already cancelled');

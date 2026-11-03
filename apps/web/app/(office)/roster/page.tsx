@@ -11,6 +11,7 @@ import {
   clientConfirmed, undoClientConfirmed,
 } from './actions';
 import { clientConfirmLine } from '../../../lib/client-orders';
+import { CancelKindField } from '../../../lib/cancel-kinds';
 import { UNCHECKED, uncheckedNote } from '../../../lib/outside-agency';
 import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
@@ -37,7 +38,7 @@ type CoverGap = GapFacts;
 type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null; shiftLetter?: string | null;
   role: string; status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
-  workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null;
+  workerId: string | null; workerName: string | null; assignmentStatus: string | null; notes: string | null; cancelledReason?: string | null; clientId?: string | null;
   equipmentOnly?: boolean; equipment?: { id: string; name: string; typeName: string; vehicle?: boolean }[];
   /** Gender requested by whoever asked for the shift, and the gender of the person on it (David, 30 Oct). */
   genderRequested?: 'F' | 'M' | null; workerGender?: 'F' | 'M' | null; itemCount?: number;
@@ -1053,6 +1054,7 @@ export default async function RosterPage({ searchParams }: {
                         </select>
                       </label>
                     )}
+                    <CancelKindField clientWord={tw.one(T.client)} forClient={false} name="cancelKind" label="Why (if cancelling)" />
                     <label>Reason<input name="reason" maxLength={300} placeholder="Needed to cancel or for something else" /></label>
                     <button className="btn small">Send for approval</button>
                   </form>
@@ -1311,6 +1313,7 @@ export default async function RosterPage({ searchParams }: {
             <section>
               <form action={cancelShift.bind(null, selected.id)} className="form-row">
                 <input type="hidden" name="back" value={url({ shift: undefined })} />
+                <CancelKindField clientWord={tw.one(T.client)} forClient={Boolean(selected.clientId)} />
                 <label>Cancel {tw.lower(T.shift)}: reason<input name="reason" required maxLength={300} placeholder="e.g. Function cancelled" /></label>
                 <button className="btn small secondary">Cancel {tw.lower(T.shift)}</button>
               </form>

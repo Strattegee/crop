@@ -86,7 +86,7 @@ export async function unassign(shiftId: string, f: FormData) {
 
 export async function cancelShift(shiftId: string, f: FormData) {
   const tw = await words();
-  await attempt(back(f), () => api(`/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason: str(f, 'reason') } }), `${tw.one(T.shift)} cancelled.`);
+  await attempt(back(f), () => api(`/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason: str(f, 'reason'), kind: str(f, 'kind') } }), `${tw.one(T.shift)} cancelled.`);
 }
 
 /** Draft → Live: publishes the week for the site shown (or every site). Changes after this are logged. */
@@ -361,7 +361,8 @@ export async function archiveTemplate(f: FormData) {
 export async function requestChange(shiftId: string, f: FormData) {
   const change = str(f, 'change');
   await attempt(back(f), () => api(`/shifts/${shiftId}/change-requests`, {
-    method: 'POST', body: { change, workerId: change === 'assign' ? str(f, 'workerId') : undefined, reason: str(f, 'reason') },
+    method: 'POST', body: { change, workerId: change === 'assign' ? str(f, 'workerId') : undefined, reason: str(f, 'reason'),
+      cancelKind: change === 'cancel' ? str(f, 'cancelKind') : undefined },
   }), 'Change requested. The owners and admins have been emailed, and you will get an email when it is decided.');
 }
 

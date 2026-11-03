@@ -683,3 +683,10 @@ Newest first. One entry per working session or scheduled run.
 
 - Shipped: offices (branches). Settings › Offices adds a business's offices such as "VIC Melbourne Metro" (optional state), puts sites in them (there or on the site's own form) and attaches office people. Allocations now shows office chips when the business has offices: each person starts on their own offices' shifts and can pick All, one office or "No office"; without offices the state chips stay.
 - Next: cancel reasons and a call log (part B), then the live numbers on the Dashboard (part C).
+
+## 2026-11-03 night (3 Nov, David: live numbers, part B)
+
+- Shipped: cancel reasons and a call log. Cancelling a shift now asks why (the client cancelled, the client withdrew the request, we couldn't fill it, our mistake, other); a client's shift must say, so the dashboard can count client cancellations apart. The allocation queue's fill panel can cancel a shift too. "Log a call" sits beside each suggested person, the person on the shift and the client contact in the fill panel, and on a person's page: open it, optionally type a short note, press the outcome. The panel lists the calls about that shift; the person's page lists their last calls.
+- Privacy policy and data processing agreement now mention the call log. The worker notice is unchanged (calls don't appear in the app); David to decide whether the notice should mention them.
+- Next: the live numbers on the Dashboard (part C).
+

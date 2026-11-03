@@ -6,6 +6,7 @@ import { BULK_MAX, bulkReleaseMessage, releasePick, type BulkResult } from '../.
 import { contactSavedNote, dayLabel, parsePlace } from '../../../lib/client-orders';
 import { T, words } from '../../../lib/terms';
 import { addShiftsDates, addShiftsUntil, addShiftsWhen } from '../roster/view';
+import { OUTCOME_LABEL, type CallOutcome } from '../../../lib/calls';
 
 /** Puts one of the business's people forward for a request an employer sent it (agency fill, migration 0042). */
 export async function putForward(requestId: string, workerId: string, name: string) {
@@ -155,4 +156,20 @@ export async function markPresence(shiftId: string): Promise<void> {
   } catch {
     // Presence is a nicety: never get in the way.
   }
+}
+
+/**
+ * Records a call (David, 3 Nov: "calls made" per officer). CROP doesn't dial: the office presses the outcome after
+ * the call, from the fill panel or a person's page (`LogCall`).
+ */
+export async function logCall(f: FormData) {
+  const outcome = str(f, 'outcome');
+  const who = str(f, 'who') ?? 'them';
+  await attempt(str(f, 'back') ?? '/allocations', () => api('/calls', {
+    method: 'POST',
+    body: {
+      outcome, note: str(f, 'note'), workerId: str(f, 'workerId'), clientId: str(f, 'clientId'), contactId: str(f, 'contactId'),
+      contactName: str(f, 'contactName'), shiftId: str(f, 'shiftId'), direction: f.get('direction') === 'in' ? 'in' : 'out',
+    },
+  }), `Call with ${who} logged: ${OUTCOME_LABEL[outcome as CallOutcome] ?? outcome}.`);
 }
