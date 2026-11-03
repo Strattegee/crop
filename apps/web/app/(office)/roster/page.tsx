@@ -7,7 +7,7 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setUsual, setGender, setRole, setTimes, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setUsual, answerRequest, setGender, setRole, setTimes, unassign, useItem,
   clientConfirmed, undoClientConfirmed,
 } from './actions';
 import { clientConfirmLine } from '../../../lib/client-orders';
@@ -18,7 +18,7 @@ import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import { lettersOf } from '../../../lib/marker-letters';
 import {
-  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
+  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers,
 } from './view';
 
@@ -59,8 +59,11 @@ type Person = { id: string; name: string; roles: string[]; employmentType: strin
 type Equip = { id: string; name: string; typeName: string; status: string; bookedHours: number };
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
 type AgencyPerson = { id: string; name: string; agencyName: string; unchecked?: boolean; rosteredHours: number };
-type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; agencyPeople?: AgencyPerson[]; equipment?: Equip[]; leave?: Leave[] };
+type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; agencyPeople?: AgencyPerson[]; equipment?: Equip[]; leave?: Leave[]; dayRequests?: DayRequest[] };
 type Facility = { id: string; name: string; active: boolean };
+/** A request for a day from the app, waiting for the office (GET /day-requests, migration 0080). */
+type AppRequest = { id: string; workerId: string; workerName: string; date: string; line: string; createdAt: string;
+  shifts: { id: string; facilityName: string; role: string; localStart: string; localEnd: string; breaks: boolean }[] };
 type FacilityDetail = Facility & { areas: { id: string; name: string; active: boolean }[] };
 type ShiftCode = { id: string; facilityId: string | null; facilityName: string | null; code: string; name: string | null; letter?: string | null; startTime: string; endTime: string; active: boolean };
 type Reason = { code: string; message: string };
@@ -159,7 +162,7 @@ export default async function RosterPage({ searchParams }: {
   // Needs attention starts closed with its counts showing (David, 29 Oct).
   const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, fetchedGaps] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, appRequests, fetchedGaps] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -172,6 +175,9 @@ export default async function RosterPage({ searchParams }: {
     span === 'month' ? Promise.resolve([] as ChangeRequest[]) : api<ChangeRequest[]>(`/roster/change-requests?weekStart=${week}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as ChangeRequest[]),
     // Needs attention (backlog item 12): the next seven days from now, whatever period is on screen.
     api<Attention>(`/roster/attention${site ? `?facilityId=${site}` : ''}`).catch(() => null),
+    // App requests (migration 0080): waiting requests for the days on screen (the whole week in day view).
+    span === 'month' ? Promise.resolve(null)
+      : api<{ requests: AppRequest[] }>(`/day-requests?from=${week}&to=${addDaysV(week, 6)}${site ? `&facilityId=${site}` : ''}`).catch(() => null),
     span === 'month' ? Promise.resolve([] as CoverGap[])
       : api<CoverGap[]>(`/roster/cover-gaps?from=${span === 'day' ? addDaysV(days[0], -1) : days[0]}&to=${days[days.length - 1]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as CoverGap[]),
   ]);
@@ -215,13 +221,14 @@ export default async function RosterPage({ searchParams }: {
   const periodWord = span === 'day' ? 'day' : span === 'month' ? 'month' : 'week';
 
   // Rows
-  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled' | 'area'; cells: Shift[][]; leave?: (Leave | null)[]; balance?: { text: string; cls: string } };
+  type Row = { key: string; label: string; sub?: string; kind: 'person' | 'open' | 'equipment' | 'cancelled' | 'area'; cells: Shift[][]; leave?: (Leave | null)[]; requests?: DayRequest[][]; balance?: { text: string; cls: string } };
   const cellsFor = (pred: (s: Shift) => boolean, list: Shift[]) => days.map(d => list.filter(s => s.localDate === d && pred(s)));
   const personRow = (p: Person, list: Shift[]): Row => {
     const bal = p.contractedHours == null ? null : p.contractedHours - p.rosteredHours;
     return {
       key: p.id, label: p.name, kind: 'person',
       leave: days.map(d => (roster.leave ?? []).find(l => l.workerId === p.id && l.startsOn <= d && l.endsOn >= d) ?? null),
+      requests: days.map(d => (roster.dayRequests ?? []).filter(r => r.workerId === p.id && r.date === d)),
       sub: [p.employmentType ? TYPE_SHORT[p.employmentType] : null, p.roles.join(', ') || null].filter(Boolean).join(' · '),
       cells: cellsFor(s => s.workerId === p.id, list),
       balance: { text: `${fmtHours(p.rosteredHours)}${p.contractedHours != null ? ` / ${fmtHours(p.contractedHours)}` : ''} h`, cls: bal == null ? '' : bal < 0 ? 'over' : bal === 0 ? 'even' : 'under' },
@@ -349,7 +356,7 @@ export default async function RosterPage({ searchParams }: {
   // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
   // (F/M gender, V vehicle, E equipment, I items, D duties) so the office sees at a glance how much a shift involves.
   const letterCol = (s: Shift) => {
-    const list = s.status === 'cancelled' ? [] : shiftMarkers(s, letters);
+    const list = s.status === 'cancelled' ? [] : shiftMarkers({ ...s, requests: requestsFor(s, roster.dayRequests ?? []) }, letters);
     const shiftName = s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM';
     return (
       <span className="mkcol">
@@ -373,6 +380,9 @@ export default async function RosterPage({ searchParams }: {
       {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
       {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
       {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
+      {cardLook === 'detailed' && s.status !== 'cancelled' && requestsFor(s, roster.dayRequests ?? []).map(r => (
+        <span key={r.id} className={`dl rq${r.breaks ? ' off' : ''}`} title="Asked for in the app">{letters.request} {r.line}</span>
+      ))}
     </>)}</span>
   </>);
 
@@ -517,6 +527,39 @@ export default async function RosterPage({ searchParams }: {
     })() : (
       <section className="card roster-attention quiet" aria-label="Needs attention"><h2>Needs attention</h2> <span className="muted">Nothing in the next 7 days.</span></section>
     )}
+    {/* App requests (David, 3 Nov: Steve's "R"): what staff asked for on a day this week, to mark done or not possible. */}
+    {appRequests && (appRequests.requests.length > 0 ? (
+      <details className="card roster-requests" aria-label="App requests">
+        <summary><h2>App requests</h2> <span className="muted">{appRequests.requests.length} waiting this week</span>
+          {appRequests.requests.some(r => r.shifts.some(x => x.breaks)) && <> · <strong className="warn">{appRequests.requests.filter(r => r.shifts.some(x => x.breaks)).length} not fitting</strong></>}</summary>
+        <ol className="req-list">
+          {appRequests.requests.map(q => (
+            <li key={q.id}>
+              <span>
+                <strong>{q.workerName}</strong> · {longDate(q.date)} · <b className="mk mk-r">{letters.request}</b> {q.line}
+                <br />
+                <span className="muted small">
+                  {q.shifts.length === 0 ? `No ${tw.lower(T.shift)} that day yet` : q.shifts.map((x, i) => (
+                    <span key={x.id}>{i > 0 && ' · '}<Link href={`${url({ shift: x.id })}#shift-panel`}>{x.localStart}–{x.localEnd} {x.role}</Link>{!site && ` (${x.facilityName})`}{x.breaks && <strong className="warn"> doesn&apos;t fit</strong>}</span>
+                  ))}
+                </span>
+              </span>
+              <form action={answerRequest.bind(null, q.id)} className="req-answer">
+                <input type="hidden" name="back" value={here} />
+                <label className="sr-only" htmlFor={`rq-${q.id}`}>Note for {q.workerName}</label>
+                <input id={`rq-${q.id}`} name="note" maxLength={300} placeholder={`Note for ${q.workerName.split(' ')[0]} (optional)`} />
+                <label className="inline small"><input type="checkbox" name="tell" defaultChecked />Tell them</label>
+                <button className="btn small" name="outcome" value="done">Done</button>
+                <button className="btn small secondary" name="outcome" value="not_possible">Not possible</button>
+              </form>
+            </li>
+          ))}
+        </ol>
+        <p className="muted small" style={{ marginBottom: 0 }}>Requests guide; they never stop anyone being put on. A {tw.lower(T.shift)} that doesn&apos;t fit shows a warning and a ringed {letters.request}.</p>
+      </details>
+    ) : (
+      <section className="card roster-requests quiet" aria-label="App requests"><h2>App requests</h2> <span className="muted">None waiting this week.</span></section>
+    ))}
     <details className="card roster-add" open={shifts.length === 0}>
       <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
       {activeFacilities.length === 0 ? (
@@ -945,9 +988,11 @@ export default async function RosterPage({ searchParams }: {
                       {r.sub && <span className="sub">{r.sub}</span>}
                     </th>
                     {r.cells.map((cell, i) => {
-                      const leaveLine = r.leave?.[i] && (
-                        <span className={`leave-line ${r.leave[i]!.status}`}>{r.leave[i]!.status === 'approved' ? 'On leave' : 'Leave requested'}</span>
-                      );
+                      const leaveLine = (r.leave?.[i] || !!r.requests?.[i]?.length) && (<>
+                        {r.leave?.[i] && <span className={`leave-line ${r.leave[i]!.status}`}>{r.leave[i]!.status === 'approved' ? 'On leave' : 'Leave requested'}</span>}
+                        {/* R: what the person asked for that day in the app (David, 3 Nov). */}
+                        {r.requests?.[i]?.map(q => <span key={q.id} className="req-line" title="Asked for in the app"><b className="mk mk-r">{letters.request}</b> {q.line}</span>)}
+                      </>);
                       if (span === 'day') {
                         const ln = lanes(cell);
                         return (

@@ -42,3 +42,23 @@ describe('customised letters (David, 3 Nov)', () => {
     expect(lettersOf(undefined)).toEqual({ duty: 'D', vehicle: 'V', equipment: 'E', items: 'I', template: 'T', request: 'R' });
   });
 });
+
+describe('R: requests for a day from the app (David, 3 Nov)', () => {
+  it('finds the person on a shift\'s requests that day and marks the ones the shift breaks', async () => {
+    const { requestsFor, breaksRequest, shiftMarkers } = await import('../app/(office)/roster/view');
+    const reqs = [
+      { id: '1', workerId: 'a', date: '2026-11-09', kind: 'prefer_am', atTime: null, note: null, status: 'open', line: 'AM shift please' },
+      { id: '2', workerId: 'a', date: '2026-11-09', kind: 'finish_by', atTime: '14:00', note: null, status: 'open', line: 'Finish by 14:00' },
+      { id: '3', workerId: 'b', date: '2026-11-09', kind: 'prefer_pm', atTime: null, note: null, status: 'open', line: 'PM shift please' },
+    ];
+    const s = { workerId: 'a', localDate: '2026-11-09', localStart: '07:00', localEnd: '15:00' };
+    expect(requestsFor(s, reqs).map(r => [r.id, r.breaks])).toEqual([['1', false], ['2', true]]);
+    expect(requestsFor({ ...s, workerId: null }, reqs)).toEqual([]);
+    expect(breaksRequest({ kind: 'prefer_night', atTime: null }, '22:00', '06:00')).toBe(false);
+    expect(breaksRequest({ kind: 'start_after', atTime: '10:00' }, '09:00', '17:00')).toBe(true);
+    expect(breaksRequest({ kind: 'other', atTime: null }, '09:00', '17:00')).toBe(false);
+    const m = shiftMarkers({ requests: requestsFor(s, reqs) }).find(x => x.key === 'r')!;
+    expect(m).toMatchObject({ letter: 'R', cls: 'mk-r warn', title: "Asked: AM shift please; Finish by 14:00 (this doesn't fit)" });
+    expect(shiftMarkers({ requests: [] }).find(x => x.key === 'r')).toBeUndefined();
+  });
+});

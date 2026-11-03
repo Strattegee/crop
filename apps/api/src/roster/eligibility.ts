@@ -11,6 +11,7 @@
  * less rest between shifts than the business's minimum, requested leave, not being available, and a gender other
  * than the one requested for the shift, or none recorded (David, 30 Oct).
  */
+import { requestReasons, type DayRequestFacts } from './day-requests.js';
 import { addDays, credentialStatus, type ComplianceIssue, type CredentialFacts } from '../workforce/compliance.js';
 import { employmentReason, type TermDates } from './employment.js';
 import { availabilityReason, leaveReason, type AvailabilityFacts, type LeaveFacts } from './availability.js';
@@ -25,6 +26,8 @@ export interface ShiftFacts {
   hours: number;
   /** Site-local start time (HH:MM), for availability (AM / PM / night). */
   localStart?: string;
+  /** Site-local finish time (HH:MM; earlier than the start = the next day), for "finish by" requests. */
+  localEnd?: string;
   /** F or M when whoever asked for the shift asked for a gender (David, 30 Oct). */
   genderRequested?: Gender | null;
 }
@@ -78,12 +81,14 @@ export interface EligibilityInput {
   roleWarnOnly?: boolean;
   /** F, M or null (not recorded); leave out to skip the gender check. */
   gender?: Gender | null;
+  /** Their requests for the shift's date (migration 0080): a shift that doesn't fit one is a warning. */
+  dayRequests?: DayRequestFacts[];
 }
 
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
 
 export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
-  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender';
+  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender' | 'request';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 
@@ -147,6 +152,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
     const r = availabilityReason(p.name, shift.localDate, shift.localStart, p.availability);
     if (r) warnings.push(r);
   }
+  warnings.push(...requestReasons(p.name, shift.localDate, shift.localStart, shift.localEnd, p.dayRequests ?? []) as Reason[]);
 
   const others = p.others.filter(o => o.id !== shift.id);
   const clash = others.find(o => o.startsAt < shift.endsAt && o.endsAt > shift.startsAt);

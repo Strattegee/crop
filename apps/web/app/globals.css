@@ -421,6 +421,8 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 /* Needs attention, Add shifts, Templates and copying: a third of the width each, closed when the page opens;
    an opened one takes the full width below the others (David, 29 Oct). */
 .roster-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+/* App requests sits next to Needs attention (David, 3 Nov), so four panels share the row on a laptop. */
+.roster-trio:has(> .roster-requests) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .roster-trio > .card { margin: 0; padding: 12px 16px; min-width: 0; }
 .roster-trio > details[open] { grid-column: 1 / -1; order: 1; }
 .roster-trio > details > summary { cursor: pointer; }
@@ -429,7 +431,7 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .roster-cover > summary { cursor: pointer; }
 .roster-kpis > div { padding: 6px 14px; }
 .roster-kpis strong { font-size: 18px; }
-@media (max-width: 900px) { .roster-trio { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .roster-trio, .roster-trio:has(> .roster-requests) { grid-template-columns: minmax(0, 1fr); } }
 /* Status and Publish sit in the title row (29 Oct): title · status (takes the spare room) · toolbar. */
 .roster-head { flex-wrap: wrap; justify-content: flex-start; gap: 10px 10px; }
 .roster-head > .roster-state { display: contents; }
@@ -488,6 +490,15 @@ body:has(.roster-page.full) .appbar { display: none; }
 .mk.mk-i { background: #1976d2; }
 .mk.mk-d { background: #ef6c00; }
 .mk.mk-r { background: #827717; }
+.mk.mk-r.warn { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #d32f2f; }
+.req-line { display: block; font-size: 11px; padding: 2px 6px; margin-bottom: 4px; border-radius: 4px; border: 1px dashed #b5ad3a; color: var(--text); background: var(--surface); overflow-wrap: anywhere; }
+.rcard .dl.rq { color: #5f5a0f; font-weight: 600; }
+.rcard .dl.rq.off { color: #b3261e; }
+.req-list { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 10px; }
+.req-list > li { display: flex; flex-direction: column; align-items: stretch; gap: 6px; border-top: 0; border-bottom: 1px solid var(--border); padding: 0 0 8px; }
+.req-answer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.req-answer input[name=note] { flex: 1 1 160px; min-width: 0; }
+.roster-requests > summary h2 { display: inline; }
 .letters-form label > span { display: flex; gap: 6px; align-items: center; }
 /* T = template (David, 3 Nov): grey like Steve's design; ringed amber when the usual person is away that day. */
 .mk.mk-t { background: var(--surface); color: var(--muted); border: 1px solid var(--border); line-height: 13px; }
@@ -663,7 +674,10 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 :root[data-mode='dark'] .tline.tl-away, :root[data-mode='dark'] .tline.tl-covering, :root[data-mode='dark'] .mk.mk-t.warn { color: #e9b45c; }
 :root[data-mode='dark'] .mk.mk-t.warn { border-color: #b07a1c; }
 :root[data-mode='dark'] .pcard-badge { background: rgba(30, 138, 76, 0.2); color: #8fdcae; border-color: #2c5b40; }
-:root[data-mode='dark'] .mk.mk-g.warn { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px #f0807a; }
+:root[data-mode='dark'] .mk.mk-g.warn, :root[data-mode='dark'] .mk.mk-r.warn { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px #f0807a; }
+:root[data-mode='dark'] .rcard .dl.rq { color: #d9d27a; }
+:root[data-mode='dark'] .rcard .dl.rq.off { color: #f0807a; }
+:root[data-mode='dark'] .req-line { border-color: #8c8530; }
 :root[data-mode='dark'] .topnav-menu a:hover, :root[data-mode='dark'] .topnav-menu .menu-button:hover { background: var(--hover); }
 :root[data-mode='dark'] img, :root[data-mode='dark'] video { opacity: 0.95; }
 

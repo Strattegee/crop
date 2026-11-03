@@ -33,10 +33,11 @@ export type InboxRow = InboxShift & { id: string; connectionId: string; siteRegi
  */
 export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId: string, workerIds?: string[], opts: { evenIfClosed?: boolean } = {}) {
   const r = (await db.query<{ connection_id: string; employer_name: string; role: string; starts_at: Date; ends_at: Date; status: string;
-    requirements: SnapshotRequirement[]; local_date: string; local_start: string; hours: number; gender_requested: 'F' | 'M' | null }>(
+    requirements: SnapshotRequirement[]; local_date: string; local_start: string; local_end: string; hours: number; gender_requested: 'F' | 'M' | null }>(
     `select connection_id, employer_name, role, starts_at, ends_at, status, requirements, gender_requested,
             to_char(starts_at at time zone site_timezone, 'YYYY-MM-DD') as local_date,
             to_char(starts_at at time zone site_timezone, 'HH24:MI') as local_start,
+            to_char(ends_at at time zone site_timezone, 'HH24:MI') as local_end,
             (extract(epoch from (ends_at - starts_at)) / 3600 - break_minutes / 60.0)::float8 as hours
        from agency_inbox where id = $1`, [inboxId])).rows[0];
   if (!r) throw new NotFoundException('Request not found');
@@ -47,7 +48,7 @@ export async function peopleForRequest(db: PoolClient, tenantId: string, inboxId
   const { rules, blockAll, unmatched } = agencyRules(r.requirements, live, names, r.employer_name);
   // `evenIfClosed`: checking the person already put forward (Needs attention); the placement itself is this shift (`id`), so it isn't double booking.
   const people = r.status !== 'open' && !opts.evenIfClosed ? [] : rankCandidates(await eligibilityForFacts(db, tenantId,
-    { id: inboxId, role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, hours: r.hours,
+    { id: inboxId, role: r.role, startsAt: r.starts_at, endsAt: r.ends_at, localDate: r.local_date, localStart: r.local_start, localEnd: r.local_end, hours: r.hours,
       genderRequested: r.gender_requested },
     { onlyRules: rules, roleWarnOnly: true, blockAll, workerIds }));
   // (Asking about one person: whether they are active is checked when they are put forward.)

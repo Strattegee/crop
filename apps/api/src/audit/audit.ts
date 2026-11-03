@@ -5,7 +5,7 @@
 export const TABLE_LABEL: Record<string, string> = {
   workers: 'Person', worker_credentials: 'Credential', credential_documents: 'Credential file', credential_types: 'Credential type',
   credential_requirements: 'Credential rule', right_to_work_records: 'Right to work', employment_terms: 'Employment',
-  availability_patterns: 'Usual availability', availability_dates: 'Availability on a date', leave_records: 'Leave',
+  availability_patterns: 'Usual availability', availability_dates: 'Availability on a date', leave_records: 'Leave', day_requests: 'Request for a day',
   shifts: 'Shift', shift_assignments: 'Shift booking', shift_offers: 'Shift offer', shift_codes: 'Shift type',
   shift_duties: 'Shift duty', shift_duty_requirements: 'Shift duty rule', shift_duty_links: 'Duty on a shift',
   site_cover_rules: 'Cover rule', roster_publications: 'Roster published', roster_change_requests: 'Roster change request',

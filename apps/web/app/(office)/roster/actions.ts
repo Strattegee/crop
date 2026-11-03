@@ -202,6 +202,15 @@ export async function setUsual(shiftId: string, f: FormData) {
   }, () => name ? `${name} is now the usual person.` : 'No usual person now.');
 }
 
+/** App requests (migration 0080): the office marks one done or not possible, telling the person unless "Tell them" is unticked. */
+export async function answerRequest(requestId: string, f: FormData) {
+  const outcome = str(f, 'outcome') === 'not_possible' ? 'not-possible' : 'done';
+  let told: string | null = null;
+  await attempt(back(f), async () => {
+    told = (await api<{ told: 'app' | 'email' | null }>(`/day-requests/${requestId}/${outcome}`, { method: 'POST', body: { note: str(f, 'note') ?? null, tell: f.get('tell') === 'on' } })).told;
+  }, () => `${outcome === 'done' ? 'Marked done' : 'Marked not possible'}${told === 'app' ? '; they were told in the app' : told === 'email' ? '; they were emailed' : ''}.`);
+}
+
 /** New day, times or break for a shift; refused (with the reason) when the person or equipment on it can't do them. */
 export async function setTimes(shiftId: string, f: FormData) {
   const brk = str(f, 'breakMinutes');
