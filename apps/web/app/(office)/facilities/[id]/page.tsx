@@ -6,26 +6,29 @@ import { PlaceFields } from '../../../../lib/place-fields';
 import { Notices } from '../../notices';
 import { addArea, setAreaActive, updateFacility } from '../../clients/actions';
 import { T, words } from '../../../../lib/terms';
+import { OfficeField } from '../../settings/offices/office-field';
 
 export const dynamic = 'force-dynamic';
 
 type Facility = {
   id: string; name: string; clientId: string | null; clientName: string | null; addressLine: string | null; suburb: string | null;
   state: string | null; postcode: string | null; country: string; timezone: string; phone: string | null; parkingNotes: string | null; entryNotes: string | null;
+  officeId: string | null; officeName: string | null;
   areas: { id: string; name: string; specialty: string | null; active: boolean }[];
 };
 
 export default async function FacilityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [f, agency] = await Promise.all([api<Facility>(`/facilities/${id}`), currentAgency()]);
+  const [f, agency, offices] = await Promise.all([api<Facility>(`/facilities/${id}`), currentAgency(),
+    api<{ id: string; name: string; active: boolean }[]>('/offices').catch(() => [])]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   const address = placeLine(f);
   return (
     <>
       <p style={{ margin: '0 0 8px' }}>{f.clientId ? <Link href={`/clients/${f.clientId}`}>← {f.clientName}</Link> : <Link href="/facilities">← Facilities</Link>}</p>
       <h1>{f.name}</h1>
-      <p className="muted" style={{ marginTop: 0 }}>{address || 'No address yet'} · {zoneName(f.timezone)} time{f.phone && <> · {f.phone}</>}</p>
+      <p className="muted" style={{ marginTop: 0 }}>{address || 'No address yet'} · {zoneName(f.timezone)} time{f.phone && <> · {f.phone}</>}{f.officeName && <> · {f.officeName} office</>}</p>
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>
@@ -75,6 +78,7 @@ export default async function FacilityPage({ params, searchParams }: { params: P
             <label>Name<input name="name" required defaultValue={f.name} maxLength={200} /></label>
             <label>Street address<input name="addressLine" defaultValue={f.addressLine ?? ''} maxLength={200} /></label>
             <PlaceFields d={f} editing />
+            <OfficeField offices={offices} value={f.officeId} />
             <label>Phone<input name="phone" defaultValue={f.phone ?? ''} maxLength={30} /></label>
             <label style={{ flexBasis: '100%' }}>Parking notes<textarea name="parkingNotes" defaultValue={f.parkingNotes ?? ''} maxLength={1000} rows={2} /></label>
             <label style={{ flexBasis: '100%' }}>Entry and security notes<textarea name="entryNotes" defaultValue={f.entryNotes ?? ''} maxLength={1000} rows={2} /></label>

@@ -9,7 +9,9 @@ import { APP_POOL } from '../database/database.module.js';
 import { COUNTRIES, isCountry, normalPostcode, siteZone, type CountryCode } from '../common/countries.js';
 import { loadSettings } from '../workforce/settings.js';
 const COLS = `f.id, f.name, f.client_id as "clientId", c.name as "clientName", f.address_line as "addressLine", f.suburb, f.state,
-  f.postcode, f.country, f.timezone, f.phone, f.parking_notes as "parkingNotes", f.entry_notes as "entryNotes", f.active`;
+  f.postcode, f.country, f.timezone, f.phone, f.parking_notes as "parkingNotes", f.entry_notes as "entryNotes", f.active,
+  f.office_id as "officeId", o.name as "officeName"`;
+const FROM = `facilities f left join clients c on c.id = f.client_id left join offices o on o.id = f.office_id`;
 
 /**
  * A site's country, region (state), postcode and time zone, checked against the country (migration 0028).
@@ -34,6 +36,21 @@ function place(body: Record<string, unknown>, country: CountryCode) {
   return { region, postcode: pc, givenZone: tz, has };
 }
 
+/**
+ * The office given (`officeId`): undefined when not sent, null when cleared; must be one of the business's live
+ * offices, or the one the site (`siteId`) is already in.
+ */
+async function officeChoice(db: PoolClient, body: Record<string, unknown>, siteId: string | null = null): Promise<string | null | undefined> {
+  if (!body || !('officeId' in body)) return undefined;
+  const id = text(body, 'officeId', { max: 40 });
+  if (id === null) return null;
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !(await db.query(
+    'select 1 from offices where id = $1 and (active or id = (select office_id from facilities where id = $2))', [id, siteId])).rowCount) {
+    throw new BadRequestException('Choose an office');
+  }
+  return id;
+}
+
 async function clientExists(db: PoolClient, id: string | null) {
   if (id === null) return;
   if (!/^[0-9a-f-]{36}$/i.test(id) || !(await db.query('select 1 from clients where id = $1', [id])).rowCount) {
@@ -52,7 +69,7 @@ export class FacilitiesController {
   @Get()
   list(@Tenant() t: Membership, @Query('clientId') clientId?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
-      `select ${COLS} from facilities f left join clients c on c.id = f.client_id
+      `select ${COLS} from ${FROM}
         where ($1::uuid is null or f.client_id = $1) order by f.active desc, f.name`,
       [clientId && /^[0-9a-f-]{36}$/i.test(clientId) ? clientId : null],
     )).rows);
@@ -70,13 +87,14 @@ export class FacilitiesController {
       const country = (given as CountryCode | null) ?? (await loadSettings(db, t.tenantId)).country;
       const p = place(body, country);
       const timezone = siteZone(country, p.region, p.givenZone);
+      const officeId = (await officeChoice(db, body)) ?? null;
       const row = (await db.query<{ id: string }>(
-        `insert into facilities(tenant_id, client_id, name, address_line, suburb, state, postcode, timezone, phone, parking_notes, entry_notes, country)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+        `insert into facilities(tenant_id, client_id, name, address_line, suburb, state, postcode, timezone, phone, parking_notes, entry_notes, country, office_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning id`,
         [t.tenantId, clientId, name, text(body, 'addressLine', { max: 200 }), text(body, 'suburb', { max: 100 }), p.region, p.postcode,
-          timezone, text(body, 'phone', { max: 30 }), text(body, 'parkingNotes', { max: 1000 }), text(body, 'entryNotes', { max: 1000 }), country],
+          timezone, text(body, 'phone', { max: 30 }), text(body, 'parkingNotes', { max: 1000 }), text(body, 'entryNotes', { max: 1000 }), country, officeId],
       )).rows[0];
-      return (await db.query(`select ${COLS} from facilities f left join clients c on c.id = f.client_id where f.id = $1`, [row.id])).rows[0];
+      return (await db.query(`select ${COLS} from ${FROM} where f.id = $1`, [row.id])).rows[0];
     });
   }
 
@@ -84,7 +102,7 @@ export class FacilitiesController {
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      const f = (await db.query(`select ${COLS} from facilities f left join clients c on c.id = f.client_id where f.id = $1`, [id])).rows[0];
+      const f = (await db.query(`select ${COLS} from ${FROM} where f.id = $1`, [id])).rows[0];
       if (!f) throw new NotFoundException('facility not found');
       const areas = (await db.query(`select id, name, specialty, active from areas where facility_id = $1 order by active desc, name`, [id])).rows;
       return { ...f, areas };
@@ -100,6 +118,7 @@ export class FacilitiesController {
     if (given && !isCountry(given)) throw new BadRequestException('Choose a country: Australia, New Zealand, United States or United Kingdom');
     return withTenant(this.pool, t.tenantId, async db => {
       if (has('clientId')) await clientExists(db, clientId);
+      const officeId = await officeChoice(db, body, id);
       const cur = (await db.query<{ country: CountryCode; state: string | null; postcode: string | null }>('select country, state, postcode from facilities where id = $1', [id])).rows[0];
       if (!cur) throw new NotFoundException('facility not found');
       const country = (given as CountryCode | null) ?? cur.country;
@@ -115,15 +134,15 @@ export class FacilitiesController {
            state = case when $9 then $10 else state end, postcode = case when $11 then $12 else postcode end, country = $21,
            timezone = coalesce($13, timezone), phone = case when $14 then $15 else phone end,
            parking_notes = case when $16 then $17 else parking_notes end, entry_notes = case when $18 then $19 else entry_notes end,
-           active = coalesce($20, active)
+           active = coalesce($20, active), office_id = case when $22 then $23::uuid else office_id end
          where id = $1`,
         [id, text(body, 'name', { max: 200 }), has('clientId'), clientId, has('addressLine'), text(body, 'addressLine', { max: 200 }),
           has('suburb'), text(body, 'suburb', { max: 100 }), true, state, true, pc, tz,
           has('phone'), text(body, 'phone', { max: 30 }), has('parkingNotes'), text(body, 'parkingNotes', { max: 1000 }),
-          has('entryNotes'), text(body, 'entryNotes', { max: 1000 }), bool(body, 'active'), country],
+          has('entryNotes'), text(body, 'entryNotes', { max: 1000 }), bool(body, 'active'), country, officeId !== undefined, officeId ?? null],
       );
       if (!r.rowCount) throw new NotFoundException('facility not found');
-      return (await db.query(`select ${COLS} from facilities f left join clients c on c.id = f.client_id where f.id = $1`, [id])).rows[0];
+      return (await db.query(`select ${COLS} from ${FROM} where f.id = $1`, [id])).rows[0];
     });
   }
 

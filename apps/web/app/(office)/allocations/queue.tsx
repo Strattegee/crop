@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { T, type Words } from '../../../lib/terms';
 import {
-  DAY_CHOICES, QUEUE_BANDS, QUEUE_TABS, bandTitle, bestPeople, releasableRows, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
+  DAY_CHOICES, QUEUE_BANDS, officeChipList, QUEUE_TABS, bandTitle, bestPeople, releasableRows, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
   type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
 } from '../../../lib/allocation-queue';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
@@ -11,7 +11,7 @@ import { offerFromQueue, releaseMany } from './actions';
 import { QueueLive } from './queue-live';
 
 export type QueueRow = {
-  id: string; facilityId: string; facilityName: string; region: string | null; areaName: string | null; role: string; status: string;
+  id: string; facilityId: string; facilityName: string; region: string | null; officeName?: string | null; areaName: string | null; role: string; status: string;
   startsAt: string; localDate: string; localStart: string; localEnd: string; dayLabel: string; hours: number; genderRequested: 'F' | 'M' | null; notes: string | null;
   clientId: string; clientName: string; clientRank: number | null; clientConfirms: boolean;
   orderId: string | null; clientReference: string | null; channelWords: string | null; requestedByName: string | null; orderNotes: string | null;
@@ -20,7 +20,8 @@ export type QueueRow = {
   waitingSince: string | null; stage: QueueStage; band: QueueBand; progress: string; presence: { name: string; initials: string }[]; youAreOn: boolean;
 };
 export type Queue = {
-  counts: Record<QueueTab, number>; regions: { name: string; count: number }[]; bands: Record<QueueBand, number>; total: number; shifts: QueueRow[];
+  counts: Record<QueueTab, number>; regions: { name: string; count: number }[];
+  office?: string | null; myOffices?: string[]; offices?: { id: string; name: string; count: number; mine: boolean }[]; noOffice?: number; bands: Record<QueueBand, number>; total: number; shifts: QueueRow[];
 };
 type Reason = { code: string; message: string };
 export type PanelCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; available: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null;
@@ -46,12 +47,14 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
   const qw: QueueWords = { client: tw.one(T.client), worker: tw.one(T.worker), bank: tw.lower(T.bank), shifts: tw.lower(T.shift, true) };
   const href = (c: Partial<QueueParams>) => queueHref(p, c);
   const here = href({});
+  const officeChips = q ? officeChipList({ office: q.office ?? null, myOffices: q.myOffices ?? [], offices: q.offices ?? [], noOffice: q.noOffice ?? 0 }) : [];
   const bands = QUEUE_BANDS.map(b => ({ band: b, rows: (q?.shifts ?? []).filter(r => r.band === b) })).filter(b => b.rows.length);
   return (
     <div className="q-screen">
       <div className="q-filters">
         <form action="/allocations" className="q-selects">
           {p.stage !== 'all' && <input type="hidden" name="stage" value={p.stage} />}
+          {p.office && <input type="hidden" name="office" value={p.office} />}
           {p.region && <input type="hidden" name="region" value={p.region} />}
           <label className="sr-only" htmlFor="q-client">{tw.one(T.client)}</label>
           <select id="q-client" name="clientId" defaultValue={p.clientId ?? ''} className="q-select">
@@ -64,7 +67,16 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
           </select>
           <button className="btn small secondary">Show</button>
         </form>
-        {(q?.regions.length ?? 0) > 0 && (
+        {officeChips.length > 0 && (
+          <nav className="q-chips" aria-label="Office">
+            <span className="muted small">Office:</span>
+            {officeChips.map(c => (
+              <Link key={c.value ?? 'default'} className={`q-chip${c.on ? ' on' : ''}`} href={href({ office: c.value, region: null, shift: null })} scroll={false}
+                aria-current={c.on ? 'true' : undefined}>{c.label}{c.count !== null && <> <b>{c.count}</b></>}</Link>
+            ))}
+          </nav>
+        )}
+        {officeChips.length === 0 && (q?.regions.length ?? 0) > 0 && (
           <nav className="q-chips" aria-label="Region">
             <span className="muted small">Region:</span>
             <Link className={`q-chip${p.region ? '' : ' on'}`} href={href({ region: null, shift: null })} scroll={false}>All</Link>

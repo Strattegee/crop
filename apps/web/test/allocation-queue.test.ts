@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BULK_MAX, QUEUE_TABS, bandTitle, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, initials, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
+  BULK_MAX, QUEUE_TABS, bandTitle, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
 } from '../lib/allocation-queue';
 
 const NOW = Date.parse('2026-11-02T08:00:00Z');
@@ -45,13 +45,32 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('keeps the screen’s state in the URL, short', () => {
     const id = '6f1c1f8e-0b6a-4a51-9a51-1b2c3d4e5f60';
     const p = parseQueueParams({ stage: 'released', region: 'VIC', days: '7', shift: id, clientId: 'nope', view: 'odd' });
-    expect(p).toEqual({ stage: 'released', region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue' });
-    expect(parseQueueParams({})).toEqual({ stage: 'all', region: null, clientId: null, days: 3, shift: null, view: 'queue' });
+    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue' });
+    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue' });
+    expect(parseQueueParams({ office: 'ALL' }).office).toBe('all');
+    expect(parseQueueParams({ office: id }).office).toBe(id);
+    expect(parseQueueParams({ office: 'Melbourne' }).office).toBeNull();
+    expect(queueHref(parseQueueParams({ office: 'none', stage: 'new' }))).toBe('/allocations?stage=new&office=none');
     expect(parseQueueParams({ stage: 'bogus', days: '5' })).toMatchObject({ stage: 'all', days: 3 });
     expect(queueHref(p)).toBe(`/allocations?stage=released&region=VIC&days=7&shift=${id}`);
     expect(queueHref(p, { shift: null, stage: 'all' })).toBe('/allocations?region=VIC&days=7');
     expect(queueHref(parseQueueParams({}))).toBe('/allocations');
     expect(queueHref(parseQueueParams({}), { view: 'new' })).toBe('/allocations?view=new');
+  });
+
+  it('lists office chips: the person’s own first, All, each office, then No office', () => {
+    const offices = [{ id: 'a', name: 'VIC Melbourne Metro', count: 3, mine: true }, { id: 'b', name: 'QLD Sunshine Coast', count: 2, mine: false }];
+    expect(officeChipList({ office: 'mine', myOffices: ['a'], offices, noOffice: 1 })).toEqual([
+      { label: 'My office', value: null, count: 3, on: true },
+      { label: 'All', value: 'all', count: 6, on: false },
+      { label: 'VIC Melbourne Metro', value: 'a', count: 3, on: false },
+      { label: 'QLD Sunshine Coast', value: 'b', count: 2, on: false },
+      { label: 'No office', value: 'none', count: 1, on: false },
+    ]);
+    // Nobody's offices: All is the default; No office only when it has work.
+    const plain = officeChipList({ office: 'b', myOffices: [], offices: offices.map(o => ({ ...o, mine: false })), noOffice: 0 });
+    expect(plain.map(c => [c.label, c.value, c.on])).toEqual([['All', null, false], ['VIC Melbourne Metro', 'a', false], ['QLD Sunshine Coast', 'b', true]]);
+    expect(officeChipList({ office: null, myOffices: [], offices: [], noOffice: 4 })).toEqual([]);
   });
 
   it('picks the best people for the panel and words their line', () => {

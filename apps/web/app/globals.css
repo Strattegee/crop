@@ -105,6 +105,10 @@ input, select, textarea { font: inherit; font-size: 14px; padding: 8px 10px; bor
 .badge.warn { color: var(--warn); background: var(--warn-bg); }
 .badge.bad { color: var(--bad); background: var(--bad-bg); }
 .badge.neutral { color: var(--muted); background: var(--surface-2); }
+/* Settings › Offices */
+.office-forms { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.office-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; margin-bottom: 8px; }
+.office-people label { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
 
 .notice { padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
 .notice.error { background: var(--bad-bg); color: var(--bad); }
