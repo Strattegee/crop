@@ -608,3 +608,11 @@ Newest first. One entry per working session or scheduled run.
 - Next: other unheld items ("Only shifts I'm on" on Allocations needs a meaning from David; a real Office for businesses with several branches).
 - Questions for David: is releasing by time band enough, or layout C as its own screen? Should people who know the site be suggested first?
 - Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
+
+## 2026-11-03 midday, 12:10pm Melbourne (scheduled run)
+
+- Shipped: cover gaps on the roster itself. In the day view a "Cover gaps" row sits under the people, with a red dashed bar at each time nobody on shift holds what a cover rule asks for ("17:00–22:00 No RSA"; the site's name is added when all sites are shown). A gap that runs past midnight shows its early-morning part on the next day too. Clicking a bar opens the shift the gap starts on. In the week view, each day with a gap says "1 cover gap" in red under its heading, linking to that day. The list of gaps above the roster is unchanged.
+- Not checked in a browser (no local sign-in in this run); unit tests cover where bars go (overnight gaps, other days, several at once); every test passes.
+- Next: other unheld items (a cover rule per area, if wanted; "Only shifts I'm on" on Allocations needs a meaning from David).
+- Questions for David: is releasing by time band enough, or layout C as its own screen? Should people who know the site be suggested first?
+- Waiting on David: tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; checking the app's Zitadel access token type is JWT; Apple's approval for iPhone builds.
