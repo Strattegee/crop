@@ -1,8 +1,10 @@
 import * as AuthSession from 'expo-auth-session';
 import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, useColorScheme, View } from 'react-native';
+import { Text } from './src/ui';
 import { api, ApiError, SignedOut } from './src/api';
 import { finishSignIn, loadSession, signOut } from './src/auth';
 import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config';
@@ -14,7 +16,8 @@ import { tapTarget, type PushTap } from './src/push-rules';
 import { SwapPicker, SwapsList } from './src/SwapsSection';
 import { canSwap, type MySwap, type SwapMode } from './src/swaps';
 import { roleOf, startMode, type Mode } from './src/manager';
-import { styles } from './src/styles';
+import { schemeOf, statusBarStyle } from './src/palette';
+import { colours, setScheme, styles } from './src/styles';
 import {
   businessesOf, byDay, dayLabel, hasStepsForMe, needsNotice, noShiftsLine, noticeText, offerCloses, roleLine, STATE_LABEL, STEP_MARK, timeRange,
   type MyNotice, type MyOffer, type MyOnboarding, type MyShift,
@@ -29,6 +32,10 @@ type My = { business: string; firstName: string; today: string; word: Word; cred
 type Phase = 'loading' | 'signedOut' | 'choose' | 'ready';
 
 export default function App() {
+  // Light or dark follows the phone's setting (3 Nov); setting it before anything below renders picks the sheet.
+  const scheme = schemeOf(useColorScheme());
+  setScheme(scheme);
+  useEffect(() => { SystemUI.setBackgroundColorAsync(colours().bg).catch(() => undefined); }, [scheme]);
   const [phase, setPhase] = useState<Phase>('loading');
   const [me, setMe] = useState<Me | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
@@ -103,7 +110,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.page}>
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle(scheme)} />
       {phase === 'loading' && <ActivityIndicator style={{ marginTop: 80 }} />}
       {phase === 'signedOut' && (
         <View style={styles.centre}>

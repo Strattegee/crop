@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import { addDays, dayLabel } from './format';
 import {
@@ -130,7 +131,7 @@ export function RosterTab({ tenant, today, view, setView, word, people, siteWord
           : shown.map(w => (
             <Text key={w.facilityId} style={{ marginBottom: 4 }}>
               <Text style={{ fontWeight: '700' }}>{shown.length > 1 || !facilityId ? `${w.facilityName}: ` : ''}</Text>
-              <Text style={w.state === 'live' && w.changesSincePublish ? { color: '#8a5a00' } : styles.muted}>{weekStateLine(w, word)}</Text>
+              <Text style={w.state === 'live' && w.changesSincePublish ? styles.warnText : styles.muted}>{weekStateLine(w, word)}</Text>
             </Text>
           ))}
         {label && (

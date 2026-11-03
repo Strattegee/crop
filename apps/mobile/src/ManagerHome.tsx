@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import {
   approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, kindLabel, kpiNote, kpiOrder, kpiValue, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,

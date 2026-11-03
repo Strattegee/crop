@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
+import { Text } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import { styles } from './styles';
 import { afterYesLine, askedMessage, mySwapLine, SWAP_BADGE, swapOrder, whenLine, type MySwap, type SwapMode, type SwapOptions } from './swaps';
@@ -84,7 +85,7 @@ export function SwapPicker({ tenant, shiftId, mode, word, today, onDone, onClose
   };
 
   return (
-    <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: '#e3e6ee', paddingTop: 10 }}>
+    <View style={styles.divider}>
       {error && <Text style={styles.error}>{error}</Text>}
       {!options && !error && <ActivityIndicator />}
       {options && (
