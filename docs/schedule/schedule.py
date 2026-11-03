@@ -57,7 +57,7 @@ todo=[
 ("CPORT","c6","Ordering for clients not on CROP",7,["INFO"],"Claude",None),
 ("PUSH","c4","Push alerts in the app: built 3 Nov, tap opens the right screen 4 Nov; switch on and try on phones",1,["STORE"],"Claude",None),
 ("OPS","c1","Production setup, backups, restore drill, monitoring",4,["INFO"],"Claude + you",None),
-("LOOK","c2","Apply the new logo, colours and look",10,["LOGO","UIDES"],"Claude",None),
+("LOOK","c2","Apply the new logo, colours and look (colours and dark mode on the web 2 Nov, in the app 4 Nov)",10,["LOGO","UIDES"],"Claude",None),
 ("FC","ms","Release 1 built: roster, allocations, credentialing",0,["APPLY","MIG","CPORT","PUSH","OPS"],"Milestone",None),
 ("PEN","ext","External penetration test (Release 1)",8,["FC"],"Security tester",None),
 ("FIX","c1","Fix test findings",4,["PEN"],"Claude",None),

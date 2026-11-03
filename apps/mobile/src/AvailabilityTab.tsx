@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import {
   addDays, chipOn, dayLabel, LEAVE_KIND_LABEL, LEAVE_KINDS, LEAVE_STATUS_LABEL, leaveAskedMessage, leaveDates, patternBody,

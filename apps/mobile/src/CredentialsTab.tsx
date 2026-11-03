@@ -1,7 +1,8 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from './ui';
 import { api, ApiError, SignedOut, upload } from './api';
 import {
   CHECK_LABEL, dateFromParts, expiryLine, filesLine, LEVEL_LABEL, nothingNeededLine, RTW_BADGE, rtwDetail, uploadName,

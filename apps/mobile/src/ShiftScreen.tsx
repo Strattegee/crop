@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import {
   actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, canSetCovering, confirmLabel, coveringChoices,
@@ -247,7 +248,7 @@ export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBac
                 <View key={c.workerId} style={styles.card}>
                   <Text style={styles.cardTitle}>{c.name}</Text>
                   <Text style={[styles.muted, styles.small]}>{candidateMeta(c)}{c.offer?.status === 'pending' ? ' · offer waiting' : ''}</Text>
-                  <Text style={[styles.small, st.tone === 'blocked' ? styles.error : st.tone === 'warning' ? { color: '#6b5300' } : { color: '#11592b' }, { marginVertical: 4 }]}>{st.label}</Text>
+                  <Text style={[styles.small, st.tone === 'blocked' ? styles.error : st.tone === 'warning' ? styles.warnText : styles.goodText, { marginVertical: 4 }]}>{st.label}</Text>
                   {c.eligible && (
                     <Pressable style={[styles.button, styles.secondary, { marginTop: 6 }]} disabled={busy} onPress={() => putOn(c)}>
                       <Text style={[styles.buttonText, styles.secondaryText]}>{refusal ? 'Ask to put on' : 'Put on'}</Text>
@@ -303,16 +304,16 @@ export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBac
         {can('cancel') && (
           <View style={{ marginTop: 28 }}>
             {!cancelling ? (
-              <Pressable onPress={() => setCancelling(true)}><Text style={[styles.link, { color: '#b42318' }]}>{refusal ? `Ask to cancel this ${word.lower}` : `Cancel this ${word.lower}`}</Text></Pressable>
+              <Pressable onPress={() => setCancelling(true)}><Text style={[styles.link, styles.linkBad]}>{refusal ? `Ask to cancel this ${word.lower}` : `Cancel this ${word.lower}`}</Text></Pressable>
             ) : (
               <View style={styles.card}>
                 <Text style={styles.label}>Why is it cancelled?</Text>
                 <TextInput style={styles.input} value={reason} onChangeText={setReason} maxLength={300} placeholder="For example, the client no longer needs it" />
                 <View style={styles.row}>
-                  <Pressable style={[styles.button, styles.grow, { marginTop: 0, backgroundColor: '#b42318' }, !reason.trim() && styles.disabled]} disabled={busy || !reason.trim()}
+                  <Pressable style={[styles.button, styles.grow, { marginTop: 0 }, styles.danger, !reason.trim() && styles.disabled]} disabled={busy || !reason.trim()}
                     onPress={() => ask(refusal ? `Ask to cancel this ${word.lower}?` : `Cancel this ${word.lower}?`, s.workerName ? `${s.workerName} comes off it.` : undefined, 'Yes', () =>
                       change('cancel', `/shifts/${shiftId}/cancel`, { reason: reason.trim() }, () => 'Cancelled.'))}>
-                    <Text style={styles.buttonText}>{refusal ? 'Ask' : 'Cancel it'}</Text>
+                    <Text style={[styles.buttonText, styles.dangerText]}>{refusal ? 'Ask' : 'Cancel it'}</Text>
                   </Pressable>
                   <Pressable style={[styles.button, styles.secondary, styles.grow, { marginTop: 0 }]} onPress={() => setCancelling(false)}>
                     <Text style={[styles.buttonText, styles.secondaryText]}>Keep it</Text>
