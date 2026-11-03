@@ -623,3 +623,11 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser or on a phone (no local sign-in in this run); API, web and app tests cover the rules, wording and every step; every test passes.
 - Next: other unheld items (push alerts for swaps come with push; a cover rule per area if wanted).
 - Waiting on David: a sentence for the worker privacy notice before any business turns swaps on (suggested in the backlog); whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; the app's Zitadel access token type (JWT); Apple's approval for iPhone builds.
+
+## 2026-11-03 evening, 6:10pm Melbourne (scheduled run)
+
+- Shipped: a client's business number follows the business's own country. The Clients pages call it ABN in Australia, NZBN in New Zealand, EIN in the USA and Company number in the UK, and each is checked the way that country writes it (ABN with the tax office's check; NZBN 13 digits starting 94 with its check digit; EIN 9 digits with a real IRS prefix; UK company numbers 8 digits, leading zeros put back, or two letters and 6 digits). A wrong one says so in plain words ("NZBN is not valid (13 digits starting 94)"). Existing ABNs are unchanged.
+- Fixed a bank-fill test that broke because its shift dates (2 to 20 November 2026) had started to pass; its shifts are now a year ahead on the same weekdays. No change to the product.
+- Not checked in a browser (no local sign-in in this run); unit and API tests cover every country; every test passes.
+- Next: other unheld items (mobile numbers stored in international form per country, without sending texts outside Australia; industry templates tagged by country).
+- Waiting on David: a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; the app's Zitadel access token type (JWT); Apple's approval for iPhone builds.

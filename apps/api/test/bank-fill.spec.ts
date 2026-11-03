@@ -96,7 +96,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('lists bank and casual staff for an open shift, ready first', async () => {
-    const s = await shift('2026-11-02');
+    const s = await shift('2027-11-01');
     const r = await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200);
     expect(r.body.candidates.map((c: { name: string; eligible: boolean }) => [c.name, c.eligible])).toEqual([
       ['Ana Example', true], ['Ben Example', true], ['Dee Example', false],
@@ -108,7 +108,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('offers to several, messages them, and books the first to accept', async () => {
-    const s = await shift('2026-11-03');
+    const s = await shift('2027-11-02');
     // Someone who isn't eligible can't be offered it.
     const no = await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, dee] }).expect(409);
     expect(no.body.message).toBe('Dee Example doesn\'t have the role Chef');
@@ -120,9 +120,9 @@ describe('bank fill: offers, first to accept is booked', () => {
     expect(again.body).toMatchObject({ offered: 0, alreadyOffered: 1, messages: 0 });
     const sent = await messages('shift_offer');
     expect(sent.map(m => [m.channel, m.to_address])).toEqual([['email', 'ana@example.com'], ['email', 'ben@example.com'], ['sms', '+61491570156']]);
-    expect(sent[0].body).toContain('Tue 3 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)');
+    expect(sent[0].body).toContain('Tue 2 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)');
     // Texts go with plain punctuation (an en dash would make the whole text Unicode, billed as twice the parts).
-    expect(sent[2].body).toContain('Tue 3 Nov, 07:00-15:30, Chef at Harbour Kitchen (Kitchen)');
+    expect(sent[2].body).toContain('Tue 2 Nov, 07:00-15:30, Chef at Harbour Kitchen (Kitchen)');
 
     const list = (await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body;
     expect(list.candidates.find((c: { workerId: string }) => c.workerId === ana).offer.status).toBe('pending');
@@ -147,7 +147,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('records a decline, expires offers and withdraws them', async () => {
-    const s = await shift('2026-11-04');
+    const s = await shift('2027-11-03');
     const o = (await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, ben], notify: false, expiresInMinutes: 30 }).expect(201)).body;
     expect(o.messages).toBe(0);
     const anaOffer = o.offers.find((x: { workerId: string }) => x.workerId === ana).id;
@@ -168,12 +168,12 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('closes offers when the shift is filled directly or cancelled', async () => {
-    const s1 = await shift('2026-11-05');
+    const s1 = await shift('2027-11-04');
     await http().post(`/shifts/${s1}/offers`).set(as('alloc')).send({ workerIds: [ana, ben], notify: false }).expect(201);
     await http().post(`/shifts/${s1}/assign`).set(as('alloc')).send({ workerId: cal }).expect(200);
     expect((await http().get(`/shifts/${s1}/offers`).set(as('alloc')).expect(200)).body.map((x: { status: string }) => x.status)).toEqual(['filled', 'filled']);
 
-    const s2 = await shift('2026-11-06');
+    const s2 = await shift('2027-11-05');
     const o = (await http().post(`/shifts/${s2}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;
     await http().post(`/shifts/${s2}/cancel`).set(as('alloc')).send({ reason: 'Closed' }).expect(200);
     expect((await http().get(`/shifts/${s2}/offers`).set(as('alloc')).expect(200)).body[0].status).toBe('withdrawn');
@@ -182,8 +182,8 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('refuses an acceptance that would double book the person', async () => {
-    const a = await shift('2026-11-09', '07:00', '15:00');
-    const b = await shift('2026-11-09', '12:00', '20:00');
+    const a = await shift('2027-11-08', '07:00', '15:00');
+    const b = await shift('2027-11-08', '12:00', '20:00');
     const oa = (await http().post(`/shifts/${a}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;
     const ob = (await http().post(`/shifts/${b}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;
     const [r1, r2] = await Promise.all([http().post(`/offers/${oa}/accept`).set(as('alloc')), http().post(`/offers/${ob}/accept`).set(as('alloc'))]);
@@ -192,7 +192,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('skips equipment-only shifts', async () => {
-    const s = (await http().post('/shifts').set(as('alloc')).send({ facilityId: site, equipmentOnly: true, date: '2026-11-10', startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
+    const s = (await http().post('/shifts').set(as('alloc')).send({ facilityId: site, equipmentOnly: true, date: '2027-11-09', startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
     expect((await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body.candidates).toEqual([]);
     await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana] }).expect(409);
   });
@@ -200,7 +200,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   it('lets people accept or decline from the link in their message, without signing in', async () => {
     process.env.APP_URL = 'https://crop.test/';
     try {
-      const s = await shift('2026-11-12');
+      const s = await shift('2027-11-11');
       await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, ben] }).expect(201);
       const sent = (await owner.query<{ channel: string; to_address: string; body: string }>(
         `select n.channel, n.to_address, n.body from notifications n where template = 'shift_offer' and body like '%https://crop.test/offer/%' order by channel, to_address`)).rows;
@@ -221,7 +221,7 @@ describe('bank fill: offers, first to accept is booked', () => {
       await http().post(`/offer-links/${'A'.repeat(43)}/accept`).expect(404);
 
       const view = (await http().get(`/offer-links/${anaTok}`).expect(200)).body;
-      expect(view).toMatchObject({ business: 'Demo Cafe', firstName: 'Ana', status: 'pending', shift: { label: 'Thu 12 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)' } });
+      expect(view).toMatchObject({ business: 'Demo Cafe', firstName: 'Ana', status: 'pending', shift: { label: 'Thu 11 Nov, 07:00–15:30, Chef at Harbour Kitchen (Kitchen)' } });
       expect(JSON.stringify(view)).not.toContain('Example'); // first name only, nothing about anyone else
       expect((await http().get(`/offer-links/${anaTok}`).expect(200)).body.status).toBe('pending'); // opening the link changes nothing
 
@@ -239,21 +239,21 @@ describe('bank fill: offers, first to accept is booked', () => {
       expect((await http().post(`/offer-links/${anaTok}/decline`).expect(409)).body.message).toBe('This offer is closed');
 
       // An expired link can't be used.
-      const s2 = await shift('2026-11-13');
+      const s2 = await shift('2027-11-12');
       await http().post(`/shifts/${s2}/offers`).set(as('alloc')).send({ workerIds: [ben], expiresInMinutes: 30 }).expect(201);
       const benTok2 = tokenIn((await owner.query<{ body: string }>(
-        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 13 Nov%'`)).rows[0].body);
+        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 12 Nov%'`)).rows[0].body);
       await owner.query(`update shift_offers set expires_at = now() - interval '1 minute' where shift_id = $1`, [s2]);
       expect((await http().get(`/offer-links/${benTok2}`).expect(200)).body.status).toBe('expired');
       expect((await http().post(`/offer-links/${benTok2}/accept`).expect(409)).body.message).toBe("This offer has expired. Contact Demo Cafe if you'd still like the shift.");
       expect((await http().post(`/offer-links/${benTok2}/decline`).expect(409)).body.message).toBe('This offer has expired');
 
       // If they can no longer be booked, they get a plain message, not the detail of their records.
-      const s3 = await shift('2026-11-16', '07:00', '15:00');
+      const s3 = await shift('2027-11-15', '07:00', '15:00');
       await http().post(`/shifts/${s3}/offers`).set(as('alloc')).send({ workerIds: [ben] }).expect(201);
       const benTok3 = tokenIn((await owner.query<{ body: string }>(
-        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Mon 16 Nov%'`)).rows[0].body);
-      const clash = await shift('2026-11-16', '10:00', '18:00');
+        `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Mon 15 Nov%'`)).rows[0].body);
+      const clash = await shift('2027-11-15', '10:00', '18:00');
       await http().post(`/shifts/${clash}/assign`).set(as('alloc')).send({ workerId: ben }).expect(200);
       expect((await http().post(`/offer-links/${benTok3}/accept`).expect(409)).body.message).toBe("You can't be booked for this shift right now. Contact Demo Cafe to sort it out.");
     } finally {
@@ -264,25 +264,25 @@ describe('bank fill: offers, first to accept is booked', () => {
   it("uses the business's words in the messages", async () => {
     await http().put('/terms').set(as('admin')).send({ terms: [{ code: 1040, singular: 'Job', plural: 'Jobs' }] }).expect(200);
     try {
-      const s = await shift('2026-11-19');
+      const s = await shift('2027-11-18');
       await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana, ben] }).expect(201);
       const sent = (await owner.query<{ channel: string; subject: string | null; body: string }>(
-        `select channel, subject, body from notifications where template = 'shift_offer' and body like '%Thu 19 Nov%' order by channel, to_address`)).rows;
-      expect(sent[0].subject).toBe('Job available: Thu 19 Nov 07:00–15:30');
+        `select channel, subject, body from notifications where template = 'shift_offer' and body like '%Thu 18 Nov%' order by channel, to_address`)).rows;
+      expect(sent[0].subject).toBe('Job available: Thu 18 Nov 07:00–15:30');
       expect(sent.find(m => m.channel === 'sms')!.body).toContain('Demo Cafe has a job for you');
       const offer = (await http().get(`/shifts/${s}/bank-fill`).set(as('alloc')).expect(200)).body.offers.find((x: { workerId: string }) => x.workerId === ana).id;
       await http().post(`/offers/${offer}/accept`).set(as('alloc')).expect(200);
-      const booked = (await owner.query<{ body: string }>(`select body from notifications where template = 'shift_booked' and channel = 'email' and body like '%Thu 19 Nov%'`)).rows[0];
+      const booked = (await owner.query<{ body: string }>(`select body from notifications where template = 'shift_booked' and channel = 'email' and body like '%Thu 18 Nov%'`)).rows[0];
       expect(booked.body).toContain("You're booked for this job:");
-      const filled = (await owner.query<{ subject: string }>(`select subject from notifications where template = 'shift_filled' and body like '%Thu 19 Nov%'`)).rows[0];
-      expect(filled.subject).toBe('Job filled: Thu 19 Nov 07:00–15:30');
+      const filled = (await owner.query<{ subject: string }>(`select subject from notifications where template = 'shift_filled' and body like '%Thu 18 Nov%'`)).rows[0];
+      expect(filled.subject).toBe('Job filled: Thu 18 Nov 07:00–15:30');
       // The offer link page gets the word, and link replies use it.
       process.env.APP_URL = 'https://crop.test';
       try {
-        const s2 = await shift('2026-11-20');
+        const s2 = await shift('2027-11-19');
         await http().post(`/shifts/${s2}/offers`).set(as('alloc')).send({ workerIds: [ben] }).expect(201);
         const body = (await owner.query<{ body: string }>(
-          `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 20 Nov%'`)).rows[0].body;
+          `select body from notifications where template = 'shift_offer' and to_address = 'ben@example.com' and body like '%Fri 19 Nov%'`)).rows[0].body;
         const token = /\/offer\/([A-Za-z0-9_-]{43})/.exec(body)![1];
         expect((await http().get(`/offer-links/${token}`).expect(200)).body.word).toEqual({ one: 'Job', lower: 'job' });
         await http().post(`/offer-links/${token}/decline`).expect(200);
@@ -328,7 +328,7 @@ describe('bank fill: offers, first to accept is booked', () => {
   });
 
   it('keeps offers to the business and never deletes them', async () => {
-    const s = await shift('2026-11-11');
+    const s = await shift('2027-11-10');
     const o = (await http().post(`/shifts/${s}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201)).body.offers[0].id;
     await http().get(`/shifts/${s}/bank-fill`).set(as('other')).expect(404);
     await http().post(`/offers/${o}/accept`).set(as('other')).expect(404);

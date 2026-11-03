@@ -8,6 +8,8 @@ import { addClient } from './actions';
 import { T, words } from '../../../lib/terms';
 import { rankChip } from '../../../lib/client-orders';
 import { ClientAllocationFields } from './client-fields';
+import { businessSettings } from '../../../lib/business';
+import { businessNumberKind, showBusinessNumber } from '../../../lib/business-number';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +17,8 @@ type ClientRow = { id: string; name: string; abn: string | null; status: string;
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
-  const [clients, agency, sp] = await Promise.all([api<ClientRow[]>('/clients'), currentAgency(), searchParams]);
+  const [clients, agency, sp, settings] = await Promise.all([api<ClientRow[]>('/clients'), currentAgency(), searchParams, businessSettings()]);
+  const bn = businessNumberKind(settings.country);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   return (
     <>
@@ -27,7 +30,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add a client</summary>
           <form action={addClient} className="form-row" style={{ marginTop: 12 }}>
             <label>Name<input name="name" required maxLength={200} /></label>
-            <label>ABN<input name="abn" maxLength={20} placeholder="11 digits" /></label>
+            <label>{bn.label}<input name="businessNumber" maxLength={20} placeholder={bn.hint} /></label>
             <label>Billing contact<input name="billingContactName" maxLength={200} /></label>
             <label>Billing email<input name="billingEmail" type="email" maxLength={200} /></label>
             <label>Phone<input name="phone" maxLength={30} /></label>
@@ -39,12 +42,12 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       <div className="card" style={{ overflowX: 'auto' }}>
         {clients.length === 0 ? <p className="muted" style={{ margin: 0 }}>No clients yet.</p> : (
           <table>
-            <thead><tr><th>Name</th><th>ABN</th><th>Facilities</th><th>Billing email</th><th>Rank</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>{bn.label}</th><th>Facilities</th><th>Billing email</th><th>Rank</th><th>Status</th></tr></thead>
             <tbody>
               {clients.map(c => (
                 <tr key={c.id}>
                   <td><Link href={`/clients/${c.id}`}>{c.name}</Link></td>
-                  <td>{c.abn ? c.abn.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4') : '—'}</td>
+                  <td>{showBusinessNumber(c.abn)}</td>
                   <td>{c.facilityCount}</td>
                   <td>{c.billingEmail ?? '—'}</td>
                   <td>{rankChip(c.rank) ? <span className="rank-chip">{rankChip(c.rank)}</span> : '—'}{c.confirmsBookings && <div className="muted small">Confirms bookings</div>}</td>
