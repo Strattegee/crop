@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import { APP_POOL } from '../database/database.module.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
-import { queueNotification } from './notify.js';
+import { queueNotification, queuePush } from './notify.js';
 import { T, wordsFor } from '../terms/words.js';
 import { queueDailyEmails } from '../dashboard/daily-email.js';
 
@@ -104,6 +104,9 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
       if (stage === 7 && it.phone) {
         await q({ channel: 'sms', to: it.phone, template: 'credential_expiry', workerId: it.workerId, dedupeKey: `${it.key}:${stage}:sms`, body: text });
       }
+      // Every stage on the phone too (free, unlike texts); nothing when they don't have the app.
+      queued += await queuePush(db, tenantId, { workerId: it.workerId, template: 'credential_expiry', dedupeKey: `${it.key}:${stage}`,
+        title: `Your ${it.what} expires ${when}`, body: `Please send your renewal to ${agency}. Open CROP to add it.` });
     }
 
     // Office digest: items reaching 30 days today or earlier (not yet reported), and items that have expired.

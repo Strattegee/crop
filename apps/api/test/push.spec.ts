@@ -9,9 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { NotificationDispatcher } from '../src/notifications/dispatcher.js';
-import { PUSH_BODY_MAX, PUSH_OFF, pushText, pushTokenProblem } from '../src/notifications/push.js';
+import { PUSH_BODY_MAX, PUSH_OFF, pushScreen, pushText, pushTokenProblem } from '../src/notifications/push.js';
+import { ExpiryReminders } from '../src/notifications/reminders.js';
 import { MemoryPush, PUSH_SENDER, pushFromEnv } from '../src/notifications/senders.js';
-import { offerMessage } from '../src/roster/bank-fill.js';
+import { bookedMessage, offerMessage } from '../src/roster/bank-fill.js';
+import { addDays } from '../src/workforce/compliance.js';
 import { rosterMessage } from '../src/roster/publishing.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
@@ -48,6 +50,21 @@ describe('push: pure rules and wording', () => {
     expect(r.push).toEqual({ title: 'Your jobs at Harbour Kitchen for the week of Mon 9 Nov', body: 'Mon 9 7:00-15:00. Open CROP to see them.' });
     const none = rosterMessage({ first: 'Ana', business: 'Demo Cafe', site: 'Harbour Kitchen', weekStart: '2026-11-09', updated: true, shifts: [] });
     expect(none.push.body).toBe('You no longer have any shifts at Harbour Kitchen that week.');
+  });
+
+  it('opens the right screen of the app when tapped', () => {
+    expect(pushScreen('shift_offer')).toBe('offers');
+    expect(pushScreen('shift_booked')).toBe('shifts');
+    expect(pushScreen('roster_published')).toBe('shifts');
+    expect(pushScreen('shift_swap_asked')).toBe('shifts');
+    expect(pushScreen('credential_expiry')).toBe('credentials');
+    expect(pushScreen('welcome')).toBeNull();
+  });
+
+  it('words a booking for the app', () => {
+    const shift = { localDate: '2026-11-09', localStart: '07:00', localEnd: '15:00', role: 'Chef', facilityName: 'Harbour Kitchen', areaName: null };
+    const b = bookedMessage('Ana', 'Demo Cafe', shift as never, makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }]));
+    expect(b.push).toEqual({ title: "You're booked: Mon 9 Nov 07:00–15:00", body: 'Demo Cafe: Mon 9 Nov, 07:00–15:00, Chef at Harbour Kitchen. Open CROP to see your jobs.' });
   });
 
   it('stays off until switched on', () => {
@@ -167,6 +184,44 @@ describe('push: phones, queueing and sending', () => {
     expect(rows.find(p => p.to_address === TOKEN_A)!.status).toBe('sent');
     expect(rows.find(p => p.to_address === TOKEN_B)).toMatchObject({ status: 'failed', last_error: 'This phone no longer receives CROP notifications' });
     expect((await devices()).find(d => d.token === TOKEN_B && d.removed_reason === 'not_registered')).toBeTruthy();
+    // Tapping it opens their offers in this business.
+    expect(push.sent.find(m => m.to === TOKEN_A)!.data).toEqual({ tenant: 'cafe', screen: 'offers' });
+  });
+
+  it("tells their phone they're booked when the office records a yes, but not when they said yes in the app", async () => {
+    const offerFor = async (shiftId: string) => (await owner.query<{ id: string }>(
+      'select id from shift_offers where shift_id = $1 and worker_id = $2', [shiftId, ana])).rows[0].id;
+    const first = (await owner.query<{ shift_id: string }>(`select shift_id from shift_offers where worker_id = $1`, [ana])).rows[0].shift_id;
+    await http().post(`/offers/${await offerFor(first)}/accept`).set(as('alloc')).expect(200);
+    const booked = (await pushRows()).filter(p => p.template === 'shift_booked');
+    expect(booked).toHaveLength(1);
+    expect(booked[0]).toMatchObject({ to_address: TOKEN_A });
+    expect(booked[0].subject).toMatch(/^You're booked: /);
+    await dispatcher.runOnce();
+    expect(push.sent.at(-1)!.data).toEqual({ tenant: 'cafe', screen: 'shifts' });
+
+    const second = (await http().post('/shifts').set(as('alloc')).send({ facilityId: site, areaId: area, role: 'Chef', date: ahead(9), startTime: '07:00', endTime: '15:00' }).expect(201)).body.ids[0];
+    await http().post(`/shifts/${second}/offers`).set(as('alloc')).send({ workerIds: [ana], notify: false }).expect(201);
+    await http().post(`/my/offers/${await offerFor(second)}/accept`).set(as('ana')).expect(200);
+    expect((await pushRows()).filter(p => p.template === 'shift_booked')).toHaveLength(1);
+  });
+
+  it('reminds their phone at every stage before a credential runs out', async () => {
+    const now = new Date(); // midnight UTC is 10 or 11am in Melbourne, after reminders start
+    now.setUTCHours(0, 0, 0, 0);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(now);
+    const type = (await owner.query<{ id: string }>(`insert into credential_types(tenant_id, name, category) values ($1,'Food Safety Supervisor','training') returning id`, [cafe])).rows[0].id;
+    await owner.query(`insert into worker_credentials(tenant_id, worker_id, credential_type_id, expiry_date, verification) values ($1,$2,$3,$4,'verified')`,
+      [cafe, ana, type, addDays(today, 25)]);
+    const reminders = app.get(ExpiryReminders);
+    await reminders.runOnce(now);
+    await reminders.runOnce(now); // again the same day: nothing new
+    const rows = (await pushRows()).filter(p => p.template === 'credential_expiry');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].subject).toMatch(/^Your Food Safety Supervisor expires on /);
+    expect(rows[0].body).toBe('Please send your renewal to Demo Cafe. Open CROP to add it.');
+    await dispatcher.runOnce();
+    expect(push.sent.at(-1)!.data).toEqual({ tenant: 'cafe', screen: 'credentials' });
   });
 
   it('tells their phone when the roster is published, and stops after sign-out', async () => {

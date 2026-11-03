@@ -12,7 +12,8 @@ export interface SmsMessage { to: string; body: string; reference: string }
 
 export interface EmailSender { readonly configured: boolean; send(m: EmailMessage): Promise<{ id: string }> }
 export interface SmsSender { readonly configured: boolean; send(m: SmsMessage): Promise<{ id: string }> }
-export interface PushMessage { to: string; title: string; body: string; reference: string }
+/** `data` travels with the notification to the app: which business and screen to open when it is tapped. */
+export interface PushMessage { to: string; title: string; body: string; reference: string; data?: { tenant: string; screen: string | null } }
 export interface PushSender { readonly configured: boolean; send(m: PushMessage): Promise<{ id: string }> }
 
 export const EMAIL_SENDER = Symbol('EMAIL_SENDER');
@@ -102,7 +103,7 @@ export class ExpoPush implements PushSender {
           accept: 'application/json', 'content-type': 'application/json',
           ...(this.accessToken ? { authorization: `Bearer ${this.accessToken}` } : {}),
         },
-        body: JSON.stringify({ to: m.to, title: m.title, body: m.body, sound: 'default', data: { ref: m.reference } }),
+        body: JSON.stringify({ to: m.to, title: m.title, body: m.body, sound: 'default', data: { ref: m.reference, ...m.data } }),
         signal: AbortSignal.timeout(15000),
       });
     } catch (err) {

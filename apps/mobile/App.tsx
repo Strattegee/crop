@@ -9,7 +9,8 @@ import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config'
 import { AvailabilityTab } from './src/AvailabilityTab';
 import { CredentialsTab } from './src/CredentialsTab';
 import { ManagerHome } from './src/ManagerHome';
-import { forgetPush, registerForPush } from './src/push';
+import { forgetPush, onPushTap, registerForPush } from './src/push';
+import { tapTarget, type PushTap } from './src/push-rules';
 import { SwapPicker, SwapsList } from './src/SwapsSection';
 import { canSwap, type MySwap, type SwapMode } from './src/swaps';
 import { roleOf, startMode, type Mode } from './src/manager';
@@ -32,6 +33,9 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A tapped notification (raw data until we know which businesses they belong to), then where it should open.
+  const [tapped, setTapped] = useState<{ data: unknown } | null>(null);
+  const [open, setOpen] = useState<(PushTap & { n: number }) | null>(null);
 
   const discovery = AuthSession.useAutoDiscovery(AUTH_ISSUER);
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
@@ -61,6 +65,19 @@ export default function App() {
   useEffect(() => {
     loadSession().then(s => (s ? start() : setPhase('signedOut')));
   }, [start]);
+
+  useEffect(() => onPushTap(data => setTapped({ data })), []);
+
+  // Once signed in: a tap opens its business (if they still belong to it) at the tab CROP named.
+  useEffect(() => {
+    if (!tapped || !me) return;
+    setTapped(null);
+    const target = tapTarget(tapped.data, businessesOf(me).map(b => b.slug));
+    if (!target) return;
+    setTenant(target.tenant);
+    setPhase('ready');
+    setOpen(o => ({ ...target, n: (o?.n ?? 0) + 1 }));
+  }, [tapped, me]);
 
   useEffect(() => {
     if (response?.type !== 'success' || !request?.codeVerifier || !discovery) {
@@ -111,7 +128,7 @@ export default function App() {
         </ScrollView>
       )}
       {phase === 'ready' && tenant && me && (
-        <Ready key={tenant} tenant={tenant} me={me} onSwitch={() => setPhase('choose')} onSignOut={out} onSignedOut={() => setPhase('signedOut')} />
+        <Ready key={tenant} tenant={tenant} me={me} open={open?.tenant === tenant ? open : null} onSwitch={() => setPhase('choose')} onSignOut={out} onSignedOut={() => setPhase('signedOut')} />
       )}
     </SafeAreaView>
   );
@@ -121,8 +138,8 @@ export default function App() {
  * One app for everyone (David, 29 Oct): owners, admins and allocators open in manager mode; workers see their own
  * shifts. A manager who is also rostered (their sign-in is linked to a person in the business) can switch between the two.
  */
-function Ready({ tenant, me, onSwitch, onSignOut, onSignedOut }: {
-  tenant: string; me: Me; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
+function Ready({ tenant, me, open, onSwitch, onSignOut, onSignedOut }: {
+  tenant: string; me: Me; open: (PushTap & { n: number }) | null; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
 }) {
   const role = roleOf(me, tenant);
   const [mode, setMode] = useState<Mode>(startMode(role));
@@ -141,16 +158,21 @@ function Ready({ tenant, me, onSwitch, onSignOut, onSignedOut }: {
     api('/my', { tenant }).then(() => setLinked(true), () => setLinked(false));
   }, [tenant, mode]);
 
+  // Notifications are about the person's own shifts, offers and credentials: a manager who taps one sees their own side.
+  useEffect(() => {
+    if (open?.screen) setMode('worker');
+  }, [open]);
+
   if (mode === 'manager' && role) {
     return <ManagerHome tenant={tenant} business={business} role={role} onMyShifts={linked ? () => setMode('worker') : null}
       switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut} />;
   }
-  return <Home tenant={tenant} switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut}
+  return <Home tenant={tenant} open={open} switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut}
     onManager={startMode(role) === 'manager' ? () => setMode('manager') : null} />;
 }
 
-function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager }: {
-  tenant: string; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void; onManager: (() => void) | null;
+function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onManager }: {
+  tenant: string; open: (PushTap & { n: number }) | null; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void; onManager: (() => void) | null;
 }) {
   const [tab, setTab] = useState<'shifts' | 'offers' | 'availability' | 'credentials'>('shifts');
   const [my, setMy] = useState<My | null>(null);
@@ -197,6 +219,13 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
   useEffect(() => {
     load();
   }, [load]);
+
+  // A tapped notification: show its tab with fresh data (the offer or booking it is about may be new).
+  useEffect(() => {
+    if (!open) return;
+    if (open.screen) setTab(open.screen);
+    void load();
+  }, [open, load]);
 
   const reply = async (offer: MyOffer, answer: 'accept' | 'decline') => {
     setBusy(true);

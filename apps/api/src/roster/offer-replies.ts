@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import { queueNotification } from '../notifications/notify.js';
+import { queueNotification, queuePush } from '../notifications/notify.js';
 import { T, wordsFor } from '../terms/words.js';
 import { bookedMessage, filledMessage, offerState } from './bank-fill.js';
 import { eligibilityForShift } from './eligibility-data.js';
@@ -62,6 +62,8 @@ export async function acceptOffer(db: PoolClient, tenant: { tenantId: string; te
   const b = bookedMessage(me.first, tenantName, s, words);
   if (me.email) await queueNotification(db, tenantId, { channel: 'email', to: me.email, template: 'shift_booked', subject: b.subject, body: b.email, workerId: ref.worker_id, dedupeKey: `offer:${offerId}:booked:email`, createdBy: by });
   if (me.phone) await queueNotification(db, tenantId, { channel: 'sms', to: me.phone, template: 'shift_booked', body: b.sms, workerId: ref.worker_id, dedupeKey: `offer:${offerId}:booked:sms`, createdBy: by });
+  // A phone notification too, unless they said yes in the app itself.
+  if (via !== 'app') await queuePush(db, tenantId, { workerId: ref.worker_id, template: 'shift_booked', ...b.push, dedupeKey: `offer:${offerId}:booked`, createdBy: by });
   // Let the others know by email (no SMS: it costs, and they can see it's gone when they ask).
   for (const w of others) {
     const c = who.get(w)!;

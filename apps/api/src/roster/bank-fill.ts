@@ -68,6 +68,7 @@ export function bookedMessage(firstName: string, business: string, s: OfferShift
     subject: `You're booked: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`,
     email: `Hi ${firstName},\n\nYou're booked for this ${w.lower(T.shift)}:\n\n${what}\n\nThanks,\n${business}`,
     sms: `Hi ${firstName}, you're booked: ${what}. Thanks, ${business}`,
+    push: { title: `You're booked: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`, body: `${business}: ${what}. Open CROP to see your ${w.lower(T.shift, true)}.` },
   };
 }
 

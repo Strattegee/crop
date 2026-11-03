@@ -39,3 +39,16 @@ export async function forgetPush(): Promise<void> {
     await api('/push-devices/remove', { method: 'POST', tenant, body: { token } }).catch(() => undefined);
   }
 }
+
+/**
+ * Calls `onTap` with the data of a notification the person tapped: the one that opened the app (once) and any
+ * tapped while it is open. Returns a function that stops listening.
+ */
+export function onPushTap(onTap: (data: unknown) => void): () => void {
+  let live = true;
+  Notifications.getLastNotificationResponseAsync()
+    .then(r => { if (live && r) onTap(r.notification.request.content.data); })
+    .catch(() => undefined);
+  const sub = Notifications.addNotificationResponseReceivedListener(r => onTap(r.notification.request.content.data));
+  return () => { live = false; sub.remove(); };
+}
