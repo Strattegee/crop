@@ -7,6 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { normaliseAbn } from '../src/clients/abn.js';
+import { BUSINESS_NUMBER, businessNumberProblem, gs1CheckDigit, normaliseBusinessNumber } from '../src/clients/business-number.js';
 import { configureApp } from '../src/configure.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -15,6 +16,33 @@ describe('ABN check', () => {
     expect(normaliseAbn('51 824 753 556')).toBe('51824753556'); // ATO's published example
     expect(normaliseAbn('51824753557')).toBeNull();
     expect(normaliseAbn('1234')).toBeNull();
+  });
+});
+
+describe('business number per country', () => {
+  it('checks each country the way it writes its numbers', () => {
+    expect(normaliseBusinessNumber('AU', '51 824 753 556')).toBe('51824753556');
+    expect(normaliseBusinessNumber('AU', '51824753557')).toBeNull();
+    // NZBN: 13 digits starting 94 with a GS1 check digit (invented number).
+    const nz = '942904123456' + gs1CheckDigit('942904123456');
+    expect(normaliseBusinessNumber('NZ', ` ${nz.slice(0, 4)} ${nz.slice(4)} `)).toBe(nz);
+    expect(normaliseBusinessNumber('NZ', nz.slice(0, 12) + ((Number(nz[12]) + 1) % 10))).toBeNull();
+    expect(normaliseBusinessNumber('NZ', '51824753556')).toBeNull();
+    // EIN: 9 digits, dash optional, never an unused IRS prefix.
+    expect(normaliseBusinessNumber('US', '12-3456789')).toBe('123456789');
+    expect(normaliseBusinessNumber('US', '07-3456789')).toBeNull();
+    expect(normaliseBusinessNumber('US', '1234567')).toBeNull();
+    // Companies House: 8 digits (leading zeros put back) or two letters and 6 digits.
+    expect(normaliseBusinessNumber('GB', '1234567')).toBe('01234567');
+    expect(normaliseBusinessNumber('GB', 'sc 123456')).toBe('SC123456');
+    expect(normaliseBusinessNumber('GB', 'R0123456')).toBe('R0123456');
+    expect(normaliseBusinessNumber('GB', 'ABC12345')).toBeNull();
+    expect(normaliseBusinessNumber('GB', '0')).toBeNull();
+  });
+
+  it('says what each country calls it', () => {
+    expect(BUSINESS_NUMBER.NZ.label).toBe('NZBN');
+    expect(businessNumberProblem('US')).toBe('EIN is not valid (9 digits, like 12-3456789)');
   });
 });
 
@@ -105,6 +133,14 @@ describe('clients, facilities and areas', () => {
     expect((await http().get('/settings').set(as('admin')).expect(200)).body).toMatchObject({ country: 'NZ', timezone: 'Pacific/Auckland' });
     const nz = await http().post('/facilities').set(as('admin')).send({ name: 'Auckland Kitchen', state: 'Auckland', postcode: '1010' }).expect(201);
     expect(nz.body).toMatchObject({ country: 'NZ', state: 'Auckland', timezone: 'Pacific/Auckland' });
+    // Clients' business numbers now follow New Zealand's form (NZBN); an ABN is refused with the right words.
+    const bad = await http().post('/clients').set(as('admin')).send({ name: 'Kiwi Kitchens', businessNumber: '51 824 753 556' }).expect(400);
+    expect(bad.body.message).toBe('NZBN is not valid (13 digits starting 94)');
+    const nzbn = '942904123456' + gs1CheckDigit('942904123456');
+    const kiwi = await http().post('/clients').set(as('admin')).send({ name: 'Kiwi Kitchens', businessNumber: nzbn }).expect(201);
+    expect(kiwi.body).toMatchObject({ businessNumber: nzbn, abn: nzbn });
+    const cleared = await http().patch(`/clients/${kiwi.body.id}`).set(as('admin')).send({ businessNumber: null }).expect(200);
+    expect(cleared.body.businessNumber).toBeNull();
     // Moving a site to another country clears the old state and postcode and moves the time zone.
     const moved = await http().patch(`/facilities/${la.body.id}`).set(as('admin')).send({ country: 'AU', state: 'WA' }).expect(200);
     expect(moved.body).toMatchObject({ country: 'AU', state: 'WA', postcode: null, timezone: 'Australia/Perth' });

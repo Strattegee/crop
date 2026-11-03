@@ -9,7 +9,7 @@ const LABELS: Record<string, string> = {
   roles: 'Roles', forRoles: 'Roles it’s for', notes: 'Notes', status: 'Status', name: 'Name', category: 'Category', timezone: 'Time zone',
   credentialTypeId: 'Credential', number: 'Number', issuedBy: 'Issued by', issueDate: 'Issue date', expiryDate: 'Expiry date',
   reason: 'Reason', note: 'Note', role: 'Role', scope: 'Applies to', severity: 'Level',
-  verificationMethod: 'How it is verified', abn: 'ABN', billingContactName: 'Billing contact', billingEmail: 'Billing email',
+  verificationMethod: 'How it is verified', abn: 'Business number', businessNumber: 'Business number', billingContactName: 'Billing contact', billingEmail: 'Billing email',
   addressLine: 'Address', suburb: 'Suburb', state: 'State', postcode: 'Postcode', clientId: 'Client', specialty: 'Specialty',
   parkingNotes: 'Parking notes', entryNotes: 'Entry notes',
   citizenProofType: 'Proof of citizenship', documentNumber: 'Document number', visaType: 'Visa type', visaSubclass: 'Visa subclass',

@@ -7,18 +7,26 @@ import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, email, int, oneOf, text } from '../common/validate.js';
 import { parseContact } from './client-orders.js';
 import { APP_POOL } from '../database/database.module.js';
-import { normaliseAbn } from './abn.js';
+import { businessNumberProblem, normaliseBusinessNumber } from './business-number.js';
+import { loadSettings } from '../workforce/settings.js';
+import type { PoolClient } from 'pg';
 
 const STATUSES = ['active', 'on_hold', 'inactive'] as const;
-const COLS = `c.id, c.name, c.abn, c.status, c.billing_contact_name as "billingContactName", c.billing_email as "billingEmail",
+const COLS = `c.id, c.name, c.abn, c.abn as "businessNumber", c.status, c.billing_contact_name as "billingContactName", c.billing_email as "billingEmail",
   c.phone, c.notes, c.confirms_bookings as "confirmsBookings", c.rank, c.created_at as "createdAt"`;
 
-function abn(body: Record<string, unknown>): string | null | undefined {
-  if (!body || !('abn' in body)) return undefined;
-  const v = text(body, 'abn', { max: 20 });
+/**
+ * The business number sent (`businessNumber`, or `abn` as before), checked against the business's own country's form:
+ * undefined when not sent, null when cleared. Read inside the transaction so the country is the business's.
+ */
+async function businessNumber(db: PoolClient, tenantId: string, body: Record<string, unknown>): Promise<string | null | undefined> {
+  const key = body && 'businessNumber' in body ? 'businessNumber' : body && 'abn' in body ? 'abn' : null;
+  if (!key) return undefined;
+  const v = text(body, key, { max: 20 });
   if (v === null) return null;
-  const n = normaliseAbn(v);
-  if (!n) throw new BadRequestException('ABN is not valid (11 digits)');
+  const { country } = await loadSettings(db, tenantId);
+  const n = normaliseBusinessNumber(country, v);
+  if (!n) throw new BadRequestException(businessNumberProblem(country));
   return n;
 }
 
@@ -56,14 +64,16 @@ export class ClientsController {
   @Roles('owner', 'admin')
   @Post('clients')
   create(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
-    const values = [t.tenantId, text(body, 'name', { required: true, max: 200 }), abn(body) ?? null,
+    const values = [t.tenantId, text(body, 'name', { required: true, max: 200 }), null,
       text(body, 'billingContactName', { max: 200 }), email(body, 'billingEmail'), text(body, 'phone', { max: 30 }), text(body, 'notes', { max: 2000 }),
       bool(body, 'confirmsBookings') ?? false, int(body, 'rank', 1, 7)];
-    return withTenant(this.pool, t.tenantId, async db =>
-      (await db.query(
+    return withTenant(this.pool, t.tenantId, async db => {
+      values[2] = (await businessNumber(db, t.tenantId, body)) ?? null;
+      return (await db.query(
         `insert into clients as c (tenant_id, name, abn, billing_contact_name, billing_email, phone, notes, confirms_bookings, rank)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${COLS}`, values,
-      ).catch(duplicate)).rows[0]);
+      ).catch(duplicate)).rows[0];
+    });
   }
 
   @Roles(...OFFICE_ROLES)
@@ -86,8 +96,8 @@ export class ClientsController {
   @Patch('clients/:id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const has = (k: string) => Boolean(body && k in body);
-    const a = abn(body);
     return withTenant(this.pool, t.tenantId, async db => {
+      const a = await businessNumber(db, t.tenantId, body);
       const row = (await db.query(
         `update clients as c set
            name = coalesce($2, name), status = coalesce($3::client_status, status),
