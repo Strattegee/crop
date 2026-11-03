@@ -6,7 +6,8 @@ import { Notices } from '../notices';
 import { addWorker } from './actions';
 import { EMPLOYMENT_LABEL } from './[id]/employment-card';
 import { T, words } from '../../../lib/terms';
-import { businessZone, todayIn } from '../../../lib/business';
+import { businessSettings, businessZone, todayIn } from '../../../lib/business';
+import { mobileExample, showMobile } from '../../../lib/phone';
 import type { CardData } from '../../../lib/person-card';
 import { PersonCard } from './person-card';
 import { RolePicker } from './role-picker';
@@ -38,6 +39,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   ]);
   const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
   const today = todayIn(await businessZone());
+  const country = (await businessSettings()).country;
   // Cards by default (David, 31 Oct: the employee card); the table is still there as a list.
   const asList = p.show === 'list';
   const showHref = (show?: string) => {
@@ -61,7 +63,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           <label>First name<input name="firstName" required maxLength={100} /></label>
           <label>Last name<input name="lastName" required maxLength={100} /></label>
           <label>Email<input name="email" type="email" maxLength={200} /></label>
-          <label>Mobile<input name="phone" maxLength={30} /></label>
+          <label>Mobile<input name="phone" maxLength={30} inputMode="tel" placeholder={mobileExample(country)} /></label>
           <label>Gender <span className="muted">(optional)</span>
             <select name="gender" defaultValue="">
               <option value="">Not recorded</option>
@@ -146,7 +148,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
                   <td>{w.roles.join(', ') || '—'}</td>
                   <td>{w.employmentType ? <>{EMPLOYMENT_LABEL[w.employmentType] ?? w.employmentType}{w.contractedHours !== null && <span className="muted"> · {w.contractedHours} h</span>}</>
                     : w.leftOn ? <span className="muted">Left {leftDate(w.leftOn)}</span> : <span className="muted">—</span>}</td>
-                  <td>{w.email ?? ''}{w.email && w.phone ? <br /> : null}{w.phone ?? ''}</td>
+                  <td>{w.email ?? ''}{w.email && w.phone ? <br /> : null}{showMobile(w.phone, country)}</td>
                   <td style={{ textTransform: 'capitalize' }}>{w.status}</td>
                   <td>
                     <Badge label={COMPLIANCE_LABEL[w.compliance]} />

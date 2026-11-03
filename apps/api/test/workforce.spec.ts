@@ -219,4 +219,29 @@ describe('workers, credentials and compliance', () => {
     history = await http().get(`${base}/${c.id}/history`).set(as('alloc')).expect(200);
     expect(history.body.map((e: { action: string }) => e.action)).toEqual(['created', 'verified', 'updated', 'updated', 'verification_reset']);
   });
+
+  it("stores mobiles in international form, read the way the business's country writes them", async () => {
+    const au = (await http().post('/workers').set(as('alloc')).send({ firstName: 'Mo', lastName: 'Bile', phone: '0412 345 678' }).expect(201)).body;
+    expect(au.phone).toBe('+61412345678');
+    // Found by the number as the office would type it.
+    expect((await http().get('/workers?search=0412 345').set(as('alloc')).expect(200)).body.map((w: { id: string }) => w.id)).toEqual([au.id]);
+    const bad = await http().post('/workers').set(as('alloc')).send({ firstName: 'No', lastName: 'Mobile', phone: '03 9000 0000' }).expect(400);
+    expect(bad.body.message).toBe('Mobile is not a mobile number (for example 0412 345 678, or start with + and the country code)');
+    // A New Zealander working here, typed with +64.
+    expect((await http().patch(`/workers/${au.id}`).set(as('alloc')).send({ phone: '+64 21 123 4567' }).expect(200)).body.phone).toBe('+64211234567');
+    expect((await http().patch(`/workers/${au.id}`).set(as('alloc')).send({ phone: '' }).expect(200)).body.phone).toBeNull();
+    // A number saved before 3 Nov in another form can be sent back unchanged (the details form sends every field).
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    await owner.query(`update workers set phone = '03 9000 0000' where id = $1`, [au.id]);
+    await owner.end();
+    expect((await http().patch(`/workers/${au.id}`).set(as('alloc')).send({ firstName: 'Mo', phone: '03 9000 0000' }).expect(200)).body.phone).toBe('03 9000 0000');
+    await http().patch(`/workers/${au.id}`).set(as('alloc')).send({ phone: '03 9000 0001' }).expect(400);
+    // A New Zealand business reads 021 numbers as its own.
+    await http().patch('/settings').set(as('other')).send({ country: 'NZ', timezone: 'Pacific/Auckland' }).expect(200);
+    const nz = await http().post('/workers').set(as('other')).send({ firstName: 'Kiri', lastName: 'Example', phone: '021 123 4567' }).expect(201);
+    expect(nz.body.phone).toBe('+64211234567');
+    const nzBad = await http().post('/workers').set(as('other')).send({ firstName: 'Aus', lastName: 'Example', phone: '0412 345 678' }).expect(400);
+    expect(nzBad.body.message).toContain('021 123 4567');
+  });
 });

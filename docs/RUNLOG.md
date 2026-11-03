@@ -631,3 +631,11 @@ Newest first. One entry per working session or scheduled run.
 - Not checked in a browser (no local sign-in in this run); unit and API tests cover every country; every test passes.
 - Next: other unheld items (mobile numbers stored in international form per country, without sending texts outside Australia; industry templates tagged by country).
 - Waiting on David: a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; the app's Zitadel access token type (JWT); Apple's approval for iPhone builds.
+
+## 2026-11-03 evening, 9:10pm Melbourne (scheduled run)
+
+- Shipped: staff mobile numbers by country. The Mobile box takes numbers the way the business's country writes them (0412 345 678 in Australia, 021 123 4567 in New Zealand, (212) 555-0123 in the USA, 07700 900123 in the UK), or with + and the country code for someone from another of those countries, and saves them in international form. A number that isn't a mobile is refused with the country's own example. Lists and the person's page show the local form (or the code for an overseas number), and searching people by "0412 345" still finds them. Numbers saved earlier are left as they are and still save unchanged.
+- Texts still go only to Australian mobiles; an overseas mobile is logged as "Texts outside Australia are not switched on yet".
+- Not checked in a browser (no local sign-in in this run); unit and API tests cover every country, refusals, older numbers and search; every test passes.
+- Next: other unheld items (industry templates tagged by country; a cover rule per area if wanted).
+- Waiting on David: sending texts outside Australia (cost and a sender per country); a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; the app's Zitadel access token type (JWT); Apple's approval for iPhone builds.

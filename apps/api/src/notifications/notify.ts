@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
-import { auMobile } from './phone.js';
+import type { CountryCode } from '../common/countries.js';
+import { parseMobile, smsRefusal } from './phone.js';
 import { smsText } from './sms-text.js';
 
 export interface NewNotification {
@@ -27,7 +28,7 @@ export type QueueResult = { id: string; status: 'queued' | 'skipped'; reason?: s
 
 /**
  * Queues a message (inside withTenant). The background sender delivers it.
- * - SMS numbers must be Australian mobiles.
+ * - SMS numbers must be mobiles (read in the business's country's form); texts go to Australian mobiles only for now.
  * - Over the agency's monthly SMS limit, the message is logged as skipped instead of sent (NOT-4).
  * - SMS text is tidied first (`smsText`: plain punctuation), so a stray en dash doesn't make it Unicode and cost double.
  * - A dedupeKey that was used before means the message was already queued, so nothing happens.
@@ -42,12 +43,14 @@ export async function queueNotification(db: PoolClient, tenantId: string, n: New
     reason = 'Demo person (example address): not sent';
   }
   if (n.channel === 'sms') {
-    const mobile = auMobile(to);
-    if (!mobile) {
+    const country = (await db.query<{ country: CountryCode }>('select country from tenant_settings where tenant_id = $1', [tenantId])).rows[0]?.country ?? 'AU';
+    const mobile = parseMobile(country, to);
+    if (mobile) to = mobile.e164;
+    const refusal = smsRefusal(mobile);
+    if (refusal) {
       status = 'skipped';
-      reason = 'Not an Australian mobile number';
+      reason = refusal;
     } else {
-      to = mobile;
       const cap = (await db.query<{ sms_monthly_cap: number }>('select sms_monthly_cap from tenant_settings where tenant_id = $1', [tenantId])).rows[0]?.sms_monthly_cap ?? 2000;
       const used = (await db.query<{ n: number }>(`select count(*)::int as n from notifications where channel = 'sms' and status <> 'skipped' and ${SMS_MONTH}`, [tenantId])).rows[0].n;
       if (used >= cap) {
