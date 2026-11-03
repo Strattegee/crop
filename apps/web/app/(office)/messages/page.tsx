@@ -65,7 +65,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
               {log.messages.map(m => (
                 <tr key={m.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{when(m.createdAt)}</td>
-                  <td>{m.channel === 'sms' ? 'Text' : 'Email'} · {templateName(m.template)}</td>
+                  <td>{m.channel === 'sms' ? 'Text' : m.channel === 'push' ? 'App' : 'Email'} · {templateName(m.template)}</td>
                   <td>{m.workerName ? <>{m.workerName}<br /></> : null}<span className="muted">{m.to}</span></td>
                   <td style={{ maxWidth: 360 }}>{m.subject && <strong>{m.subject}<br /></strong>}<span className="muted">{m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body}</span>
                     {m.smsParts !== undefined && <div className="muted" style={{ fontSize: 12 }}>{smsPartsLine(m.smsParts, m.smsUnicode)}</div>}</td>

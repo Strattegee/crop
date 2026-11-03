@@ -33,6 +33,8 @@ export class NotificationsController {
            from notifications n left join workers w on w.id = n.worker_id
           order by n.created_at desc limit $1`, [limit],
       )).rows.map(r => {
+        // A phone's push token is never shown: the log just says it went to the app.
+        if (r.channel === 'push') return { ...r, to: 'CROP app' };
         if (r.channel !== 'sms') return r;
         const size = smsSize(r.body);
         // How the text is billed: parts, and when it went as Unicode, the characters that made it so.

@@ -9,6 +9,7 @@ import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config'
 import { AvailabilityTab } from './src/AvailabilityTab';
 import { CredentialsTab } from './src/CredentialsTab';
 import { ManagerHome } from './src/ManagerHome';
+import { forgetPush, registerForPush } from './src/push';
 import { SwapPicker, SwapsList } from './src/SwapsSection';
 import { canSwap, type MySwap, type SwapMode } from './src/swaps';
 import { roleOf, startMode, type Mode } from './src/manager';
@@ -76,6 +77,7 @@ export default function App() {
   }, [response, request, discovery, start]);
 
   const out = async () => {
+    await forgetPush();
     await signOut();
     setMe(null);
     setTenant(null);
@@ -127,6 +129,11 @@ function Ready({ tenant, me, onSwitch, onSignOut, onSignedOut }: {
   const [linked, setLinked] = useState(false);
   const switchable = me.memberships.length > 1;
   const business = me.memberships.find(m => m.tenantSlug === tenant)?.tenantName ?? '';
+
+  useEffect(() => {
+    // Push for this business (offers, swaps, published rosters); quietly nothing if the phone says no.
+    void registerForPush(tenant);
+  }, [tenant]);
 
   useEffect(() => {
     if (mode !== 'manager') return;

@@ -1,10 +1,11 @@
 import type { PoolClient } from 'pg';
 import type { CountryCode } from '../common/countries.js';
 import { parseMobile, smsRefusal } from './phone.js';
+import { pushText } from './push.js';
 import { smsText } from './sms-text.js';
 
 export interface NewNotification {
-  channel: 'email' | 'sms';
+  channel: 'email' | 'sms' | 'push';
   to: string;
   template: string;
   subject?: string;
@@ -68,4 +69,35 @@ export async function queueNotification(db: PoolClient, tenantId: string, n: New
   )).rows[0];
   if (!row) return { id: null, status: 'duplicate' };
   return reason ? { id: row.id, status, reason } : { id: row.id, status };
+}
+
+export interface NewPush {
+  /** The person the message is about and for; it goes to every phone where their sign-in has the CROP app. */
+  workerId: string;
+  template: string;
+  title: string;
+  body: string;
+  /** Required: one message per phone, never twice (the phone's id is added). */
+  dedupeKey: string;
+  createdBy?: string | null;
+}
+
+/**
+ * Queues a push message to each phone where this person's sign-in has the CROP app (inside withTenant).
+ * Nobody with the app = nothing queued. Returns how many were queued.
+ */
+export async function queuePush(db: PoolClient, tenantId: string, p: NewPush): Promise<number> {
+  const devices = (await db.query<{ id: string; token: string }>(
+    `select d.id, d.token from push_devices d join workers w on w.user_id = d.user_id and w.tenant_id = d.tenant_id
+      where w.id = $1 and d.removed_at is null order by d.created_at`, [p.workerId])).rows;
+  const t = pushText(p.title, p.body);
+  let n = 0;
+  for (const d of devices) {
+    const r = await queueNotification(db, tenantId, {
+      channel: 'push', to: d.token, template: p.template, subject: t.title, body: t.body,
+      workerId: p.workerId, dedupeKey: `${p.dedupeKey}:push:${d.id}`, createdBy: p.createdBy ?? null,
+    });
+    if (r.status !== 'duplicate') n++;
+  }
+  return n;
 }

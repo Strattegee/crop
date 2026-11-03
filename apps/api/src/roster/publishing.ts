@@ -106,5 +106,12 @@ export function rosterMessage(o: {
   const sms = o.shifts.length
     ? `${o.business}: ${o.updated ? `your ${shifts} have changed. Now` : `your ${shifts}`} at ${o.site}, wk of ${week}: ${listed}${more}.`
     : `${o.business}: you no longer have ${shifts} at ${o.site} in the week of ${week}.`;
-  return { subject, email, sms };
+  // Push to the app: the list in short, then where to see it all.
+  const push = {
+    title: subject,
+    body: o.shifts.length
+      ? `${listed}${o.shifts.length > 5 ? ` +${o.shifts.length - 5} more` : ''}. Open CROP to see them.`
+      : `You no longer have any ${shifts} at ${o.site} that week.`,
+  };
+  return { subject, email, sms, push };
 }

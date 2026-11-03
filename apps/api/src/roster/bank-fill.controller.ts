@@ -6,7 +6,7 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, int } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
-import { queueNotification } from '../notifications/notify.js';
+import { queueNotification, queuePush } from '../notifications/notify.js';
 import { wordsFor } from '../terms/words.js';
 import { BANK_FILL_TYPES, newOfferLink, offerLinkUrl, offerMessage, offerState, type OfferShift } from './bank-fill.js';
 import { eligibilityForShift, rankCandidates } from './eligibility-data.js';
@@ -144,6 +144,7 @@ export class BankFillController {
               workerId: o.worker_id, dedupeKey: `offer:${o.id}:sms`, createdBy: auth.userId });
             messages++;
           }
+          messages += await queuePush(db, t.tenantId, { workerId: o.worker_id, template: 'shift_offer', ...m.push, dedupeKey: `offer:${o.id}`, createdBy: auth.userId });
         }
       }
       return {

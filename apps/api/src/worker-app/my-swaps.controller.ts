@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { AuthContext, Membership } from '../auth/auth.types.js';
 import { Auth, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
-import { queueNotification } from '../notifications/notify.js';
+import { queueNotification, queuePush } from '../notifications/notify.js';
 import { eligibilityForShift } from '../roster/eligibility-data.js';
 import { rosterChangeRefusal } from '../roster/offers-data.js';
 import { loadSwap, makeSwap, shiftFacts, SWAP_SELECT, swapMode, swapProblem, tellBoth, viewOf, type SwapRow } from '../roster/swaps-data.js';
@@ -162,13 +162,14 @@ export class MySwapsController {
       // Tried now and undone, so nobody is asked about a swap the rules would stop.
       const problem = await swapProblem(db, t.tenantId, sw);
       if (problem) throw new ConflictException(fillWords(problem, words));
+      const m = swapAskedEmail({ ...viewOf(sw), toFirstName: sw.toFirstName, business: t.tenantName }, words);
       if (sw.toEmail) {
-        const m = swapAskedEmail({ ...viewOf(sw), toFirstName: sw.toFirstName, business: t.tenantName }, words);
         await queueNotification(db, t.tenantId, {
           channel: 'email', to: sw.toEmail, template: 'shift_swap_asked', subject: m.subject, body: m.body,
           workerId: sw.toWorkerId, createdBy: auth.userId, dedupeKey: `swap:${id}:asked`,
         });
       }
+      await queuePush(db, t.tenantId, { workerId: sw.toWorkerId, template: 'shift_swap_asked', ...m.push, createdBy: auth.userId, dedupeKey: `swap:${id}:asked` });
       return mineView(sw, w.id);
     });
   }
@@ -214,13 +215,14 @@ export class MySwapsController {
       if (refusal) throw new ConflictException(refusal);
       await db.query(`update shift_swaps set status = 'declined', answered_at = now(), updated_at = now() where id = $1`, [id]);
       const r = await loadSwap(db, id);
+      const m = swapDeclinedEmail({ ...viewOf(r), fromFirstName: r.fromFirstName }, words);
       if (r.fromEmail) {
-        const m = swapDeclinedEmail({ ...viewOf(r), fromFirstName: r.fromFirstName }, words);
         await queueNotification(db, t.tenantId, {
           channel: 'email', to: r.fromEmail, template: 'shift_swap_declined', subject: m.subject, body: m.body,
           workerId: r.fromWorkerId, createdBy: auth.userId, dedupeKey: `swap:${id}:declined`,
         });
       }
+      await queuePush(db, t.tenantId, { workerId: r.fromWorkerId, template: 'shift_swap_declined', ...m.push, createdBy: auth.userId, dedupeKey: `swap:${id}:declined` });
       return mineView(r, w.id);
     });
   }

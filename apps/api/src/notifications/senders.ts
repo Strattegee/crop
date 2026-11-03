@@ -1,7 +1,8 @@
 /** Email and SMS providers, behind interfaces so they can be swapped by configuration. */
 
 export class SendError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  /** `gone`: the phone is no longer registered for push (app removed or notifications turned off for good). */
+  constructor(message: string, readonly retryable: boolean, readonly gone = false) {
     super(message);
   }
 }
@@ -11,9 +12,12 @@ export interface SmsMessage { to: string; body: string; reference: string }
 
 export interface EmailSender { readonly configured: boolean; send(m: EmailMessage): Promise<{ id: string }> }
 export interface SmsSender { readonly configured: boolean; send(m: SmsMessage): Promise<{ id: string }> }
+export interface PushMessage { to: string; title: string; body: string; reference: string }
+export interface PushSender { readonly configured: boolean; send(m: PushMessage): Promise<{ id: string }> }
 
 export const EMAIL_SENDER = Symbol('EMAIL_SENDER');
 export const SMS_SENDER = Symbol('SMS_SENDER');
+export const PUSH_SENDER = Symbol('PUSH_SENDER');
 
 const retryableStatus = (status: number) => status === 429 || status >= 500;
 
@@ -81,7 +85,41 @@ export class ClickSendSms implements SmsSender {
   }
 }
 
-class Disabled implements EmailSender, SmsSender {
+/**
+ * Expo's push service (sends to Apple and Google for the app). Needs no key unless the Expo project turns on
+ * access tokens, in which case EXPO_ACCESS_TOKEN is sent. Delivery receipts aren't read yet.
+ */
+export class ExpoPush implements PushSender {
+  readonly configured = true;
+  constructor(private readonly accessToken: string | null) {}
+
+  async send(m: PushMessage) {
+    let res: Response;
+    try {
+      res = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json', 'content-type': 'application/json',
+          ...(this.accessToken ? { authorization: `Bearer ${this.accessToken}` } : {}),
+        },
+        body: JSON.stringify({ to: m.to, title: m.title, body: m.body, sound: 'default', data: { ref: m.reference } }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) {
+      throw new SendError(`push service unreachable: ${(err as Error).message}`, true);
+    }
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: { status?: string; id?: string; message?: string; details?: { error?: string } };
+      errors?: Array<{ message?: string }>;
+    };
+    const d = body.data;
+    if (res.ok && d?.status === 'ok' && d.id) return { id: d.id };
+    if (d?.details?.error === 'DeviceNotRegistered') throw new SendError('This phone no longer receives CROP notifications', false, true);
+    throw new SendError(`push service said ${res.status}: ${d?.message ?? body.errors?.[0]?.message ?? 'unknown error'}`, retryableStatus(res.status));
+  }
+}
+
+class Disabled implements EmailSender, SmsSender, PushSender {
   readonly configured = false;
   async send(): Promise<{ id: string }> {
     throw new SendError('not set up', false);
@@ -112,6 +150,18 @@ export class MemorySms implements SmsSender {
   }
 }
 
+export class MemoryPush implements PushSender {
+  readonly configured = true;
+  readonly sent: PushMessage[] = [];
+  /** Tokens that answer "no longer registered". */
+  readonly gone = new Set<string>();
+  async send(m: PushMessage) {
+    if (this.gone.has(m.to)) throw new SendError('This phone no longer receives CROP notifications', false, true);
+    this.sent.push(m);
+    return { id: `push-${this.sent.length}` };
+  }
+}
+
 export function emailFromEnv(): EmailSender {
   const { RESEND_API_KEY, NOTIFY_FROM_EMAIL, NOTIFY_PROVIDERS, NODE_ENV } = process.env;
   if (NOTIFY_PROVIDERS === 'memory' && NODE_ENV !== 'production') return new MemoryEmail();
@@ -122,4 +172,11 @@ export function smsFromEnv(): SmsSender {
   const { CLICKSEND_USERNAME, CLICKSEND_API_KEY, CLICKSEND_FROM, NOTIFY_PROVIDERS, NODE_ENV } = process.env;
   if (NOTIFY_PROVIDERS === 'memory' && NODE_ENV !== 'production') return new MemorySms();
   return CLICKSEND_USERNAME && CLICKSEND_API_KEY && CLICKSEND_FROM ? new ClickSendSms(CLICKSEND_USERNAME, CLICKSEND_API_KEY, CLICKSEND_FROM) : new Disabled();
+}
+
+/** Push is off until David switches it on (PUSH_SEND=on) once the Expo project has Apple and Google credentials. */
+export function pushFromEnv(): PushSender {
+  const { PUSH_SEND, EXPO_ACCESS_TOKEN, NOTIFY_PROVIDERS, NODE_ENV } = process.env;
+  if (NOTIFY_PROVIDERS === 'memory' && NODE_ENV !== 'production') return new MemoryPush();
+  return PUSH_SEND === 'on' ? new ExpoPush(EXPO_ACCESS_TOKEN || null) : new Disabled();
 }
