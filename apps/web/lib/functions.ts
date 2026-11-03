@@ -4,6 +4,7 @@
  */
 export const FUNCTIONS = [
   { code: 1000, path: '/dashboard', label: 'Dashboard' },
+  { code: 1100, path: '/dashboard/live', label: 'Live numbers', subPage: true },
   { code: 2000, path: '/roster', term: 1045, one: true },
   { code: 2050, path: '/roster/template', label: 'Roster templates', subPage: true },
   { code: 2200, path: '/allocations', label: 'Allocations' },
