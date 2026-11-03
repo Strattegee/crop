@@ -19,7 +19,7 @@ export const TABLE_LABEL: Record<string, string> = {
   agency_connections: 'Agency link', agency_credential_maps: 'Agency credential match', agency_invitations: 'Agency invitation',
   agency_requests: 'Agency request', agency_request_rounds: 'Agency request round', agency_inbox: 'Request from an employer',
   agency_placements: 'Agency placement', agency_offers: 'Agency offer', outside_agencies: 'Agency not on CROP',
-  client_orders: 'Client order', client_contacts: 'Client contact',
+  client_orders: 'Client order', client_contacts: 'Client contact', shift_swaps: 'Shift swap',
 };
 
 const ACTION_WORD = { insert: 'Added', update: 'Changed', delete: 'Removed' } as const;

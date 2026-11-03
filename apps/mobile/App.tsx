@@ -9,6 +9,8 @@ import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config'
 import { AvailabilityTab } from './src/AvailabilityTab';
 import { CredentialsTab } from './src/CredentialsTab';
 import { ManagerHome } from './src/ManagerHome';
+import { SwapPicker, SwapsList } from './src/SwapsSection';
+import { canSwap, type MySwap, type SwapMode } from './src/swaps';
 import { roleOf, startMode, type Mode } from './src/manager';
 import { styles } from './src/styles';
 import {
@@ -148,6 +150,8 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
   const [shifts, setShifts] = useState<MyShift[]>([]);
   const [offers, setOffers] = useState<MyOffer[]>([]);
   const [onboarding, setOnboarding] = useState<MyOnboarding | null>(null);
+  const [swaps, setSwaps] = useState<{ mode: SwapMode; swaps: MySwap[] }>({ mode: 'off', swaps: [] });
+  const [swapping, setSwapping] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -155,7 +159,7 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
     setBusy(true);
     setError(null);
     try {
-      const [m, s, o, g] = await Promise.all([
+      const [m, s, o, g, sw] = await Promise.all([
         api<My>('/my', { tenant }),
         api<{ shifts: MyShift[] }>('/my/shifts', { tenant }),
         api<{ offers: MyOffer[] }>('/my/offers', { tenant }),
@@ -164,11 +168,17 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
           if (e instanceof SignedOut) throw e;
           return { onboarding: null };
         }),
+        // Swaps are extra too (off unless the business turns them on).
+        api<{ mode: SwapMode; swaps: MySwap[] }>('/my/swaps', { tenant }).catch(e => {
+          if (e instanceof SignedOut) throw e;
+          return { mode: 'off' as SwapMode, swaps: [] as MySwap[] };
+        }),
       ]);
       setMy(m);
       setShifts(s.shifts);
       setOffers(o.offers);
       setOnboarding(g.onboarding);
+      setSwaps(sw);
     } catch (e) {
       if (e instanceof SignedOut) onSignedOut();
       else setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -247,6 +257,9 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
             )}
           </View>
         )}
+        {tab === 'shifts' && !error && (
+          <SwapsList tenant={tenant} swaps={swaps.swaps} today={my?.today} onChanged={load} onSignedOut={onSignedOut} />
+        )}
         {tab === 'shifts' && !error && (shifts.length === 0
           ? <Text style={styles.muted}>{noShiftsLine(word, onboarding, my?.rosterWord)}</Text>
           : byDay(shifts).map(d => (
@@ -259,6 +272,14 @@ function Home({ tenant, switchable, onSwitch, onSignOut, onSignedOut, onManager 
                   <Text style={styles.muted}>{s.site}</Text>
                   {s.duties.length > 0 && <Text style={[styles.muted, styles.small]}>Duties: {s.duties.join(', ')}</Text>}
                   <Text style={[styles.badge, s.state === 'booked' ? styles.badgeBooked : styles.badgeWaiting]}>{STATE_LABEL[s.state]}</Text>
+                  {swapping === s.id ? (
+                    <SwapPicker tenant={tenant} shiftId={s.id} mode={swaps.mode} word={word} today={my?.today} onSignedOut={onSignedOut}
+                      onClose={() => setSwapping(null)} onDone={() => { setSwapping(null); load(); }} />
+                  ) : canSwap(s.id, swaps.mode, swaps.swaps) && (
+                    <Pressable onPress={() => setSwapping(s.id)} style={{ marginTop: 8 }}>
+                      <Text style={styles.link}>Swap or give away</Text>
+                    </Pressable>
+                  )}
                 </View>
               ))}
             </View>
