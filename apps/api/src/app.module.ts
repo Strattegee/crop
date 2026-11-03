@@ -15,6 +15,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { FacilitiesController } from './facilities/facilities.controller.js';
+import { OfficesController } from './facilities/offices.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { IndustryController } from './industry/industry.controller.js';
 import { PlatformController } from './platform/platform.controller.js';
@@ -46,7 +47,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, WorkersController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, WorkersController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

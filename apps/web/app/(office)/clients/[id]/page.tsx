@@ -9,6 +9,7 @@ import { addContact, addFacility, setContactActive, updateClient, updateContact 
 import { T, words } from '../../../../lib/terms';
 import { contactLine, rankChip, type ClientContact } from '../../../../lib/client-orders';
 import { ClientAllocationFields } from '../client-fields';
+import { OfficeField } from '../../settings/offices/office-field';
 import { businessNumberKind, showBusinessNumber } from '../../../../lib/business-number';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,8 @@ type ClientDetail = {
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [c, agency, settings] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' }))]);
+  const [c, agency, settings, offices] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' })),
+    api<{ id: string; name: string; active: boolean }[]>('/offices').catch(() => [])]);
   const home = settings.country ?? 'AU';
   const bn = businessNumberKind(home);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
@@ -59,6 +61,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
               <label>Name<input name="name" required maxLength={200} placeholder="e.g. Northside Private Hospital" /></label>
               <label>Street address<input name="addressLine" maxLength={200} /></label>
               <PlaceFields homeCountry={home} />
+              <OfficeField offices={offices} />
               <label>Phone<input name="phone" maxLength={30} /></label>
               <button type="submit" className="btn">Add facility</button>
             </form>

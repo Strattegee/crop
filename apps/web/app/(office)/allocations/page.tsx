@@ -37,7 +37,7 @@ type Site = { id: string; name: string; clientId: string | null; clientName: str
 /**
  * Allocations (function code 2200). For a business with clients: the allocation queue (David chose layout A, 2 Nov):
  * client shifts still needing work, most urgent first, with a fill panel beside the one open (`shift=`), stage tabs
- * and region chips in the URL; "+ New order" and "Completed and history" are views of their own. For a business that
+ * and office chips (state chips for a business without offices) in the URL; "+ New order" and "Completed and history" are views of their own. For a business that
  * supplies employers on CROP (agency fill), "Requests from employers" lists what employers sent it, with its people
  * checked against each (ready first) to put forward or offer.
  */
@@ -87,7 +87,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
 
 /** The allocation queue and the open shift's fill panel. */
 async function ClientQueue({ tw, p, when }: { tw: Words; p: QueueParams; when: (iso: string) => string }) {
-  const qs = new URLSearchParams({ days: String(p.days), ...(p.stage !== 'all' ? { stage: p.stage } : {}), ...(p.region ? { region: p.region } : {}), ...(p.clientId ? { clientId: p.clientId } : {}) });
+  const qs = new URLSearchParams({ days: String(p.days), ...(p.stage !== 'all' ? { stage: p.stage } : {}), ...(p.office ? { office: p.office } : {}), ...(p.region ? { region: p.region } : {}), ...(p.clientId ? { clientId: p.clientId } : {}) });
   const [q, clients, fill, agency] = await Promise.all([
     api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
     api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),

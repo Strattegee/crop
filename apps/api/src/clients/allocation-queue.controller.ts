@@ -7,6 +7,8 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 import { UUID } from '../roster/shift-create.js';
 import { wordsFor } from '../terms/words.js';
+import { myOffices } from '../facilities/offices.controller.js';
+import { inOffice, officeChips, officeParam, parseOfficeFilter } from '../facilities/offices.js';
 import { CHANNEL_WORDS, type Channel } from './client-orders.js';
 import {
   QUEUE_BANDS, QUEUE_TABS, initialsOf, onTab, parseTab, progressLine, queueBand, queueOrder, queueStage,
@@ -17,7 +19,7 @@ import {
 export const PRESENCE_MINUTES = 2;
 
 type Raw = {
-  id: string; facilityId: string; facilityName: string; region: string | null; areaName: string | null; role: string; status: string;
+  id: string; facilityId: string; facilityName: string; region: string | null; officeId: string | null; officeName: string | null; areaName: string | null; role: string; status: string;
   startsAt: string; endsAt: string; localDate: string; localStart: string; localEnd: string; dayLabel: string; hours: number; breakMinutes: number;
   genderRequested: 'F' | 'M' | null; notes: string | null; timezone: string; siteToday: string; siteTomorrow: string;
   clientId: string; clientName: string; clientRank: number | null; clientConfirms: boolean;
@@ -47,20 +49,26 @@ export class AllocationQueueController {
 
   /**
    * `stage` = a tab (all, new, released, accepted, worker_to_confirm, client_to_confirm, pulled_out, booked_today),
-   * `region` = the site's region (the office for now), `clientId`, `days` (1–14, default 3; started shifts that haven't
-   * ended are always in). Tab counts take the region and client filters; office counts take the client filter only.
+   * `office` = all | mine | none | an office id (migration 0077; left out = the caller's offices when they have any),
+   * `region` = the site's state, `clientId`, `days` (1–14, default 3; started shifts that haven't ended are always in).
+   * Tab counts take the office, region and client filters; office and region chip counts take the client filter only.
+   * `offices` (chips, the caller's first) is empty when the business has no offices: the web then shows state chips.
    */
   @Roles(...OFFICE_ROLES)
   @Get('allocations/queue')
   queue(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query('stage') stageQ?: string, @Query('region') regionQ?: string,
-    @Query('clientId') clientQ?: string, @Query('days') daysQ?: string) {
+    @Query('clientId') clientQ?: string, @Query('days') daysQ?: string, @Query('office') officeQ?: string) {
     const days = whole(daysQ, 3, 1, 14);
     const tab = parseTab(stageQ);
     const region = regionQ?.trim() ? regionQ.trim().slice(0, 60) : null;
     const clientId = clientQ && UUID.test(clientQ) ? clientQ : null;
     return withTenant(this.pool, t.tenantId, async db => {
+      const mine = await myOffices(db, auth.userId);
+      const office = parseOfficeFilter(officeQ, mine.size > 0);
+      const officeList = (await db.query<{ id: string; name: string; active: boolean }>('select id, name, active from offices')).rows;
       const raw = (await db.query<Raw>(
-        `select s.id, s.facility_id as "facilityId", f.name as "facilityName", nullif(trim(f.state), '') as region, a.name as "areaName",
+        `select s.id, s.facility_id as "facilityId", f.name as "facilityName", nullif(trim(f.state), '') as region,
+                f.office_id as "officeId", ofc.name as "officeName", a.name as "areaName",
                 s.role, s.status::text as status, s.starts_at as "startsAt", s.ends_at as "endsAt", f.timezone,
                 to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as "localDate",
                 to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "localStart",
@@ -89,6 +97,7 @@ export class AllocationQueueController {
                 coalesce((select json_agg(json_build_object('userId', p.user_id, 'name', p.name) order by p.seen_at desc)
                             from allocation_presence p where p.shift_id = s.id and p.seen_at > now() - make_interval(mins => $3)), '[]'::json) as presence
            from shifts s join facilities f on f.id = s.facility_id join clients c on c.id = f.client_id
+           left join offices ofc on ofc.id = f.office_id
            left join areas a on a.id = s.area_id left join client_orders o on o.id = s.client_order_id
            left join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
            left join workers w on w.id = sa.worker_id
@@ -119,7 +128,7 @@ export class AllocationQueueController {
           clientConfirms: r.clientConfirms, clientConfirmedAt: r.clientConfirmedAt });
         const others = r.presence.filter(p => p.userId !== auth.userId);
         return {
-          id: r.id, facilityId: r.facilityId, facilityName: r.facilityName, region: r.region, areaName: r.areaName, role: r.role, status: r.status,
+          id: r.id, facilityId: r.facilityId, facilityName: r.facilityName, region: r.region, officeId: r.officeId, officeName: r.officeName, areaName: r.areaName, role: r.role, status: r.status,
           startsAt: r.startsAt, endsAt: r.endsAt, timezone: r.timezone, localDate: r.localDate, localStart: r.localStart, localEnd: r.localEnd,
           dayLabel: r.dayLabel, hours: r.hours, breakMinutes: r.breakMinutes, genderRequested: r.genderRequested, notes: r.notes,
           clientId: r.clientId, clientName: r.clientName, clientRank: r.clientRank, clientConfirms: r.clientConfirms,
@@ -140,13 +149,19 @@ export class AllocationQueueController {
 
       const counted = (r: (typeof rows)[number], k: QueueTab) => onTab(k, r.stage, r.bookedToday);
       const inClient = rows;
-      const inRegion = region ? inClient.filter(r => r.region === region) : inClient;
+      const inOffices = inClient.filter(r => inOffice(office, r.officeId, mine));
+      const inRegion = region ? inOffices.filter(r => r.region === region) : inOffices;
       const counts = Object.fromEntries(QUEUE_TABS.map(k => [k, inRegion.filter(r => counted(r, k)).length])) as Record<QueueTab, number>;
       const regionNames = [...new Set(inClient.map(r => r.region).filter((x): x is string => Boolean(x)))].sort((a, b) => a.localeCompare(b));
       const regions = regionNames.map(name => ({ name, count: inClient.filter(r => r.region === name && counted(r, 'all')).length }));
       const shown = inRegion.filter(r => counted(r, tab));
       const bands = Object.fromEntries(QUEUE_BANDS.map(b => [b, shown.filter(r => r.band === b).length])) as Record<QueueBand, number>;
-      return { tab, region, clientId, days, counts, regions, bands, total: shown.length, shifts: shown };
+      const needing = inClient.filter(r => counted(r, 'all'));
+      const chips = officeList.length ? officeChips(officeList, needing, mine) : { offices: [], noOffice: 0 };
+      return {
+        tab, region, clientId, days, office: officeParam(office), myOffices: [...mine], offices: chips.offices, noOffice: chips.noOffice,
+        counts, regions, bands, total: shown.length, shifts: shown,
+      };
     });
   }
 

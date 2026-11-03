@@ -39,6 +39,7 @@ export async function addFacility(clientId: string | null, f: FormData) {
         clientId: clientId ?? str(f, 'clientId'), name: str(f, 'name'), addressLine: str(f, 'addressLine'),
         suburb: str(f, 'suburb'), state: str(f, 'state'), postcode: str(f, 'postcode'), phone: str(f, 'phone'),
         country: str(f, 'country'), ...(str(f, 'timezone') ? { timezone: str(f, 'timezone') } : {}),
+        ...(f.has('officeId') ? { officeId: str(f, 'officeId') ?? null } : {}),
       },
     })).id;
   } catch (err) {
@@ -55,6 +56,7 @@ export async function updateFacility(id: string, f: FormData) {
       state: str(f, 'state') ?? null, postcode: str(f, 'postcode') ?? null, phone: str(f, 'phone') ?? null,
       country: str(f, 'country'), ...(str(f, 'timezone') ? { timezone: str(f, 'timezone') } : {}),
       parkingNotes: str(f, 'parkingNotes') ?? null, entryNotes: str(f, 'entryNotes') ?? null,
+      ...(f.has('officeId') ? { officeId: str(f, 'officeId') ?? null } : {}),
     },
   }), 'Facility saved.');
 }

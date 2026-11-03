@@ -75,6 +75,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       )}
 
       <div className="card">
+        <h2>Offices</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Your branches: which {tw.lower(T.site, true)} and which people in the office belong to each. Allocations and the dashboard can be narrowed to one office.</p>
+        <Link href="/settings/offices" className="btn small secondary">Offices</Link>
+      </div>
+
+      <div className="card">
         <h2>Dashboards</h2>
         <p className="muted" style={{ marginTop: 0 }}>Which dashboard each person in the office lands on, who sees cost figures, and your business’s own targets.</p>
         <Link href="/settings/dashboards" className="btn small secondary">Dashboards</Link>

@@ -80,7 +80,37 @@ export function updatedWords(at: number, now: number): string {
   return `Updated ${Math.round(s / 60)} min ago`;
 }
 
-export type QueueParams = { stage: QueueTab; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers' };
+/**
+ * `office`: null = the API's default (the person's own offices when they have any, else all), `all`, `mine`, `none`
+ * (sites without an office) or an office id (offices, David 3 Nov).
+ */
+export type QueueParams = { stage: QueueTab; office: string | null; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers' };
+
+/** `?office=`: all, mine, none or an office id; anything else is left to the default. */
+export function officeValue(v: string | undefined): string | null {
+  const s = v?.trim().toLowerCase();
+  return s === 'all' || s === 'mine' || s === 'none' || (s && /^[0-9a-f-]{36}$/.test(s)) ? s : null;
+}
+
+export type OfficeChipData = { office: string | null; myOffices: string[]; offices: { id: string; name: string; count: number; mine: boolean }[]; noOffice: number };
+
+/**
+ * The office chips: "My offices" (when the person has any; the default), "All", each office (theirs first), then
+ * "No office" when sites without one have work. `value` is what goes in the URL (null = the default); `on` follows the
+ * filter the API applied. Empty when the business has no offices (the state chips show instead).
+ */
+export function officeChipList(q: OfficeChipData): { label: string; value: string | null; count: number | null; on: boolean }[] {
+  if (q.offices.length === 0) return [];
+  const hasMine = q.myOffices.length > 0;
+  const total = q.offices.reduce((n, o) => n + o.count, 0) + q.noOffice;
+  const mineCount = q.offices.filter(o => o.mine).reduce((n, o) => n + o.count, 0);
+  return [
+    ...(hasMine ? [{ label: q.myOffices.length === 1 ? 'My office' : 'My offices', value: null, count: mineCount, on: q.office === 'mine' }] : []),
+    { label: 'All', value: hasMine ? 'all' : null, count: total, on: q.office === null },
+    ...q.offices.map(o => ({ label: o.name, value: o.id, count: o.count, on: q.office === o.id })),
+    ...(q.noOffice > 0 || q.office === 'none' ? [{ label: 'No office', value: 'none', count: q.noOffice, on: q.office === 'none' }] : []),
+  ];
+}
 
 /** Reads the screen's state from the URL (anything odd falls back to the defaults). */
 export function parseQueueParams(sp: Record<string, string | string[] | undefined>): QueueParams {
@@ -91,6 +121,7 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
   const id = (v: string | undefined) => (v && /^[0-9a-f-]{36}$/i.test(v) ? v : null);
   return {
     stage,
+    office: officeValue(one('office')),
     region: one('region')?.trim().slice(0, 60) || null,
     clientId: id(one('clientId')),
     days: (DAY_CHOICES as readonly number[]).includes(days) ? days : 3,
@@ -105,6 +136,7 @@ export function queueHref(p: QueueParams, change: Partial<QueueParams> = {}): st
   const q = new URLSearchParams();
   if (n.view !== 'queue') q.set('view', n.view);
   if (n.stage !== 'all') q.set('stage', n.stage);
+  if (n.office) q.set('office', n.office);
   if (n.region) q.set('region', n.region);
   if (n.clientId) q.set('clientId', n.clientId);
   if (n.days !== 3) q.set('days', String(n.days));
