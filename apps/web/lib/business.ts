@@ -1,10 +1,13 @@
 import { cache } from 'react';
 import { api } from './api';
+import type { MarkerLetters } from './marker-letters';
 
 /** Used only if the business's settings can't be read; every business has its own time zone in Settings. */
 const FALLBACK_ZONE = 'Australia/Melbourne';
 
-export type BusinessSettings = { timezone?: string; country?: string; publishedChanges?: 'open' | 'managers' | 'locked'; minRestHours?: number };
+export type BusinessSettings = { timezone?: string; country?: string; publishedChanges?: 'open' | 'managers' | 'locked'; minRestHours?: number;
+  /** Letters on roster cards (migration 0079), with CROP's defaults filled in by the API. */
+  markerLetters?: Partial<MarkerLetters> };
 
 /** The signed-in business's settings, fetched once per request. */
 export const businessSettings = cache(async (): Promise<BusinessSettings> =>

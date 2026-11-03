@@ -683,6 +683,8 @@ Newest first. One entry per working session or scheduled run.
 
 - Shipped: offices (branches). Settings › Offices adds a business's offices such as "VIC Melbourne Metro" (optional state), puts sites in them (there or on the site's own form) and attaches office people. Allocations now shows office chips when the business has offices: each person starts on their own offices' shifts and can pick All, one office or "No office"; without offices the state chips stay.
 - Next: cancel reasons and a call log (part B), then the live numbers on the Dashboard (part C).
+- Shipped: the Template tab and customisable letters (answer 2, migration 0079). The roster's title row now reads Template · Draft · Live · History, with the week's stage highlighted. Template opens the site's templates as a week by area: add shifts to several days at once, open one to change its usual person, times or shift type, role, area, duties or equipment, or take it out; start a template empty or from a week, rename it, put it away, and fill a week from it straight from there. Changing a template never changes weeks already filled; every earlier version of a template shift is kept. Settings › Shift types has "Letters on roster cards": each business can change D, V, E, I, T and R (one or two letters or numbers; F and M stay for gender).
+
 
 ## 2026-11-03 night (3 Nov, David: live numbers, part B)
 

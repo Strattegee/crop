@@ -1,3 +1,4 @@
+import { DEFAULT_MARKER_LETTERS, type MarkerLetters } from '../../../lib/marker-letters';
 /**
  * Day, week and month views of the roster: date ranges, navigation and the day timeline.
  * Pure functions (no React, no API) so they can be unit-tested.
@@ -424,7 +425,7 @@ const GENDER_WORD = { F: 'female', M: 'male' } as const;
  * at all), or the person's own gender when nothing was requested; V = vehicles booked, E = other equipment,
  * I = items given out or used, D = duties.
  */
-export function shiftMarkers(s: MarkerShift): Marker[] {
+export function shiftMarkers(s: MarkerShift, letters: MarkerLetters = DEFAULT_MARKER_LETTERS): Marker[] {
   const out: Marker[] = [];
   if (s.genderRequested) {
     const want = GENDER_WORD[s.genderRequested];
@@ -439,13 +440,13 @@ export function shiftMarkers(s: MarkerShift): Marker[] {
   }
   const vehicles = (s.equipment ?? []).filter(e => e.vehicle);
   const other = (s.equipment ?? []).filter(e => !e.vehicle);
-  if (vehicles.length) out.push({ key: 'v', letter: 'V', cls: 'mk-v', title: `Vehicle: ${vehicles.map(e => e.name).join(', ')}` });
-  if (other.length) out.push({ key: 'e', letter: 'E', cls: 'mk-e', title: `Equipment: ${other.map(e => e.name).join(', ')}` });
-  if (s.itemCount) out.push({ key: 'i', letter: 'I', cls: 'mk-i', title: `${s.itemCount} ${s.itemCount === 1 ? 'item' : 'items'} given out or used` });
-  if (s.duties?.length) out.push({ key: 'd', letter: 'D', cls: 'mk-d', title: `Duties: ${s.duties.map(d => d.name).join(', ')}` });
+  if (vehicles.length) out.push({ key: 'v', letter: letters.vehicle, cls: 'mk-v', title: `Vehicle: ${vehicles.map(e => e.name).join(', ')}` });
+  if (other.length) out.push({ key: 'e', letter: letters.equipment, cls: 'mk-e', title: `Equipment: ${other.map(e => e.name).join(', ')}` });
+  if (s.itemCount) out.push({ key: 'i', letter: letters.items, cls: 'mk-i', title: `${s.itemCount} ${s.itemCount === 1 ? 'item' : 'items'} given out or used` });
+  if (s.duties?.length) out.push({ key: 'd', letter: letters.duty, cls: 'mk-d', title: `Duties: ${s.duties.map(d => d.name).join(', ')}` });
   // T = template (David, 3 Nov): who usually works it; marked when they're away that day.
   const t = tLines(s);
-  if (t.length) out.push({ key: 't', letter: 'T', cls: `mk-t${t.some(l => l.tone === 'away') ? ' warn' : ''}`, title: t.map(l => l.title).join('; ') });
+  if (t.length) out.push({ key: 't', letter: letters.template, cls: `mk-t${t.some(l => l.tone === 'away') ? ' warn' : ''}`, title: t.map(l => l.title).join('; ') });
   return out;
 }
 

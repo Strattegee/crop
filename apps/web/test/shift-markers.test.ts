@@ -28,3 +28,17 @@ describe('shift marker letters (David, 30 Oct)', () => {
     expect(shiftMarkers({ itemCount: 1 })[0].title).toBe('1 item given out or used');
   });
 });
+
+describe('customised letters (David, 3 Nov)', () => {
+  it('uses the business letters, keeping F/M for gender', async () => {
+    const { shiftMarkers } = await import('../app/(office)/roster/view');
+    const { lettersOf } = await import('../lib/marker-letters');
+    const letters = lettersOf({ duty: 'CI', vehicle: 'C', template: 'U' });
+    const m = shiftMarkers({
+      genderRequested: 'F', equipment: [{ name: 'Van', vehicle: true }, { name: 'Laptop' }], duties: [{ name: 'Care' }], itemCount: 1,
+      usualWorkerId: 'u', usualName: 'Sandra Example',
+    }, letters);
+    expect(m.map(x => x.letter)).toEqual(['F', 'C', 'E', 'I', 'CI', 'U']);
+    expect(lettersOf(undefined)).toEqual({ duty: 'D', vehicle: 'V', equipment: 'E', items: 'I', template: 'T', request: 'R' });
+  });
+});

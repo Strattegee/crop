@@ -3,7 +3,9 @@ import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
 import { T, words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
-import { addShiftType, saveShiftType, setShiftTypeActive } from './actions';
+import { addShiftType, saveMarkerLetters, saveShiftType, setShiftTypeActive } from './actions';
+import { businessSettings } from '../../../../lib/business';
+import { MARKER_KINDS, lettersOf, markerMeaning } from '../../../../lib/marker-letters';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +26,10 @@ function paidHours(t: ShiftType) {
 /** Shift types (function 9100): the business's usual shifts, each with a letter for the roster, a name and standard hours. */
 export default async function ShiftTypesPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string; edit?: string }> }) {
   const tw = await words();
-  const [types, facilities, agency, sp] = await Promise.all([
-    api<ShiftType[]>('/shift-codes'), api<Facility[]>('/facilities'), currentAgency(), searchParams,
+  const [types, facilities, agency, sp, settings] = await Promise.all([
+    api<ShiftType[]>('/shift-codes'), api<Facility[]>('/facilities'), currentAgency(), searchParams, businessSettings(),
   ]);
+  const letters = lettersOf(settings.markerLetters);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   const sites = facilities.filter(f => f.active);
   const editing = canEdit && sp.edit ? types.find(t => t.id === sp.edit) : undefined;
@@ -87,6 +90,21 @@ export default async function ShiftTypesPage({ searchParams }: { searchParams: P
           </table>
         )}
         <p className="muted small" style={{ marginBottom: 0 }}>Changing the hours only affects {tw.lower(T.shift, true)} added afterwards; {tw.lower(T.shift, true)} already on the {tw.lower(T.roster)} keep their times.</p>
+      </div>
+
+      {/* Letters on roster cards (David, 3 Nov: each employer can customise them; migration 0079). */}
+      <div className="card" id="letters">
+        <h2>Letters on {tw.lower(T.roster)} cards</h2>
+        <p className="muted small">Down the left of every {tw.lower(T.shift)} on the {tw.lower(T.roster)}: the shift type&apos;s letter (or A, P or N), F or M for gender, then these. One or two letters or numbers each; leave one blank to go back to CROP&apos;s letter.</p>
+        <form action={saveMarkerLetters} className="form-row letters-form">
+          {MARKER_KINDS.map(k => (
+            <label key={k}>
+              <span><b className={`mk mk-${{ duty: 'd', vehicle: 'v', equipment: 'e', items: 'i', template: 't', request: 'r' }[k]}`}>{letters[k]}</b> {markerMeaning(k, { equipment: tw.one(T.equipment), items: tw.many(T.item) })}</span>
+              <input name={k} defaultValue={letters[k]} maxLength={2} disabled={!canEdit} style={{ width: 64, textTransform: 'uppercase' }} aria-label={`Letter for ${markerMeaning(k, { equipment: tw.one(T.equipment), items: tw.many(T.item) })}`} />
+            </label>
+          ))}
+          {canEdit && <button type="submit" className="btn">Save letters</button>}
+        </form>
       </div>
 
       {canEdit && (

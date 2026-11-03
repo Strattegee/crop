@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import { T, wordsFor } from '../terms/words.js';
@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { equipmentForShift } from './equipment-data.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
+import { checkTemplateShift, insertTemplateShifts, parseTemplateShift } from './template-edit.js';
 import { applySummary, copyWeeksSummary, firstReason, MAX_COPY_WEEKS, planWeek, weekPairs, type ApplyResult, type LeftOpen, type PlannedShift, type Slot } from './templates.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,9 +156,56 @@ async function bookUsualEquipment(db: PoolClient, tenantId: string, auth: AuthCo
 
 const TEMPLATE_COLS = `t.id, t.facility_id as "facilityId", f.name as "facilityName", t.name, t.created_at as "createdAt",
   t.created_by_name as "createdByName",
-  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id) as shifts,
-  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id and ts.worker_id is not null) as "withPeople",
-  (select count(*)::int from roster_template_shifts ts join roster_template_equipment te on te.template_shift_id = ts.id where ts.template_id = t.id) as "equipmentBookings"`;
+  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id and ts.removed_at is null) as shifts,
+  (select count(*)::int from roster_template_shifts ts where ts.template_id = t.id and ts.removed_at is null and ts.worker_id is not null) as "withPeople",
+  (select count(*)::int from roster_template_shifts ts join roster_template_equipment te on te.template_shift_id = ts.id
+    where ts.template_id = t.id and ts.removed_at is null) as "equipmentBookings"`;
+
+/** One template shift for the Template tab: everything needed to show and edit it. */
+const TEMPLATE_SHIFT_COLS = `ts.id, ts.weekday, to_char(ts.start_time, 'HH24:MI') as "startTime", to_char(ts.end_time, 'HH24:MI') as "endTime",
+  ts.break_minutes as "breakMinutes", ts.role, ts.area_id as "areaId", a.name as "areaName", ts.shift_code_id as "shiftCodeId",
+  sc.code as "shiftCode", sc.letter as "shiftLetter", not ts.needs_person as "equipmentOnly", ts.notes, ts.gender_requested as "genderRequested",
+  ts.worker_id as "workerId", case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
+  w.status as "workerStatus",
+  coalesce((select json_agg(json_build_object('id', e.id, 'name', e.name, 'vehicle', et.is_vehicle) order by e.name)
+              from roster_template_equipment te join equipment e on e.id = te.equipment_id join equipment_types et on et.id = e.equipment_type_id
+             where te.template_shift_id = ts.id), '[]'::json) as "equipmentList",
+  coalesce((select json_agg(json_build_object('id', d.id, 'name', d.name) order by lower(d.name))
+              from roster_template_duties td join shift_duties d on d.id = td.duty_id where td.template_shift_id = ts.id), '[]'::json) as duties`;
+const TEMPLATE_SHIFT_FROM = `roster_template_shifts ts left join areas a on a.id = ts.area_id left join shift_codes sc on sc.id = ts.shift_code_id
+  left join workers w on w.id = ts.worker_id`;
+
+/** A template shift still in a template that isn't put away; locks the template so two edits can't cross. */
+async function liveTemplateShift(db: PoolClient, id: string) {
+  const r = (await db.query<{ template_id: string; facility_id: string }>(
+    `select ts.template_id, t.facility_id from roster_template_shifts ts join roster_templates t on t.id = ts.template_id
+      where ts.id = $1 and ts.removed_at is null and t.archived_at is null`, [id])).rows[0];
+  if (!r) throw new NotFoundException('That template {shift} has been changed or removed. Open the template again');
+  await db.query('select 1 from roster_templates where id = $1 for update', [r.template_id]);
+  if (!(await db.query('select 1 from roster_template_shifts where id = $1 and removed_at is null', [id])).rowCount) {
+    throw new NotFoundException('That template {shift} has been changed or removed. Open the template again');
+  }
+  return r;
+}
+
+async function liveTemplate(db: PoolClient, id: string) {
+  const tpl = (await db.query<{ facility_id: string }>(`select facility_id from roster_templates where id = $1 and archived_at is null`, [id])).rows[0];
+  if (!tpl) throw new NotFoundException('Template not found');
+  return tpl;
+}
+
+async function templateDetail(db: PoolClient, id: string) {
+  const tpl = (await db.query(`select ${TEMPLATE_COLS}, t.archived_at as "archivedAt" from roster_templates t join facilities f on f.id = t.facility_id where t.id = $1`, [id])).rows[0];
+  if (!tpl) throw new NotFoundException('Template not found');
+  const shifts = (await db.query(
+    `select ${TEMPLATE_SHIFT_COLS},
+            -- Kept for older callers: equipment names only.
+            coalesce((select json_agg(e.name order by e.name) from roster_template_equipment te join equipment e on e.id = te.equipment_id
+                       where te.template_shift_id = ts.id), '[]'::json) as equipment
+       from ${TEMPLATE_SHIFT_FROM}
+      where ts.template_id = $1 and ts.removed_at is null order by ts.weekday, ts.start_time, ts.role`, [id])).rows;
+  return { ...tpl, shiftList: shifts };
+}
 
 /** Roster templates (the "ideal week") and copying a week (backlog item 2). */
 @ApiBearerAuth()
@@ -182,20 +230,7 @@ export class RosterTemplatesController {
   @Roles(...OFFICE_ROLES)
   @Get('roster/templates/:id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
-    return withTenant(this.pool, t.tenantId, async db => {
-      const tpl = (await db.query(`select ${TEMPLATE_COLS}, t.archived_at as "archivedAt" from roster_templates t join facilities f on f.id = t.facility_id where t.id = $1`, [id])).rows[0];
-      if (!tpl) throw new NotFoundException('Template not found');
-      const shifts = (await db.query(
-        `select ts.weekday, to_char(ts.start_time, 'HH24:MI') as "startTime", to_char(ts.end_time, 'HH24:MI') as "endTime",
-                ts.break_minutes as "breakMinutes", ts.role, a.name as "areaName", sc.letter as "shiftLetter", not ts.needs_person as "equipmentOnly",
-                case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
-                coalesce((select json_agg(e.name order by e.name) from roster_template_equipment te join equipment e on e.id = te.equipment_id
-                           where te.template_shift_id = ts.id), '[]'::json) as equipment
-           from roster_template_shifts ts left join areas a on a.id = ts.area_id left join shift_codes sc on sc.id = ts.shift_code_id
-           left join workers w on w.id = ts.worker_id
-          where ts.template_id = $1 order by ts.weekday, ts.start_time, ts.role`, [id])).rows;
-      return { ...tpl, shiftList: shifts };
-    });
+    return withTenant(this.pool, t.tenantId, db => templateDetail(db, id));
   }
 
   /** Saves a site's week as a template. `people: false` leaves out who works each shift; `equipment: false` leaves out the equipment. */
@@ -203,15 +238,17 @@ export class RosterTemplatesController {
   @Post('roster/templates')
   create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const facilityId = siteField(body);
-    const weekStart = weekField(body, 'weekStart')!;
+    // An empty template (the Template tab, migration 0079) is filled in shift by shift.
+    const empty = bool(body, 'empty') ?? false;
+    const weekStart = empty ? null : weekField(body, 'weekStart')!;
     const name = text(body, 'name', { required: true, max: 80 })!;
     const people = bool(body, 'people') ?? true;
     const equipment = bool(body, 'equipment') ?? true;
     return withTenant(this.pool, t.tenantId, async db => {
       await site(db, facilityId);
-      const slots = await slotsFromWeek(db, facilityId, weekStart);
+      const slots = weekStart ? await slotsFromWeek(db, facilityId, weekStart) : [];
       const w = await wordsFor(db);
-      if (!slots.length) throw new BadRequestException(`There are no ${w.lower(T.shift, true)} at this ${w.lower(T.site)} that week to save`);
+      if (!empty && !slots.length) throw new BadRequestException(`There are no ${w.lower(T.shift, true)} at this ${w.lower(T.site)} that week to save`);
       if (slots.length > MAX_SHIFTS) throw new BadRequestException(`A template can hold up to ${w.count(MAX_SHIFTS, T.shift)}`);
       let id: string;
       try {
@@ -285,9 +322,74 @@ export class RosterTemplatesController {
                 gender_requested as "genderRequested",
                 coalesce((select json_agg(te.equipment_id) from roster_template_equipment te where te.template_shift_id = ts.id), '[]'::json) as "equipmentIds",
                 coalesce((select json_agg(td.duty_id) from roster_template_duties td where td.template_shift_id = ts.id), '[]'::json) as "dutyIds"
-           from roster_template_shifts ts where template_id = $1`, [id])).rows;
+           from roster_template_shifts ts where template_id = $1 and removed_at is null`, [id])).rows;
       const r = await createFromSlots(db, t.tenantId, auth, f, weekStart, slots, people, equipment);
       return { ...r, weekStart, facilityId: f.id, summary: applySummary(r, await wordsFor(db)) };
+    });
+  }
+
+  /** Renames a template (the Template tab). */
+  @Roles(...OFFICE_ROLES)
+  @Patch('roster/templates/:id')
+  rename(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const name = text(body, 'name', { required: true, max: 80 })!;
+    return withTenant(this.pool, t.tenantId, async db => {
+      await liveTemplate(db, id);
+      try {
+        await db.query('update roster_templates set name = $2 where id = $1', [id, name]);
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505') throw new ConflictException(`There is already a template called ${name} for this {site}`);
+        throw e;
+      }
+      return templateDetail(db, id);
+    });
+  }
+
+  /**
+   * Adds shifts to a template, one per weekday in `weekdays` (the Template tab, migration 0079): times (or a shift
+   * type), role, area, usual person (`workerId`), gender asked for, duties, equipment, notes. Returns the template.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('roster/templates/:id/shifts')
+  addShifts(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const p = parseTemplateShift(body ?? {}, true);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const tpl = await liveTemplate(db, id);
+      await db.query('select 1 from roster_templates where id = $1 for update', [id]);
+      const times = await checkTemplateShift(db, tpl.facility_id, p);
+      const n = (await db.query<{ n: number }>('select count(*)::int as n from roster_template_shifts where template_id = $1 and removed_at is null', [id])).rows[0].n;
+      if (n + p.weekdays.length > MAX_SHIFTS) throw new BadRequestException(`A template can hold up to ${(await wordsFor(db)).count(MAX_SHIFTS, T.shift)}`);
+      const ids = await insertTemplateShifts(db, t.tenantId, id, p, times);
+      return { ...(await templateDetail(db, id)), ids };
+    });
+  }
+
+  /**
+   * Changes one template shift. Template shifts are append-only: the change is a new row that replaces this one
+   * (`replaces_id`), and this one is marked removed. Weeks already filled from the template don't change.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Put('roster/template-shifts/:id')
+  changeShift(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const p = parseTemplateShift(body ?? {}, false);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const old = await liveTemplateShift(db, id);
+      const times = await checkTemplateShift(db, old.facility_id, p);
+      await db.query('update roster_template_shifts set removed_at = now() where id = $1', [id]);
+      const [newId] = await insertTemplateShifts(db, t.tenantId, old.template_id, p, times, id);
+      return { ...(await templateDetail(db, old.template_id)), id: old.template_id, shiftId: newId };
+    });
+  }
+
+  /** Takes a shift out of a template (marked removed, kept on record). */
+  @Roles(...OFFICE_ROLES)
+  @Post('roster/template-shifts/:id/remove')
+  @HttpCode(200)
+  removeShift(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const old = await liveTemplateShift(db, id);
+      await db.query('update roster_template_shifts set removed_at = now() where id = $1', [id]);
+      return templateDetail(db, old.template_id);
     });
   }
 

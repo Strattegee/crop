@@ -17,6 +17,7 @@ import { AttentionPanel } from './attention-panel';
 import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
+import { lettersOf } from '../../../lib/marker-letters';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers,
@@ -180,9 +181,14 @@ export default async function RosterPage({ searchParams }: {
   const coverGaps = fetchedGaps.filter(g => days.includes(g.localDate) || (span === 'day' && gapBars([g], days[0], false).length > 0));
   const gapCount = gapsByDay(coverGaps);
   const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
+  // The business's letters on cards (Settings › Shift types, migration 0079).
+  const letters = lettersOf(rosterSettings.markerLetters);
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
   const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
   const isHistory = weekStates.length > 0 && weekStates.every(w => w.state === 'history');
+  // The stage the week is at, for Template · Draft · Live · History; null when sites differ (each then shows its own).
+  const weekStage: Week['state'] | null = isHistory ? 'history' : weekRows.length === 0 ? 'draft'
+    : weekRows.every(w => w.state === weekRows[0].state) ? weekRows[0].state : null;
   const drafts = weekRows.filter(w => w.state === 'draft');
   const pendingChanges = weekRows.filter(w => w.state === 'live').reduce((a, w) => a + w.changesSincePublish, 0);
   const canPublish = !isHistory && (drafts.length > 0 || pendingChanges > 0);
@@ -344,7 +350,7 @@ export default async function RosterPage({ searchParams }: {
   // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
   // (F/M gender, V vehicle, E equipment, I items, D duties) so the office sees at a glance how much a shift involves.
   const letterCol = (s: Shift) => {
-    const list = s.status === 'cancelled' ? [] : shiftMarkers(s);
+    const list = s.status === 'cancelled' ? [] : shiftMarkers(s, letters);
     const shiftName = s.shiftLetter ? s.shiftCode ?? s.shiftLetter : band(s) === 'nd' ? 'Night' : band(s) === 'am' ? 'AM' : 'PM';
     return (
       <span className="mkcol">
@@ -714,15 +720,24 @@ export default async function RosterPage({ searchParams }: {
         </div>
         {/* Draft / live status and Publish on the same line as the title and toolbar (David, 29 Oct). */}
         {span !== 'month' && <div className="roster-state" aria-label="Roster status">
+          {/* Template · Draft · Live · History (David, 3 Nov): Template opens the site's templates as a week; the
+              other three say where this week is (it moves on by publishing, and becomes history once it's over). */}
+          <nav className="roster-stages" aria-label="Roster stages">
+            <Link href={`/roster/template${site ? `?site=${site}` : ''}`} title="Make and change templates: a usual week to fill weeks from">Template</Link>
+            {(['draft', 'live', 'history'] as const).map(st => (
+              <span key={st} className={weekStage === st ? `on ${st}` : undefined} aria-current={weekStage === st ? 'step' : undefined}
+                title={st === 'draft' ? 'Being built; staff don\'t see it yet' : st === 'live' ? 'Published to staff; changes are recorded' : 'The week is over; kept as a record'}>{STATE_LABEL[st]}</span>
+            ))}
+          </nav>
           {span === 'day' && <span className="muted small">Week of {longDate(week)}:</span>}
           <div className="states">
             {isHistory ? (
-              <span><b className="pill history">History</b> <span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
+              <span><span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
             ) : weekRows.length === 0 ? (
-              <span><b className="pill draft">Draft</b> <span className="muted">Nothing on this week yet.</span></span>
+              <span><span className="muted">Nothing on this week yet.</span></span>
             ) : weekRows.map(w => (
               <span key={w.facilityId}>
-                <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>
+                {weekStage === null && <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>}
                 {weekRows.length > 1 || !site ? <> {w.facilityName}</> : null}
                 <span className="muted">
                     {w.state === 'live' && ` · published ${w.publishedAt ? when(w.publishedAt) : ''}${w.publishedByName ? ` by ${w.publishedByName}` : ''}`}
@@ -1335,7 +1350,7 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <div className="roster-legend">
-        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g f">F</b>/<b className="mk mk-g m">M</b> gender requested (pale: the person's own; ringed red: doesn't match)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><b className="mk mk-t">T</b> who usually works it (ringed: away that day)</span><span><i className="leave-key" /> Leave</span>
+        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g f">F</b>/<b className="mk mk-g m">M</b> gender requested (pale: the person's own; ringed red: doesn't match)</span><span><b className="mk mk-v">{letters.vehicle}</b> vehicle</span><span><b className="mk mk-e">{letters.equipment}</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">{letters.items}</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">{letters.duty}</b> duties</span><span><b className="mk mk-t">{letters.template}</b> who usually works it (ringed: away that day)</span><span><i className="leave-key" /> Leave</span>
         <span><i className="rb accepted" /> Accepted (when approval is on)</span>
       </div>
 
