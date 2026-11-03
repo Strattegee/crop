@@ -4,7 +4,7 @@ import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { date, text } from '../common/validate.js';
+import { date, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
 import { queueNotification } from '../notifications/notify.js';
@@ -15,12 +15,13 @@ import { rosterChangeRefusal } from './offers-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
 import { shiftById } from './roster.controller.js';
 import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-actions.js';
+import { CANCEL_KINDS, type CancelKind } from './cancel.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES: Array<ChangeRequestStatus | 'all'> = ['pending', 'approved', 'declined', 'withdrawn', 'all'];
 const DECIDERS = new Set(['owner', 'admin']);
 
-const COLS = `r.id, r.shift_id as "shiftId", r.kind, r.worker_id as "workerId", r.reason, r.status,
+const COLS = `r.id, r.shift_id as "shiftId", r.kind, r.worker_id as "workerId", r.reason, r.status, r.cancel_kind as "cancelKind",
   r.requested_by as "requestedBy", r.requested_by_name as "requestedByName", r.created_at as "createdAt",
   r.decided_by_name as "decidedByName", r.decided_at as "decidedAt", r.decision_note as "decisionNote",
   case when w.id is null then null else coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name end as "workerName",
@@ -48,8 +49,8 @@ function present(rows: Row[], auth: AuthContext, w: Words) {
 }
 
 async function oneRequest(db: PoolClient, id: string, lock = false) {
-  const r = (await db.query<{ id: string; shift_id: string; kind: ChangeRequestKind; worker_id: string | null; reason: string | null; status: ChangeRequestStatus; requested_by: string }>(
-    `select id, shift_id, kind, worker_id, reason, status, requested_by from roster_change_requests where id = $1 ${lock ? 'for update' : ''}`, [id])).rows[0];
+  const r = (await db.query<{ id: string; shift_id: string; kind: ChangeRequestKind; worker_id: string | null; reason: string | null; status: ChangeRequestStatus; requested_by: string; cancel_kind: CancelKind | null }>(
+    `select id, shift_id, kind, worker_id, reason, status, requested_by, cancel_kind from roster_change_requests where id = $1 ${lock ? 'for update' : ''}`, [id])).rows[0];
   if (!r) throw new NotFoundException('Change request not found');
   return r;
 }
@@ -93,6 +94,7 @@ export class ChangeRequestsController {
     const kind = text(body, 'change', { required: true, max: 20 }) as ChangeRequestKind;
     if (!CHANGE_REQUEST_KINDS.includes(kind)) throw new BadRequestException('Choose the change you need');
     const reason = text(body, 'reason', { required: kind === 'cancel' || kind === 'other', max: 300 });
+    const cancelKind = kind === 'cancel' ? oneOf(body, 'cancelKind', CANCEL_KINDS) ?? 'other' : null;
     const rawWorker = text(body, 'workerId', { required: kind === 'assign', max: 40 });
     if (rawWorker !== null && !UUID.test(rawWorker)) throw new BadRequestException('Choose a person');
     const workerId = kind === 'assign' ? rawWorker : null;
@@ -121,9 +123,9 @@ export class ChangeRequestsController {
       }
       try {
         const newId = (await db.query<{ id: string }>(
-          `insert into roster_change_requests(tenant_id, shift_id, facility_id, week_start, kind, worker_id, reason, requested_by, requested_by_name, requested_by_email)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
-          [t.tenantId, id, s.facility_id, week, kind, workerId, reason, auth.userId, actor.name, auth.email || null])).rows[0].id;
+          `insert into roster_change_requests(tenant_id, shift_id, facility_id, week_start, kind, worker_id, reason, requested_by, requested_by_name, requested_by_email, cancel_kind)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+          [t.tenantId, id, s.facility_id, week, kind, workerId, reason, auth.userId, actor.name, auth.email || null, cancelKind])).rows[0].id;
         // Owners and admins hear about it straight away (not the asker, if they are one).
         const { r, words } = await forEmail(db, newId);
         const m = requestArrivedEmail(r, process.env.APP_URL ?? '', words);
@@ -191,7 +193,7 @@ export class ChangeRequestsController {
         case 'confirm': await confirmWorker(db, r.shift_id); break;
         case 'remove': await removeWorker(db, r.shift_id, false); break;
         case 'pulled_out': await removeWorker(db, r.shift_id, true); break;
-        case 'cancel': await cancelShift(db, auth.userId, r.shift_id, r.reason!); break;
+        case 'cancel': await cancelShift(db, auth.userId, r.shift_id, r.reason!, r.cancel_kind ?? 'other'); break;
         case 'other': break; // described in words: the approver makes it on the shift
       }
       await db.query(

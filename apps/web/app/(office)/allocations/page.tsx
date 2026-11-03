@@ -8,6 +8,7 @@ import { QueueScreen, type Panel, type PanelCandidate, type PanelOffer, type Pan
 import type { AgencyFillState } from '../roster/agency-fill-section';
 import { T, words, type Words } from '../../../lib/terms';
 import { Notices } from '../notices';
+import type { CallRow } from '../../../lib/calls';
 import { AgencyAttentionList, type AgencyAttention } from './agency-attention';
 import { offerToPeople, pullOut, putForward, recordYes, withdrawOffers } from './actions';
 
@@ -75,7 +76,7 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
       {!hasClients && !hasAgency && (
         <p className="muted">Nothing to allocate yet. Give a {tw.lower(T.site)} a {tw.lower(T.client)} to take their orders here.</p>
       )}
-      {hasClients && p.view === 'queue' && <ClientQueue tw={tw} p={p} when={when} />}
+      {hasClients && p.view === 'queue' && <ClientQueue tw={tw} p={p} when={when} today={todayIn(zone)} />}
       {hasClients && p.view === 'new' && <NewOrder tw={tw} today={todayIn(zone)} />}
       {hasClients && p.view === 'history' && (
         <RecentOrders tw={tw} orders={await api<ClientOrder[]>('/client-orders?days=30').catch(() => [] as ClientOrder[])} when={when} />
@@ -86,16 +87,17 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
 }
 
 /** The allocation queue and the open shift's fill panel. */
-async function ClientQueue({ tw, p, when }: { tw: Words; p: QueueParams; when: (iso: string) => string }) {
+async function ClientQueue({ tw, p, when, today }: { tw: Words; p: QueueParams; when: (iso: string) => string; today: string }) {
   const qs = new URLSearchParams({ days: String(p.days), ...(p.stage !== 'all' ? { stage: p.stage } : {}), ...(p.office ? { office: p.office } : {}), ...(p.region ? { region: p.region } : {}), ...(p.clientId ? { clientId: p.clientId } : {}) });
-  const [q, clients, fill, agency] = await Promise.all([
+  const [q, clients, fill, agency, calls] = await Promise.all([
     api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
     api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),
     p.shift ? api<{ shift: PanelShift; candidates: PanelCandidate[]; offers: PanelOffer[] }>(`/shifts/${p.shift}/bank-fill?everyone=true`).catch(() => null) : Promise.resolve(null),
     p.shift ? api<AgencyFillState>(`/shifts/${p.shift}/agency-fill`).catch(() => null) : Promise.resolve(null),
+    p.shift ? api<CallRow[]>(`/calls?shiftId=${p.shift}&days=14`).catch(() => [] as CallRow[]) : Promise.resolve([] as CallRow[]),
   ]);
   const row: QueueRow | null = q?.shifts.find(r => r.id === p.shift) ?? null;
-  const panel: Panel | null = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency } : null;
+  const panel: Panel | null = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today } : null;
   return (
     <QueueScreen tw={tw} p={p} q={q} clients={clients.filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name))}
       panel={panel} now={Date.now()} when={when} />

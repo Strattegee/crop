@@ -688,3 +688,10 @@ Newest first. One entry per working session or scheduled run.
 - Choices: requests marked done still warn when a shift breaks them later; not possible and withdrawn ones stop counting. The office's note goes to the person. No Dashboard entry (optional). The privacy policy and worker notice already list availability, so no change there.
 - Checked in the preview (App requests panel, By person and By area, Detailed look; light, dark and phone width). Every test passes.
 
+
+## 2026-11-03 night (3 Nov, David: live numbers, part B)
+
+- Shipped: cancel reasons and a call log. Cancelling a shift now asks why (the client cancelled, the client withdrew the request, we couldn't fill it, our mistake, other); a client's shift must say, so the dashboard can count client cancellations apart. The allocation queue's fill panel can cancel a shift too. "Log a call" sits beside each suggested person, the person on the shift and the client contact in the fill panel, and on a person's page: open it, optionally type a short note, press the outcome. The panel lists the calls about that shift; the person's page lists their last calls.
+- Privacy policy and data processing agreement now mention the call log. The worker notice is unchanged (calls don't appear in the app); David to decide whether the notice should mention them.
+- Next: the live numbers on the Dashboard (part C).
+

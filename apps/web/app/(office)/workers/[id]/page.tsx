@@ -27,6 +27,8 @@ import { businessZone, todayIn, whenIn } from '../../../../lib/business';
 import { mobileExample, showMobile } from '../../../../lib/phone';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 import { RecruitmentCard } from './recruitment-card';
+import { LogCall } from '../../allocations/log-call';
+import { callLine, type CallRow } from '../../../../lib/calls';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
 
 export const dynamic = 'force-dynamic';
@@ -96,6 +98,8 @@ export default async function WorkerPage({ params, searchParams }: {
     : [];
   const recruitment = tab === 'overview' && w.status !== 'agency'
     ? await api<RecruitmentEvent[]>(`/workers/${id}/recruitment`).catch(() => [] as RecruitmentEvent[]) : [];
+  const calls = tab === 'overview' && w.status !== 'agency'
+    ? await api<CallRow[]>(`/calls?workerId=${id}&days=90&limit=8`).catch(() => [] as CallRow[]) : [];
   const upcoming = shifts.filter(x => x.localDate >= today && x.status !== 'cancelled');
   const shiftTable = (list: MyShift[]) => list.length === 0 ? <p className="muted" style={{ margin: 0 }}>None.</p> : (
     <table>
@@ -160,6 +164,18 @@ export default async function WorkerPage({ params, searchParams }: {
         </div>
       {appAccess && w.status !== 'agency' && (
         <AppAccessCard workerId={id} a={appAccess} first={w.preferredName || w.firstName} canGive={canVerify} timeZone={zone} />
+      )}
+
+      {w.status !== 'agency' && (
+        <div className="card">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <h2 style={{ margin: 0 }}>Calls</h2>
+            <LogCall back={`/workers/${id}`} workerId={id} who={`${w.preferredName || w.firstName} ${w.lastName}`} />
+          </div>
+          {calls.length === 0 ? <p className="muted small" style={{ margin: '6px 0 0' }}>No calls logged in the last 90 days.</p> : (
+            <ul className="call-list">{calls.map(c => <li key={c.id}>{callLine(c, today)}</li>)}</ul>
+          )}
+        </div>
       )}
 
         {w.notes && <div className="card"><h2>Notes</h2><p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{w.notes}</p></div>}
