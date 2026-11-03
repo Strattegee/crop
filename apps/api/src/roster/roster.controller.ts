@@ -9,6 +9,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, gender, int, oneOf, text } from '../common/validate.js';
 import { genderReason } from './eligibility.js';
 import { fillWords, wordsFor } from '../terms/words.js';
+import { requestLine, type DayRequestKind } from './day-requests.js';
 import { APP_POOL } from '../database/database.module.js';
 import { EMPLOYED_ON, eligibilityForShift, rankCandidates } from './eligibility-data.js';
 import { equipmentForShift } from './equipment-data.js';
@@ -446,7 +447,15 @@ export class ShiftsController {
            from leave_records l join workers w on w.id = l.worker_id
           where w.status = 'active' and l.status in ('requested', 'approved') and l.ends_on >= $1 and l.starts_on <= $2
           order by l.starts_on`, [from, to])).rows;
-      return { from, to, shifts, people, agencyPeople, equipment, leave };
+      // Requests for a day (migration 0080): waiting or done, for the roster's R markers and lines.
+      const w = await wordsFor(db);
+      const dayRequests = (await db.query<{ kind: DayRequestKind; atTime: string | null; note: string | null }>(
+        `select r.id, r.worker_id as "workerId", to_char(r.on_date, 'YYYY-MM-DD') as date, r.kind, to_char(r.at_time, 'HH24:MI') as "atTime",
+                r.note, r.status
+           from day_requests r join workers w on w.id = r.worker_id
+          where w.status = 'active' and r.status in ('open', 'done') and r.on_date between $1 and $2
+          order by r.on_date, r.created_at`, [from, to])).rows.map(r => ({ ...r, line: fillWords(requestLine(r), w) }));
+      return { from, to, shifts, people, agencyPeople, equipment, leave, dayRequests };
     });
   }
 

@@ -4,6 +4,7 @@ import { fillReasons, wordsFor } from '../terms/words.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { addDays, type RequirementRule } from '../workforce/compliance.js';
 import type { TermDates } from './employment.js';
+import type { DayRequestFacts } from './day-requests.js';
 import { PERIODS, type AvailabilityFacts, type LeaveFacts, type Period } from './availability.js';
 import { fortnightsContaining, mondayOf, shiftEligibility, type Eligibility, type OperatorNeed, type OtherShift, type ShiftFacts } from './eligibility.js';
 
@@ -44,13 +45,13 @@ export interface Candidate {
 
 /** The facts about a shift that eligibility needs (within withTenant). */
 export async function loadShiftFacts(db: PoolClient, shiftId: string): Promise<ShiftFacts & { id: string }> {
-  const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; local_start: string; hours: number; gender_requested: 'F' | 'M' | null }>(
+  const s = (await db.query<{ id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; local_start: string; local_end: string; hours: number; gender_requested: 'F' | 'M' | null }>(
     `select s.id, s.role, s.gender_requested, s.starts_at, s.ends_at, to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
-            to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as local_start,
+            to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as local_start, to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as local_end,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours
        from shifts s join facilities f on f.id = s.facility_id where s.id = $1`, [shiftId])).rows[0];
   if (!s) throw new NotFoundException('{Shift} not found');
-  return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, localStart: s.local_start, hours: s.hours, genderRequested: s.gender_requested };
+  return { id: s.id, role: s.role, startsAt: s.starts_at, endsAt: s.ends_at, localDate: s.local_date, localStart: s.local_start, localEnd: s.local_end, hours: s.hours, genderRequested: s.gender_requested };
 }
 
 /** Operator credentials needed by the equipment booked on a shift. */
@@ -148,6 +149,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   const availability = await availabilityByWorker(db, ids, shift.localDate);
   const leave = await leaveByWorker(db, ids, shift.localDate);
   const employment = await termsByWorker(db, ids);
+  const dayRequests = await dayRequestsByWorker(db, ids, shift.localDate);
 
   const words = await wordsFor(db);
   const weekFrom = mondayOf(shift.localDate);
@@ -161,7 +163,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
       name: w.name, roles: w.roles, issues, others: mine, hoursPerFortnight: limits.get(w.id) ?? null, minRestHours: ctx.settings.minRestHours,
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
       availability: availability.get(w.id), leave: leave.get(w.id) ?? [], employment: employment.get(w.id) ?? [],
-      roleWarnOnly: opts.roleWarnOnly, gender: w.gender,
+      roleWarnOnly: opts.roleWarnOnly, gender: w.gender, dayRequests: dayRequests.get(w.id) ?? [],
     });
     for (const message of opts.blockAll ?? []) {
       e.blocks.push({ code: 'credential', message });
@@ -214,6 +216,19 @@ export async function leaveByWorker(db: PoolClient, workerIds: string[], onDate:
     [workerIds, onDate])).rows) {
     const list = out.get(r.worker_id) ?? [];
     list.push({ startsOn: r.starts_on, endsOn: r.ends_on, status: r.status });
+    out.set(r.worker_id, list);
+  }
+  return out;
+}
+
+/** Requests for a day that still count (waiting or done), per person, on one date (migration 0080; within withTenant). */
+export async function dayRequestsByWorker(db: PoolClient, workerIds: string[], onDate: string): Promise<Map<string, DayRequestFacts[]>> {
+  const out = new Map<string, DayRequestFacts[]>();
+  for (const r of (await db.query<DayRequestFacts & { worker_id: string }>(
+    `select worker_id, kind, to_char(at_time, 'HH24:MI') as "atTime", note, status from day_requests
+      where worker_id = any($1) and on_date = $2 and status in ('open', 'done')`, [workerIds, onDate])).rows) {
+    const list = out.get(r.worker_id) ?? [];
+    list.push({ kind: r.kind, atTime: r.atTime, note: r.note, status: r.status });
     out.set(r.worker_id, list);
   }
   return out;

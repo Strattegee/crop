@@ -40,6 +40,8 @@ import { DashboardController } from './dashboard/dashboard.controller.js';
 import { AuditController } from './audit/audit.controller.js';
 import { AppAccessController, MyController } from './worker-app/worker-app.controller.js';
 import { MyAvailabilityController } from './worker-app/my-availability.controller.js';
+import { MyDayRequestsController } from './worker-app/my-day-requests.controller.js';
+import { DayRequestsController } from './roster/day-requests.controller.js';
 import { MySwapsController } from './worker-app/my-swaps.controller.js';
 import { SwapsController } from './roster/swaps.controller.js';
 import { OnboardingChecklistsController, WorkerOnboardingController } from './workforce/onboarding.controller.js';
@@ -53,7 +55,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController, AttentionController, ShiftDutiesController, CoverRulesController,
     OnboardingChecklistsController, WorkerOnboardingController, AgencyLinksController, AgencyFillController, OutsideAgenciesController, AgencyAttentionController, AgencyOffersController, AgencyOfferLinksController,
-    AppAccessController, MyController, MyAvailabilityController, MySwapsController, SwapsController,
+    AppAccessController, MyController, MyAvailabilityController, MyDayRequestsController, DayRequestsController, MySwapsController, SwapsController,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: WordsInErrorsInterceptor }, { provide: APP_INTERCEPTOR, useClass: DbRulesInterceptor }, AgencyEscalator, ClientConfirmations],
 })

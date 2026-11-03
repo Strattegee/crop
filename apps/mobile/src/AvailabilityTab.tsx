@@ -7,6 +7,7 @@ import {
   PERIOD_LABEL, PERIODS, periodsLabel, toggleDay, WEEKDAYS, type DayChip, type LeaveKind, type MyLeave, type Period,
 } from './format';
 import { styles } from './styles';
+import { RequestsSection } from './RequestsSection';
 
 type Availability = {
   today: string;
@@ -179,6 +180,8 @@ export function AvailabilityTab({ tenant, word, onSignedOut, footer }: { tenant:
               <Text style={[styles.buttonText, styles.secondaryText]}>Add a change</Text>
             </Pressable>
           )}
+
+          <RequestsSection tenant={tenant} today={today} word={word} onSignedOut={onSignedOut} />
 
           <Text style={styles.section}>Leave</Text>
           {data.leave.length === 0 && !asking && <Text style={styles.muted}>No leave coming up.</Text>}

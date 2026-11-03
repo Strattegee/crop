@@ -45,6 +45,7 @@ const SCREEN_FOR: Record<string, PushScreen> = {
   shift_swap_done: 'shifts',
   shift_swap_refused: 'shifts',
   credential_expiry: 'credentials',
+  day_request_answered: 'availability',
 };
 
 export function pushScreen(template: string): PushScreen | null {

@@ -412,7 +412,31 @@ export function addShiftsWhen(dates: string[]): string {
 }
 
 /** What a card needs for its marker letters (David, 30 Oct). */
+/** A request for a day from the app (migration 0080), as the roster gets it. */
+export type DayRequest = { id: string; workerId: string; date: string; kind: string; atTime: string | null; note: string | null; status: string; line: string };
+
+/**
+ * Whether a shift goes against a request (keep in step with `breaksRequest` in apps/api/src/roster/day-requests.ts):
+ * another part of the day than asked for, finishing after "finish by" (overnight always does), starting before "start after".
+ */
+export function breaksRequest(r: { kind: string; atTime: string | null }, localStart: string, localEnd: string): boolean {
+  const h = Number(localStart.slice(0, 2));
+  const period = h >= 5 && h < 12 ? 'am' : h >= 12 && h < 19 ? 'pm' : 'night';
+  if (r.kind.startsWith('prefer_')) return r.kind !== `prefer_${period}`;
+  if (r.kind === 'start_after') return !!r.atTime && localStart < r.atTime;
+  if (r.kind === 'finish_by') return !!r.atTime && (localEnd <= localStart || localEnd > r.atTime);
+  return false;
+}
+
+/** The person on a shift's requests for its date, each marked when the shift goes against it. */
+export function requestsFor(s: { workerId?: string | null; localDate: string; localStart: string; localEnd: string }, all: DayRequest[]): (DayRequest & { breaks: boolean })[] {
+  if (!s.workerId) return [];
+  return all.filter(r => r.workerId === s.workerId && r.date === s.localDate).map(r => ({ ...r, breaks: breaksRequest(r, s.localStart, s.localEnd) }));
+}
+
 export type MarkerShift = TLineShift & {
+  /** The person's requests that day (R), from `requestsFor`. */
+  requests?: { line: string; breaks: boolean }[];
   genderRequested?: 'F' | 'M' | null; workerId?: string | null; workerName?: string | null; workerGender?: 'F' | 'M' | null;
   equipment?: { name: string; vehicle?: boolean }[]; itemCount?: number; duties?: { name: string }[];
 };
@@ -447,6 +471,11 @@ export function shiftMarkers(s: MarkerShift, letters: MarkerLetters = DEFAULT_MA
   // T = template (David, 3 Nov): who usually works it; marked when they're away that day.
   const t = tLines(s);
   if (t.length) out.push({ key: 't', letter: letters.template, cls: `mk-t${t.some(l => l.tone === 'away') ? ' warn' : ''}`, title: t.map(l => l.title).join('; ') });
+  // R = request from the worker (David, 3 Nov): ringed when the shift doesn't fit it (a warning, never a block).
+  if (s.requests?.length) {
+    const off = s.requests.some(r => r.breaks);
+    out.push({ key: 'r', letter: letters.request, cls: `mk-r${off ? ' warn' : ''}`, title: `Asked: ${s.requests.map(r => r.line).join('; ')}${off ? ' (this doesn\'t fit)' : ''}` });
+  }
   return out;
 }
 
