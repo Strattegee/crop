@@ -6,9 +6,15 @@ import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.ty
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
-import { PACKS, packById, type IndustryPack } from './packs.js';
+import { type IndustryPack } from './packs.js';
+import { packByIdFor, packsFor } from './local.js';
 import { industriesOf } from './catalogue.js';
 import { applyPackTerms } from '../terms/terms.controller.js';
+
+/** The business's country (tenant_settings; Australia when nothing is set). */
+async function countryOf(db: PoolClient): Promise<string> {
+  return (await db.query<{ country: string }>('select country from tenant_settings where tenant_id = app_tenant_id()')).rows[0]?.country ?? 'AU';
+}
 
 const summary = (p: IndustryPack) => ({
   id: p.id, name: p.name, description: p.description,
@@ -106,26 +112,32 @@ export class IndustryController {
   @Get('industry-packs')
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => {
+      const country = await countryOf(db);
       const applied = new Map((await db.query<{ pack_id: string; applied_at: Date }>('select pack_id, applied_at from industry_pack_applications')).rows.map(r => [r.pack_id, r.applied_at]));
-      return PACKS.map(p => ({ ...summary(p), appliedAt: applied.get(p.id) ?? null }));
+      return packsFor(country).map(p => ({ ...summary(p), appliedAt: applied.get(p.id) ?? null }));
     });
   }
 
   @Roles(...OFFICE_ROLES)
   @Get('industry-packs/:id')
-  get(@Param('id') id: string) {
-    const p = packById(id);
-    if (!p) throw new NotFoundException('Industry template not found');
-    return p;
+  get(@Tenant() t: Membership, @Param('id') id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const p = packByIdFor(id, await countryOf(db));
+      if (!p) throw new NotFoundException('Industry template not found');
+      return p;
+    });
   }
 
   @Roles('owner', 'admin')
   @Post('industry-packs/:id/apply')
   @HttpCode(200)
   apply(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id') id: string) {
-    const p = packById(id);
-    if (!p) throw new NotFoundException('Industry template not found');
-    return withTenant(this.pool, t.tenantId, async db => ({ pack: p.id, added: await applyPack(db, t.tenantId, auth.userId, p) }));
+    return withTenant(this.pool, t.tenantId, async db => {
+      // The business's own country's version of the template (local.ts).
+      const p = packByIdFor(id, await countryOf(db));
+      if (!p) throw new NotFoundException('Industry template not found');
+      return { pack: p.id, added: await applyPack(db, t.tenantId, auth.userId, p) };
+    });
   }
 
   /** The business's roles: from templates and added by hand. */

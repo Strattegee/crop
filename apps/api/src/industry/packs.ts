@@ -25,9 +25,12 @@ export interface IndustryPack {
   duties: PackDuty[];
 }
 
-/** The catalogue code for a pack credential's name: `au.` (the packs are Australian) and the name in lower case with dashes. */
-export function catalogueCode(name: string): string {
-  return 'au.' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '');
+/**
+ * The catalogue code for a pack credential's name: the country (`au.` for the packs as written, which are Australian;
+ * `nz.`, `us.`, `gb.` for the other countries' versions in `local.ts`) and the name in lower case with dashes.
+ */
+export function catalogueCode(name: string, country: 'AU' | 'NZ' | 'US' | 'GB' = 'AU'): string {
+  return country.toLowerCase() + '.' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '');
 }
 
 const c = (name: string, category: Category, number: boolean, expiry: boolean, method: string, code = catalogueCode(name)): PackCredential =>

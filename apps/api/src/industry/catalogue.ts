@@ -2,9 +2,12 @@
  * Which industries a thing belongs to (David, 31 Oct): credentials, roles, duties, equipment types, items and shift
  * types are grouped by industry, so each business sees the ones for the industries it works in. Worked out from the
  * industry templates (packs.ts), never stored: credentials by catalogue code (then name), everything else by name.
- * Something no template has is the business's own (an empty list).
+ * Something no template has is the business's own (an empty list). Every country's version of the templates
+ * (local.ts) counts, so a New Zealand business's Site Safe Passport is construction like an Australian White Card.
  */
-import { catalogueCode, PACKS } from './packs.js';
+import { COUNTRY_CODES } from '../common/countries.js';
+import { catalogueCode } from './packs.js';
+import { packsFor } from './local.js';
 
 export type CatalogueKind = 'credential' | 'role' | 'duty' | 'equipmentType' | 'item' | 'shiftCode';
 
@@ -19,7 +22,7 @@ function build(): Record<CatalogueKind, Map<string, string[]>> {
     if (!list.includes(pack)) list.push(pack);
     idx[kind].set(k, list);
   };
-  for (const p of PACKS) {
+  for (const p of COUNTRY_CODES.flatMap(packsFor)) {
     for (const c of p.credentials) { add('credential', c.code, p.id); add('credential', key(c.name), p.id); }
     for (const r of p.roles) add('role', key(r.name), p.id);
     for (const d of p.duties) add('duty', key(d.name), p.id);

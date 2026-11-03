@@ -40,7 +40,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="card">
         <h2>Industry templates</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Pick the industries this business works in. Each adds starter roles, the credentials each role needs, shift types, shift duties (such as serving alcohol), equipment types and stock items. Apply as many as you like; nothing is duplicated, and you can change or switch off anything afterwards. Templates are a starting point, not legal advice: check your state&apos;s requirements.</p>
+        <p className="muted" style={{ marginTop: 0 }}>Pick the industries this business works in. Each adds starter roles, the credentials each role needs, shift types, shift duties (such as serving alcohol), equipment types and stock items. Apply as many as you like; nothing is duplicated, and you can change or switch off anything afterwards. Templates are a starting point, not legal advice: check your state&apos;s requirements.{' '}They are the {COUNTRIES[(settings.country ?? 'AU') as keyof typeof COUNTRIES]?.name ?? 'Australia'} versions, with that country&apos;s usual credentials and licences (the business&apos;s country is set under Business settings below); anything already added stays as it is if the country changes.</p>
         <div className="grid">
           {packs.map(p => (
             <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
