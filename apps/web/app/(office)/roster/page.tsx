@@ -17,7 +17,7 @@ import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, anchorOf, barPosition, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type Span,
+  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers,
 } from './view';
 
@@ -32,7 +32,7 @@ type Attention = {
 };
 const ATTENTION_SHOWN = 5;
 /** A gap in a cover rule (Settings → Cover rules): someone working but nobody holding the credential. */
-type CoverGap = { facilityId: string; facilityName: string; typeName: string; localDate: string; localFrom: string; localTo: string; shiftId: string; title: string };
+type CoverGap = GapFacts;
 
 type Shift = {
   id: string; facilityId: string; facilityName: string; areaId: string | null; areaName: string | null; shiftCode: string | null; shiftLetter?: string | null;
@@ -115,6 +115,8 @@ type PublishedChanges = 'open' | 'managers' | 'locked';
 const CHANGE_RULE: Record<Exclude<PublishedChanges, 'open'>, string> = { managers: 'only owners and admins can change a live week', locked: 'changes to a live week are turned off' };
 /** Height of one lane of bars in the day timeline. */
 const LANE_PX = 60;
+/** Height of one lane in the day timeline's cover gaps row. */
+const GAP_PX = 30;
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
@@ -154,7 +156,7 @@ export default async function RosterPage({ searchParams }: {
   // Needs attention starts closed with its counts showing (David, 29 Oct).
   const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, coverGaps] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, fetchedGaps] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -168,8 +170,12 @@ export default async function RosterPage({ searchParams }: {
     // Needs attention (backlog item 12): the next seven days from now, whatever period is on screen.
     api<Attention>(`/roster/attention${site ? `?facilityId=${site}` : ''}`).catch(() => null),
     span === 'month' ? Promise.resolve([] as CoverGap[])
-      : api<CoverGap[]>(`/roster/cover-gaps?from=${days[0]}&to=${days[days.length - 1]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as CoverGap[]),
+      : api<CoverGap[]>(`/roster/cover-gaps?from=${span === 'day' ? addDaysV(days[0], -1) : days[0]}&to=${days[days.length - 1]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as CoverGap[]),
   ]);
+  // Cover gaps in this period (day view also fetched the day before, for a gap running past midnight).
+  const dayGaps = span === 'day' ? gapBars(fetchedGaps, days[0], !site) : [];
+  const coverGaps = fetchedGaps.filter(g => days.includes(g.localDate) || (span === 'day' && gapBars([g], days[0], false).length > 0));
+  const gapCount = gapsByDay(coverGaps);
   const changeRule: PublishedChanges = rosterSettings.publishedChanges ?? 'open';
   // Sites with shifts this week, or already published, are the ones worth showing a state for.
   const weekRows = weekStates.filter(w => w.shifts > 0 || w.version !== null || site);
@@ -322,7 +328,7 @@ export default async function RosterPage({ searchParams }: {
   }));
 
   // Shift cards, shared by the week grid and the day timeline (bars).
-  const win = dayWindow(span === 'day' ? [...shifts, ...cancelled] : []);
+  const win = dayWindow(span === 'day' ? [...shifts, ...cancelled, ...dayGaps] : []);
   const cardAttrs = (s: Shift) => ({
     href: url({ shift: s.id }), 'data-shift': s.id, 'data-date': s.localDate, 'data-start': s.localStart,
     'data-needs-person': !s.equipmentOnly && !s.workerId && s.status !== 'cancelled' ? '1' : '0',
@@ -898,6 +904,11 @@ export default async function RosterPage({ searchParams }: {
                     <th key={d} className={d === today ? 'today' : ''}>
                       <Link href={url({ ...at('day', d), shift: undefined })} className="daylink" title="See this day hour by hour"><span>{dayLabel(d)}</span></Link>
                       {count}
+                      {(gapCount.get(d) ?? 0) > 0 && (
+                        <Link href={url({ ...at('day', d), shift: undefined })} className="gapcount" title="Times with nobody on who holds a credential a cover rule asks for">
+                          {gapCount.get(d) === 1 ? '1 cover gap' : `${gapCount.get(d)} cover gaps`}
+                        </Link>
+                      )}
                     </th>
                   );
                 })}
@@ -958,6 +969,32 @@ export default async function RosterPage({ searchParams }: {
             ))}
             {shifts.length > 0 && (
               <tfoot>
+                {dayGaps.length > 0 && (() => {
+                  const gl = lanes(dayGaps);
+                  return (
+                    <tr className="cover-gaps">
+                      <th className="who" scope="row">
+                        <span className="name">Cover gaps</span>
+                        <span className="sub"><Link href="/settings/cover-rules">Cover rules</Link></span>
+                      </th>
+                      <td className="tl">
+                        <div className="tl-track" style={{ height: gl.count * GAP_PX, minHeight: 0 }}>
+                          {win.ticks.map(t => <i key={t} className="tl-tick" style={{ left: `${((t - win.from) / (win.to - win.from)) * 100}%` }} />)}
+                          {dayGaps.map(b => {
+                            const pos = barPosition(b, win);
+                            return (
+                              <Link key={b.id} href={`${url({ shift: b.shiftId })}#shift-panel`} className="gapbar" title={b.title}
+                                style={{ left: `${pos.left}%`, width: `${pos.width}%`, top: (gl.lane.get(b.id) ?? 0) * GAP_PX }}>
+                                <span>{b.localStart}–{b.localEnd}</span> {b.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="bal" />
+                    </tr>
+                  );
+                })()}
                 <tr className="totals">
                   <th className="who" scope="row">{span === 'day' ? 'Day total' : 'Day totals'}</th>
                   {days.map(d => {

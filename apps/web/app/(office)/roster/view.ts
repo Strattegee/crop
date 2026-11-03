@@ -502,3 +502,37 @@ export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3, 
   });
   return [...all.filter(e => e.canDo > 0).slice(0, top), ...all.filter(e => e.canDo === 0).slice(0, blockedShown)].map(row);
 }
+
+/** A cover gap as `GET /roster/cover-gaps` gives it ("02:00 next day" when it ends the day after). */
+export type GapFacts = { facilityId: string; facilityName: string; typeName: string; localDate: string; localFrom: string; localTo: string; shiftId: string; title: string };
+export type GapBar = { id: string; localStart: string; localEnd: string; shiftId: string; label: string; title: string };
+
+/**
+ * Cover gaps on one day of the timeline (Settings → Cover rules): gaps starting that day, and the part after
+ * midnight of a gap that started the day before. Times are the site's local times, as on the shift bars.
+ * `allSites` adds the site to the label when the roster shows every site.
+ */
+export function gapBars(gaps: GapFacts[], day: string, allSites: boolean): GapBar[] {
+  const out: GapBar[] = [];
+  for (const g of gaps) {
+    const nextDay = g.localTo.endsWith('next day');
+    const to = g.localTo.slice(0, 5);
+    let localStart: string;
+    if (g.localDate === day) localStart = g.localFrom;
+    else if (nextDay && addDays(g.localDate, 1) === day && to !== '00:00') localStart = '00:00';
+    else continue;
+    const label = `No ${g.typeName}${allSites ? ` · ${g.facilityName}` : ''}`;
+    out.push({
+      id: `${g.facilityId}:${g.typeName}:${g.localDate}:${g.localFrom}`, localStart, localEnd: to, shiftId: g.shiftId, label,
+      title: `${g.title}${allSites ? ` · ${g.facilityName}` : ''}`,
+    });
+  }
+  return out;
+}
+
+/** How many cover gaps start on each day, for the week view's day headings. */
+export function gapsByDay(gaps: { localDate: string }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const g of gaps) m.set(g.localDate, (m.get(g.localDate) ?? 0) + 1);
+  return m;
+}
