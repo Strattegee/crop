@@ -25,6 +25,13 @@ const ZONE = "coalesce((select timezone from tenant_settings where tenant_id = $
 /** The SQL condition for this calendar month in the business's own time zone ($1 = tenant id). */
 export const SMS_MONTH = `created_at >= date_trunc('month', now() at time zone ${ZONE}) at time zone ${ZONE}`;
 
+/**
+ * Who caused a message when the caller didn't say (David, 3 Nov 2026: "messages sent" per officer): the signed-in
+ * person of the request (`app.audit_id`, always a user id); null for links and background jobs.
+ */
+const WHO_ACTED = `(select case when v ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then v::uuid end
+  from (select nullif(current_setting('app.audit_id', true), '') as v) a)`;
+
 export type QueueResult = { id: string; status: 'queued' | 'skipped'; reason?: string } | { id: null; status: 'duplicate' };
 
 /**
@@ -62,7 +69,7 @@ export async function queueNotification(db: PoolClient, tenantId: string, n: New
   }
   const row = (await db.query<{ id: string }>(
     `insert into notifications(tenant_id, channel, to_address, template, dedupe_key, subject, body, worker_id, status, last_error, created_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, coalesce($11::uuid, ${WHO_ACTED}))
      on conflict (tenant_id, dedupe_key) where dedupe_key is not null do nothing
      returning id`,
     [tenantId, n.channel, to, n.template, n.dedupeKey ?? null, n.subject ?? null, n.channel === 'sms' ? smsText(n.body) : n.body, n.workerId ?? null, status, reason, n.createdBy ?? null],

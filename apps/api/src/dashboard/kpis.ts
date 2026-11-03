@@ -145,3 +145,80 @@ export function trendDays(today: string, weeks = 13): string[] {
   const t = Date.parse(`${today}T00:00:00Z`);
   return Array.from({ length: weeks }, (_, i) => new Date(t - (weeks - 1 - i) * 7 * 86_400_000).toISOString().slice(0, 10));
 }
+
+// ---- Live numbers (David, 3 Nov 2026, answer 1): shifts, allocation officers and personnel for a period, for the
+// business, a state or an office. Defined here once; worked out by `liveNumbers` in dashboard-data.ts.
+
+export const LIVE_PERIODS = ['today', 'week', 'last7', 'month'] as const;
+export type LivePeriod = typeof LIVE_PERIODS[number];
+export const LIVE_PERIOD_LABEL: Record<LivePeriod, string> = { today: 'Today', week: 'This week', last7: 'Last 7 days', month: 'This month' };
+
+/**
+ * The period's first and last local dates (inclusive) for the business's `today`: today; this week (Monday to
+ * Sunday); the last 7 days (today and the six before); this month (the 1st to its last day).
+ */
+export function livePeriod(period: LivePeriod, today: string): { from: string; to: string } {
+  const t = new Date(`${today}T00:00:00Z`);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const plus = (d: Date, days: number) => new Date(d.getTime() + days * 86_400_000);
+  switch (period) {
+    case 'today': return { from: today, to: today };
+    case 'last7': return { from: iso(plus(t, -6)), to: today };
+    case 'month': return { from: `${today.slice(0, 7)}-01`, to: iso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0))) };
+    case 'week': {
+      const monday = plus(t, -((t.getUTCDay() + 6) % 7));
+      return { from: iso(monday), to: iso(plus(monday, 6)) };
+    }
+  }
+}
+
+export type LiveGroup = 'shifts' | 'officers' | 'personnel';
+export interface LiveDef {
+  key: string;
+  group: LiveGroup;
+  label: string;
+  /** How it is worked out (tokens {shift} {shifts} {Shifts} {client} {clients} {Client}). */
+  how: string;
+  /** Shown as a percentage of client requests as well as a number. */
+  ofRequests: boolean;
+}
+
+/**
+ * The live numbers. Every {shift} number counts {shifts} needing a person at a {client}'s site whose local start
+ * date is in the period (a {client} request), so filled + waiting + unfilled + cancelled = requests.
+ */
+export const LIVE: readonly LiveDef[] = [
+  { key: 'requests', group: 'shifts', label: '{Client} requests', ofRequests: false,
+    how: '{Shifts} needing a person at {client} sites that start in the period (local dates), cancelled ones included' },
+  { key: 'filled', group: 'shifts', label: 'Filled', ofRequests: true,
+    how: '{Client} requests booked: someone is on the {shift} and has confirmed' },
+  { key: 'waiting', group: 'shifts', label: 'Waiting to confirm', ofRequests: true,
+    how: '{Client} requests with someone allocated who hasn\'t confirmed yet' },
+  { key: 'unfilled', group: 'shifts', label: 'Unfilled', ofRequests: true,
+    how: '{Client} requests with nobody on them, not cancelled: still open, or started or ended empty' },
+  { key: 'client_cancelled', group: 'shifts', label: '{Client} cancelled', ofRequests: true,
+    how: '{Client} requests cancelled because the {client} cancelled or withdrew the request' },
+  { key: 'other_cancelled', group: 'shifts', label: 'Cancelled, other reasons', ofRequests: true,
+    how: '{Client} requests cancelled for any other reason (we couldn\'t fill it, our mistake, other, or cancelled before reasons were recorded)' },
+
+  { key: 'handled', group: 'officers', label: '{Shifts} handled', ofRequests: false,
+    how: 'Different {shifts} the officer worked on in the period: changed in the office (added, filled, confirmed, removed, cancelled, times), offered, recorded the {client}\'s yes, or logged a call about' },
+  { key: 'messages', group: 'officers', label: 'Messages sent', ofRequests: false,
+    how: 'Emails, texts and app messages to workers that the officer\'s actions sent in the period (offers, rosters, bookings); messages not sent are left out' },
+  { key: 'calls', group: 'officers', label: 'Calls made', ofRequests: false,
+    how: 'Calls the officer logged in the period, to workers or {clients} (calls they took count too)' },
+
+  { key: 'accepted', group: 'personnel', label: 'Accepted, not worked yet', ofRequests: true,
+    how: '{Client} requests in the period booked to the person that haven\'t started yet' },
+  { key: 'worked', group: 'personnel', label: 'Worked', ofRequests: true,
+    how: '{Client} requests in the period booked to the person that have ended' },
+  { key: 'pulled_out', group: 'personnel', label: 'Pull-outs', ofRequests: false,
+    how: 'Times a person pulled out of a {client}\'s {shift} in the period (when they pulled out); agency people are left out' },
+] as const;
+
+/** {client} tokens as well as the {shift} and {agency} ones. */
+export function liveWorded(text: string, w: { one: (c: number) => string; many: (c: number) => string; lower: (c: number, plural?: boolean) => string },
+  codes: { shift: number; agency: number; client: number }): string {
+  return worded(text, w, codes)
+    .replaceAll('{client}', w.lower(codes.client)).replaceAll('{clients}', w.lower(codes.client, true)).replaceAll('{Client}', w.one(codes.client));
+}

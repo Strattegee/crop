@@ -94,6 +94,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 {f.label}{f.focus === dash.assigned ? ' (yours)' : ''}
               </Link>
             ))}
+            <Link href="/dashboard/live" title={`${tw.many(T.shift)}, allocation officers and ${tw.lower(T.worker, true)}, by state and office`}>Live numbers</Link>
           </nav>
         )}
       </div>

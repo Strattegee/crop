@@ -695,3 +695,9 @@ Newest first. One entry per working session or scheduled run.
 - Privacy policy and data processing agreement now mention the call log. The worker notice is unchanged (calls don't appear in the app); David to decide whether the notice should mention them.
 - Next: the live numbers on the Dashboard (part C).
 
+## 2026-11-04 small hours (3 Nov, David: live numbers, part C)
+
+- Shipped: Dashboard › Live numbers, the figures David asked for in answer 1. Pick today, this week, the last 7 days or this month, and narrow from the whole business to a state, then an office. Shifts: client requests, filled, waiting to confirm, unfilled, client cancelled and other cancellations, each with its percentage of requests. Allocation officers: shifts handled, messages sent and calls made, per officer. People: shifts accepted and not worked yet, worked, and pull-outs, per person. The page refreshes itself every 45 seconds while open; hovering a number says how it is worked out.
+- Messages now record who caused them even where the code didn't say, so "messages sent" fills in going forward.
+- Next: David to say whether the daily email and the app's manager screens should carry these numbers.
+

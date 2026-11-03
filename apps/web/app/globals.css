@@ -905,3 +905,16 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .log-call-btns { display: flex; flex-wrap: wrap; gap: 4px; }
 .call-list { list-style: none; padding: 0; margin: 4px 0 0; }
 .call-list li { padding: 3px 0; border-bottom: 1px solid var(--divider); font-size: 13px; }
+
+/* Live numbers (David, 3 Nov): Dashboard › Live numbers. */
+.live-scope { margin: 4px 0 8px; }
+.live-drill { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.live-section { margin-top: 18px; }
+.live-section h2 { margin: 0; }
+.live-table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.live-table { width: 100%; border-collapse: collapse; }
+.live-table th, .live-table td { padding: 6px 12px; border-bottom: 1px solid var(--divider); text-align: left; white-space: nowrap; }
+.live-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.live-table td.bad { color: var(--bad); font-weight: 600; }
+.live-updated { display: inline-flex; align-items: center; gap: 6px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }

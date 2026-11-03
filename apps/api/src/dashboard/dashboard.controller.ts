@@ -8,11 +8,12 @@ import { bool, oneOf } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { AttentionController } from '../roster/attention.controller.js';
 import { DEFAULT_WORDS, T, wordsFor } from '../terms/words.js';
-import { funnel, history, MEASURES, saveSnapshot, suppliesEmployers, targetsOf } from './dashboard-data.js';
+import { funnel, history, liveChoices, liveOfficers, livePersonnel, liveShiftCounts, MEASURES, saveSnapshot, suppliesEmployers, targetsOf, type LiveScope } from './dashboard-data.js';
 import { loadSettings } from '../workforce/settings.js';
 import { todayIn } from '../workforce/compliance.js';
 import {
-  defaultFocus, FOCUS_LABEL, FOCUSES, kpiByKey, KPIS, kpisFor, seesCosts, SETTING_KPIS, standing, targetRefusal, tidy, trendDays, worded, type Focus,
+  defaultFocus, FOCUS_LABEL, FOCUSES, kpiByKey, KPIS, kpisFor, LIVE, LIVE_PERIOD_LABEL, LIVE_PERIODS, liveWorded, livePeriod, percent, seesCosts, SETTING_KPIS, standing,
+  targetRefusal, tidy, trendDays, worded, type Focus, type LivePeriod,
 } from './kpis.js';
 
 type TeamRow = { user_id: string; name: string; email: string; role: string; focus: Focus | null; sees_costs: boolean };
@@ -75,6 +76,57 @@ export class DashboardController {
         focuses: FOCUSES.filter(f => f !== 'agency' || supplier).map(f => ({ focus: f, label: FOCUS_LABEL[f] })),
         kpis: withHistory,
         funnel: focus === 'recruitment' ? await funnel(db) : null,
+      };
+    });
+  }
+
+  /**
+   * Live numbers (David, 3 Nov 2026, answer 1): {client} requests and how they ended up, each allocation officer's
+   * {shifts} handled, messages and calls, and each person's accepted, worked and pull-outs, for `period` (today | week |
+   * last7 | month; default week, in the business's dates), the business or a `state` (a site's state) and/or an
+   * `office` (an office id, or `none`). Definitions in `LIVE` (kpis.ts). No costs.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('dashboard/live')
+  live(@Tenant() t: Membership, @Query('period') periodQ?: string, @Query('state') stateQ?: string, @Query('office') officeQ?: string) {
+    const period: LivePeriod = periodQ === undefined || periodQ === '' ? 'week' : (LIVE_PERIODS as readonly string[]).includes(periodQ) ? periodQ as LivePeriod : (() => {
+      throw new BadRequestException('Choose today, this week, the last 7 days or this month');
+    })();
+    const state = stateQ?.trim() ? stateQ.trim().slice(0, 60) : null;
+    const office = officeQ?.trim() ? officeQ.trim().toLowerCase() : null;
+    if (office && office !== 'none' && !/^[0-9a-f-]{36}$/.test(office)) throw new BadRequestException('Choose an office');
+    return withTenant(this.pool, t.tenantId, async db => {
+      const zone = (await loadSettings(db, t.tenantId)).timezone;
+      const today = todayIn(zone);
+      const { from, to } = livePeriod(period, today);
+      const scope: LiveScope = { from, to, zone, state, office };
+      const w = await wordsFor(db);
+      const say = (x: string) => liveWorded(x, w, T);
+      const officeName = office && office !== 'none'
+        ? (await db.query<{ name: string }>('select name from offices where id = $1', [office])).rows[0]?.name ?? null : null;
+      if (office && office !== 'none' && !officeName) throw new NotFoundException('Office not found');
+      const [counts, officers, people, choices] = [await liveShiftCounts(db, scope), await liveOfficers(db, scope), await livePersonnel(db, scope), await liveChoices(db, scope)];
+      const def = (key: string) => LIVE.find(d => d.key === key)!;
+      const measure = (key: string, value: number) => {
+        const d = def(key);
+        return { key, label: say(d.label), how: say(d.how), value, percent: d.ofRequests ? percent(value, counts.requests) : null };
+      };
+      const sum = <R>(rows: R[], k: keyof R) => rows.reduce((n, r) => n + Number(r[k]), 0);
+      const personTotals = { accepted: sum(people, 'accepted'), worked: sum(people, 'worked'), pulledOut: sum(people, 'pulledOut') };
+      const officerTotals = { handled: sum(officers, 'handled'), messages: sum(officers, 'messages'), calls: sum(officers, 'calls') };
+      return {
+        period, periodLabel: LIVE_PERIOD_LABEL[period], periods: LIVE_PERIODS.map(p => ({ period: p, label: LIVE_PERIOD_LABEL[p] })),
+        from, to, today, state, office, officeName, at: new Date().toISOString(),
+        states: choices.states, offices: choices.offices,
+        shifts: (['requests', 'filled', 'waiting', 'unfilled', 'client_cancelled', 'other_cancelled'] as const).map(k => measure(k, counts[k])),
+        officers: {
+          measures: [measure('handled', officerTotals.handled), measure('messages', officerTotals.messages), measure('calls', officerTotals.calls)],
+          rows: officers,
+        },
+        personnel: {
+          measures: [measure('accepted', personTotals.accepted), measure('worked', personTotals.worked), measure('pulled_out', personTotals.pulledOut)],
+          rows: people.slice(0, 100), more: Math.max(0, people.length - 100),
+        },
       };
     });
   }

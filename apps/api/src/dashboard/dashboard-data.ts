@@ -235,3 +235,124 @@ export async function history(db: PoolClient, keys: string[], days: string[]): P
   const by = new Map(rows.map(r => [`${r.kpi}:${r.day}`, r.value === null ? null : Number(r.value)]));
   return new Map(keys.map(k => [k, days.map(d => by.get(`${k}:${d}`) ?? null)]));
 }
+
+// ---- Live numbers (David, 3 Nov 2026, answer 1). Definitions and wording: `LIVE` in kpis.ts.
+
+export interface LiveScope {
+  /** First and last local dates of the period (inclusive). */
+  from: string; to: string;
+  /** The business's time zone, for things that happen in the office (pull-outs, calls, messages). */
+  zone: string;
+  /** A site's state, or null for every state. */
+  state: string | null;
+  /** An office id, 'none' (sites without an office), or null for every office. */
+  office: string | null;
+}
+
+/** The sites in scope: client sites, in the state and office asked for. ($3 = state, $4 = office.) */
+const LIVE_SITES = `f.client_id is not null and ($3::text is null or f.state = $3)
+  and ($4::text is null or ($4 = 'none' and f.office_id is null) or f.office_id::text = $4)`;
+/** Client requests: shifts needing a person at those sites whose local start date is in the period ($1, $2). */
+const LIVE_SHIFTS = `s.needs_person and ${LIVE_SITES} and (s.starts_at at time zone f.timezone)::date between $1::date and $2::date`;
+const CLIENT_KINDS = `('client_cancelled', 'client_withdrew')`;
+
+export type LiveCounts = Record<'requests' | 'filled' | 'waiting' | 'unfilled' | 'client_cancelled' | 'other_cancelled', number>;
+export interface LivePerson { workerId: string; name: string; accepted: number; worked: number; pulledOut: number }
+export interface LiveOfficer { userId: string; name: string; handled: number; messages: number; calls: number }
+
+/** The shift numbers for the scope. */
+export async function liveShiftCounts(db: PoolClient, x: LiveScope): Promise<LiveCounts> {
+  const r = (await db.query<LiveCounts>(
+    `select count(*)::int as requests,
+            count(*) filter (where s.status = 'booked')::int as filled,
+            count(*) filter (where s.status = 'assigned')::int as waiting,
+            count(*) filter (where s.status = 'open')::int as unfilled,
+            count(*) filter (where s.status = 'cancelled' and s.cancel_kind in ${CLIENT_KINDS})::int as client_cancelled,
+            count(*) filter (where s.status = 'cancelled' and (s.cancel_kind is null or s.cancel_kind not in ${CLIENT_KINDS}))::int as other_cancelled
+       from shifts s join facilities f on f.id = s.facility_id
+      where ${LIVE_SHIFTS}`, [x.from, x.to, x.state, x.office])).rows[0];
+  return r;
+}
+
+/** Each person's accepted (booked, not started), worked (booked, ended) and pull-outs in the scope; agency people left out. */
+export async function livePersonnel(db: PoolClient, x: LiveScope): Promise<LivePerson[]> {
+  const booked = (await db.query<{ workerId: string; name: string; accepted: number; worked: number }>(
+    `select w.id as "workerId", coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as name,
+            count(*) filter (where s.starts_at > now())::int as accepted,
+            count(*) filter (where s.ends_at <= now())::int as worked
+       from shifts s join facilities f on f.id = s.facility_id
+       join shift_assignments sa on sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status = 'confirmed'
+       join workers w on w.id = sa.worker_id and w.status <> 'agency'
+      where ${LIVE_SHIFTS} and s.status = 'booked'
+      group by w.id`, [x.from, x.to, x.state, x.office])).rows;
+  const pulled = (await db.query<{ workerId: string; name: string; n: number }>(
+    `select w.id as "workerId", coalesce(nullif(trim(w.preferred_name), ''), w.first_name) || ' ' || w.last_name as name, count(*)::int as n
+       from shift_assignments px join shifts s on s.id = px.shift_id join facilities f on f.id = s.facility_id
+       join workers w on w.id = px.worker_id and w.status <> 'agency'
+      where px.resource_kind = 'worker' and px.status = 'removed' and px.removed_reason = 'pulled_out' and s.needs_person and ${LIVE_SITES}
+        and (px.ended_at at time zone $5)::date between $1::date and $2::date
+      group by w.id`, [x.from, x.to, x.state, x.office, x.zone])).rows;
+  const by = new Map<string, LivePerson>();
+  for (const b of booked) by.set(b.workerId, { workerId: b.workerId, name: b.name, accepted: b.accepted, worked: b.worked, pulledOut: 0 });
+  for (const p of pulled) {
+    const cur = by.get(p.workerId) ?? { workerId: p.workerId, name: p.name, accepted: 0, worked: 0, pulledOut: 0 };
+    cur.pulledOut = p.n;
+    by.set(p.workerId, cur);
+  }
+  return [...by.values()].sort((a, b) => (b.worked + b.accepted) - (a.worked + a.accepted) || b.pulledOut - a.pulledOut || a.name.localeCompare(b.name));
+}
+
+/**
+ * Each office person's shifts handled, messages sent and calls made in the period. Officers are everyone in the
+ * office, narrowed by their offices: an office (or 'none': people with no office), or a state (offices in that state
+ * or with sites there).
+ */
+export async function liveOfficers(db: PoolClient, x: LiveScope): Promise<LiveOfficer[]> {
+  const team = (await db.query<{ user_id: string; name: string }>('select user_id, name from app_office_team()')).rows;
+  const offices = (await db.query<{ user_id: string; office_id: string; state: string | null; site_states: string[] }>(
+    `select m.user_id, m.office_id, o.state,
+            coalesce((select array_agg(distinct f.state) from facilities f where f.office_id = o.id and f.state is not null), '{}') as site_states
+       from member_offices m join offices o on o.id = m.office_id where o.active`)).rows;
+  const keep = team.filter(p => {
+    const mine = offices.filter(o => o.user_id === p.user_id);
+    if (x.office === 'none') return mine.length === 0;
+    if (x.office) return mine.some(o => o.office_id === x.office);
+    if (x.state) return mine.some(o => o.state === x.state || o.site_states.includes(x.state!));
+    return true;
+  });
+  if (!keep.length) return [];
+  const ids = keep.map(p => p.user_id);
+  const inPeriod = (col: string) => `(${col} at time zone $3)::date between $1::date and $2::date`;
+  const rows = (await db.query<{ u: string; handled: number; messages: number; calls: number }>(
+    `with h as (
+       select actor_id as u, shift_id from shift_changes where via = 'office' and actor_id = any($4::uuid[]) and ${inPeriod('at')}
+       union select offered_by, shift_id from shift_offers where offered_by = any($4::uuid[]) and ${inPeriod('created_at')}
+       union select user_id, shift_id from call_logs where shift_id is not null and user_id = any($4::uuid[]) and ${inPeriod('at')}
+     ), m as (
+       select created_by as u, count(*)::int as n from notifications
+        where created_by = any($4::uuid[]) and worker_id is not null and status <> 'skipped' and ${inPeriod('created_at')} group by created_by
+     ), c as (
+       select user_id as u, count(*)::int as n from call_logs where user_id = any($4::uuid[]) and ${inPeriod('at')} group by user_id
+     )
+     select u.u, coalesce((select count(distinct shift_id) from h where h.u = u.u), 0)::int as handled,
+            coalesce((select n from m where m.u = u.u), 0) as messages, coalesce((select n from c where c.u = u.u), 0) as calls
+       from unnest($4::uuid[]) as u(u)`, [x.from, x.to, x.zone, ids])).rows;
+  const name = new Map(keep.map(p => [p.user_id, p.name]));
+  return rows.map(r => ({ userId: r.u, name: name.get(r.u) ?? 'Someone', handled: r.handled, messages: r.messages, calls: r.calls }))
+    .sort((a, b) => b.handled - a.handled || b.calls - a.calls || b.messages - a.messages || a.name.localeCompare(b.name));
+}
+
+/** States and offices to drill into, each with its client requests in the period (offices narrowed by the state). */
+export async function liveChoices(db: PoolClient, x: LiveScope) {
+  const states = (await db.query<{ name: string; requests: number }>(
+    `select f.state as name, count(s.id)::int as requests
+       from facilities f left join shifts s on s.facility_id = f.id and s.needs_person and (s.starts_at at time zone f.timezone)::date between $1::date and $2::date
+      where f.client_id is not null and nullif(trim(f.state), '') is not null group by f.state order by f.state`, [x.from, x.to])).rows;
+  const offices = (await db.query<{ id: string; name: string; requests: number }>(
+    `select o.id, o.name, count(s.id)::int as requests
+       from offices o left join facilities f on f.office_id = o.id and f.client_id is not null and ($3::text is null or f.state = $3)
+       left join shifts s on s.facility_id = f.id and s.needs_person and (s.starts_at at time zone f.timezone)::date between $1::date and $2::date
+      where o.active and ($3::text is null or o.state = $3 or f.id is not null)
+      group by o.id, o.name order by lower(o.name)`, [x.from, x.to, x.state])).rows;
+  return { states, offices };
+}

@@ -35,6 +35,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | Code | Screen | Label |
 |---|---|---|
 | 1000 | Dashboard | Dashboard |
+| 1100 | Live numbers: shifts, allocation officers and people by state and office (under the Dashboard, not in the menu) | Live numbers |
 | 2000 | Roster | term 1045 |
 | 2050 | Roster templates: the Template tab, a site's templates as a week to edit (David, 3 Nov) | "Template" |
 | 2100 | Bank fill (roster side panel) | term 1080 + "fill" (reserved) |
