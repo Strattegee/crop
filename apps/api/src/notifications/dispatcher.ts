@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import type { Pool } from 'pg';
 import { APP_POOL } from '../database/database.module.js';
-import { PUSH_OFF } from './push.js';
+import { PUSH_OFF, pushScreen } from './push.js';
 import { EMAIL_SENDER, PUSH_SENDER, SendError, SMS_SENDER, type EmailSender, type PushSender, type SmsSender } from './senders.js';
 
-type Claimed = { id: string; channel: 'email' | 'sms' | 'push'; to_address: string; subject: string | null; body: string; attempts: number };
+type Claimed = { id: string; channel: 'email' | 'sms' | 'push'; to_address: string; subject: string | null; body: string; attempts: number;
+  template: string; tenant_slug: string };
 
 const RETRY_SECONDS = [60, 300, 900, 3600]; // then give up (5 attempts in total)
 
@@ -63,7 +64,8 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         ? await this.email.send({ to: n.to_address, subject: n.subject ?? 'CROP', text: n.body, idempotencyKey: n.id })
         : n.channel === 'sms'
           ? await this.sms.send({ to: n.to_address, body: n.body, reference: n.id })
-          : await this.push.send({ to: n.to_address, title: n.subject ?? 'CROP', body: n.body, reference: n.id });
+          : await this.push.send({ to: n.to_address, title: n.subject ?? 'CROP', body: n.body, reference: n.id,
+              data: { tenant: n.tenant_slug, screen: pushScreen(n.template) } });
       await this.finish(n.id, true, id, null, null);
     } catch (err) {
       if (err instanceof SendError && err.gone) await this.pool.query('select app_push_device_gone($1)', [n.id]);

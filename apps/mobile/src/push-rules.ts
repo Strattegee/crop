@@ -23,3 +23,21 @@ export class Registered {
     return all;
   }
 }
+
+/** The worker app's tabs a tapped notification can open (CROP's `PUSH_SCREENS`). */
+export type PushScreen = 'shifts' | 'offers' | 'availability' | 'credentials';
+const SCREENS: readonly string[] = ['shifts', 'offers', 'availability', 'credentials'];
+
+/** Where a tapped notification should go: which business and tab, or null to just open the app. */
+export type PushTap = { tenant: string; screen: PushScreen | null };
+
+/**
+ * Reads the data CROP sent with a notification. Only a business the person still belongs to is opened;
+ * anything unexpected is ignored, so a tap never does more than open the app.
+ */
+export function tapTarget(data: unknown, slugs: readonly string[]): PushTap | null {
+  if (!data || typeof data !== 'object') return null;
+  const { tenant, screen } = data as { tenant?: unknown; screen?: unknown };
+  if (typeof tenant !== 'string' || !slugs.includes(tenant)) return null;
+  return { tenant, screen: typeof screen === 'string' && SCREENS.includes(screen) ? (screen as PushScreen) : null };
+}

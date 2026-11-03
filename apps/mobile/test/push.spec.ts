@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pushPlatform, Registered, shouldAsk } from '../src/push-rules';
+import { pushPlatform, Registered, shouldAsk, tapTarget } from '../src/push-rules';
 
 describe('push in the app', () => {
   it('only registers phones', () => {
@@ -23,5 +23,23 @@ describe('push in the app', () => {
     expect(r.has('cafe', 'ExpoPushToken[b]')).toBe(false);
     expect(r.take()).toEqual([['cafe', 'ExpoPushToken[a]'], ['other', 'ExpoPushToken[b]']]);
     expect(r.take()).toEqual([]);
+  });
+});
+
+describe('tapping a notification', () => {
+  const mine = ['cafe', 'kitchen-co'];
+  it('opens the business and tab CROP named', () => {
+    expect(tapTarget({ ref: 'x', tenant: 'cafe', screen: 'offers' }, mine)).toEqual({ tenant: 'cafe', screen: 'offers' });
+    expect(tapTarget({ tenant: 'kitchen-co', screen: 'credentials' }, mine)).toEqual({ tenant: 'kitchen-co', screen: 'credentials' });
+  });
+  it('opens the business only when the screen is missing or unknown', () => {
+    expect(tapTarget({ tenant: 'cafe', screen: null }, mine)).toEqual({ tenant: 'cafe', screen: null });
+    expect(tapTarget({ tenant: 'cafe', screen: 'settings' }, mine)).toEqual({ tenant: 'cafe', screen: null });
+  });
+  it('ignores businesses they no longer belong to and anything unexpected', () => {
+    expect(tapTarget({ tenant: 'elsewhere', screen: 'offers' }, mine)).toBeNull();
+    expect(tapTarget({ ref: 'x' }, mine)).toBeNull();
+    expect(tapTarget(null, mine)).toBeNull();
+    expect(tapTarget('cafe', mine)).toBeNull();
   });
 });
