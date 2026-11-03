@@ -12,6 +12,23 @@ import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from 
 import { beginOnboarding } from './onboarding.controller.js';
 import { cardsFor } from './person-card.js';
 import { recruitmentEvent } from './recruitment.controller.js';
+import { mobileProblem, parseMobile, phoneSearchDigits } from '../notifications/phone.js';
+
+/**
+ * The mobile sent, in international form (+61412345678), read the way the business's country writes numbers:
+ * undefined when not sent, null when cleared. A number already on the record in another form (saved before 3 Nov)
+ * may come back unchanged, so editing someone else's details never fails on it.
+ */
+async function mobileField(db: PoolClient, tenantId: string, body: Record<string, unknown>, current?: string | null): Promise<string | null | undefined> {
+  if (!body || !('phone' in body)) return undefined;
+  const v = text(body, 'phone', { max: 30 });
+  if (v === null) return null;
+  if (current != null && v === current) return current;
+  const { country } = await loadSettings(db, tenantId);
+  const m = parseMobile(country, v);
+  if (!m) throw new BadRequestException(mobileProblem(country));
+  return m.e164;
+}
 
 const STATUSES = ['active', 'onboarding', 'applicant', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
@@ -53,13 +70,14 @@ export class WorkersController {
                                where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $5 and (e.ends_on is null or e.ends_on >= $5)
                                order by e.starts_on desc limit 1) et on true
           where w.agency_connection_id is null and w.outside_agency_id is null
-            and ($1::text is null or (w.first_name || ' ' || w.last_name || ' ' || coalesce(w.preferred_name,'') || ' ' || coalesce(w.email,'') || ' ' || coalesce(w.phone,'')) ilike '%' || $1 || '%')
+            and ($1::text is null or (w.first_name || ' ' || w.last_name || ' ' || coalesce(w.preferred_name,'') || ' ' || coalesce(w.email,'') || ' ' || coalesce(w.phone,'')) ilike '%' || $1 || '%'
+                 or ($6::text is not null and regexp_replace(coalesce(w.phone,''), '\\D', '', 'g') like '%' || $6 || '%'))
             and ($2::worker_status is null or w.status = $2)
             and ($3::text is null or $3 = any(w.roles))
             and ($4::text is null or ($4 = 'none' and et.employment_type is null and lt.ends_on is null) or ($4 = 'left' and lt.ends_on is not null)
                  or et.employment_type::text = $4)
           order by w.last_name, w.first_name limit 500`,
-        [search, status, q.role?.trim() || null, employment, today],
+        [search, status, q.role?.trim() || null, employment, today, phoneSearchDigits(search)],
       )).rows;
       const ctx = await complianceContext(db, t.tenantId);
       const facts = await credentialFactsByWorker(db, workers.map(w => w.id));
@@ -87,12 +105,13 @@ export class WorkersController {
       text(body, 'lastName', { required: true, max: 100 }),
       text(body, 'preferredName', { max: 100 }),
       email(body, 'email'),
-      text(body, 'phone', { max: 30 }),
+      null as string | null | undefined, // phone, read in the business's country below
       textList(body, 'roles') ?? [],
       text(body, 'notes', { max: 2000 }),
       gender(body, 'gender'),
     ];
     return withTenant(this.pool, t.tenantId, async db => {
+      values[5] = (await mobileField(db, t.tenantId, body)) ?? null;
       try {
         const row = (await db.query<{ id: string }>(
           `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender, status, recruitment_stage, stage_changed_at)
@@ -142,6 +161,9 @@ export class WorkersController {
   @Patch(':id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     return withTenant(this.pool, t.tenantId, async db => {
+      const current = body && 'phone' in body
+        ? (await db.query<{ phone: string | null }>('select phone from workers where id = $1', [id])).rows[0]?.phone ?? null : null;
+      const phone = await mobileField(db, t.tenantId, body, current);
       try {
         const row = (await db.query(
           `update workers as w set
@@ -157,7 +179,7 @@ export class WorkersController {
           [id, text(body, 'firstName', { max: 100 }), text(body, 'lastName', { max: 100 }),
             body && 'preferredName' in body, text(body, 'preferredName', { max: 100 }),
             body && 'email' in body, email(body, 'email'),
-            body && 'phone' in body, text(body, 'phone', { max: 30 }),
+            phone !== undefined, phone ?? null,
             textList(body, 'roles'), oneOf(body, 'status', STATUSES),
             body && 'notes' in body, text(body, 'notes', { max: 2000 }),
             body && 'gender' in body, gender(body, 'gender')],

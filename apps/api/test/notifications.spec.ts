@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { NotificationDispatcher } from '../src/notifications/dispatcher.js';
-import { auMobile } from '../src/notifications/phone.js';
+import { auMobile, mobileProblem, parseMobile, phoneSearchDigits, smsRefusal } from '../src/notifications/phone.js';
 import { EMAIL_SENDER, MemoryEmail, MemorySms, SendError, SMS_SENDER, textToHtml } from '../src/notifications/senders.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -19,6 +19,41 @@ describe('helpers', () => {
     expect(auMobile('61412345678')).toBe('+61412345678');
     expect(auMobile('02 9876 5432')).toBeNull();
     expect(auMobile('041234567')).toBeNull();
+  });
+  it('reads mobiles the way each country writes them and stores them in international form', () => {
+    expect(parseMobile('AU', '0412 345 678')).toEqual({ e164: '+61412345678', country: 'AU' });
+    expect(parseMobile('AU', '+61 0412 345 678')).toEqual({ e164: '+61412345678', country: 'AU' });
+    expect(parseMobile('NZ', '021 123 4567')).toEqual({ e164: '+64211234567', country: 'NZ' });
+    expect(parseMobile('NZ', '027 123 456')).toEqual({ e164: '+6427123456', country: 'NZ' });
+    expect(parseMobile('NZ', '027 123 45')).toBeNull();
+    expect(parseMobile('NZ', '022 1234 5678')).toEqual({ e164: '+642212345678', country: 'NZ' });
+    expect(parseMobile('NZ', '09 123 4567')).toBeNull(); // an Auckland landline
+    expect(parseMobile('US', '(212) 555-0123')).toEqual({ e164: '+12125550123', country: 'US' });
+    expect(parseMobile('US', '1 212 555 0123')).toEqual({ e164: '+12125550123', country: 'US' });
+    expect(parseMobile('US', '212 055 0123')).toBeNull(); // exchanges never start with 0
+    expect(parseMobile('GB', '07700 900123')).toEqual({ e164: '+447700900123', country: 'GB' });
+    expect(parseMobile('GB', '020 7946 0000')).toBeNull(); // a London landline
+    // Someone from another of CROP's countries, typed with + (or 00) and its code.
+    expect(parseMobile('AU', '+64 21 123 4567')).toEqual({ e164: '+64211234567', country: 'NZ' });
+    expect(parseMobile('NZ', '0061 412 345 678')).toEqual({ e164: '+61412345678', country: 'AU' });
+    expect(parseMobile('AU', '+44 7700 900123')).toEqual({ e164: '+447700900123', country: 'GB' });
+    // A national number from another country without its code isn't guessed at.
+    expect(parseMobile('AU', '021 123 4567')).toBeNull();
+    expect(parseMobile('AU', '+33 6 12 34 56 78')).toBeNull(); // France: not one of CROP's countries
+    expect(parseMobile('AU', 'call 0412')).toBeNull();
+    expect(mobileProblem('NZ')).toBe('Mobile is not a mobile number (for example 021 123 4567, or start with + and the country code)');
+  });
+  it('texts Australian mobiles only for now', () => {
+    expect(smsRefusal(parseMobile('AU', '0412 345 678'))).toBeNull();
+    expect(smsRefusal(parseMobile('NZ', '021 123 4567'))).toBe('Texts outside Australia are not switched on yet');
+    expect(smsRefusal(null)).toBe('Not a mobile number');
+  });
+  it('finds people by the digits of their mobile', () => {
+    expect(phoneSearchDigits('0412 345')).toBe('412345');
+    expect(phoneSearchDigits('+61 412')).toBe('61412');
+    expect(phoneSearchDigits('041')).toBeNull();
+    expect(phoneSearchDigits('Ana 0412')).toBeNull();
+    expect(phoneSearchDigits(null)).toBeNull();
   });
   it('escapes HTML in emails and links https addresses', () => {
     expect(textToHtml('<b>Hi</b>\n\nOpen https://staging.cropwms.com/x')).toContain('&lt;b&gt;Hi&lt;/b&gt;');

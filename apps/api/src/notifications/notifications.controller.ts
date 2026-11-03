@@ -7,6 +7,7 @@ import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { queueNotification, SMS_MONTH } from './notify.js';
+import { auMobile } from './phone.js';
 import { smsSize, unicodeCharacters } from './sms-text.js';
 import { EMAIL_SENDER, SMS_SENDER, type EmailSender, type SmsSender } from './senders.js';
 
@@ -56,7 +57,7 @@ export class NotificationsController {
   test(@Tenant() t: Membership, @Auth() auth: AuthContext, @Body() body: Record<string, unknown>) {
     const channel = oneOf(body, 'channel', ['email', 'sms'] as const, { required: true })!;
     const to = channel === 'email' ? auth.email : text(body, 'to', { required: true, max: 20 })!;
-    if (channel === 'sms' && !/^(\+?61|0)4/.test(to.replace(/[\s()-]/g, ''))) throw new BadRequestException('Enter an Australian mobile number, e.g. 0412 345 678');
+    if (channel === 'sms' && !auMobile(to)) throw new BadRequestException('Enter an Australian mobile number, e.g. 0412 345 678 (texts go to Australian mobiles only for now)');
     return withTenant(this.pool, t.tenantId, db => queueNotification(db, t.tenantId, {
       channel, to, template: 'test', createdBy: auth.userId,
       subject: channel === 'email' ? 'CROP test email' : undefined,

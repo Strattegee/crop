@@ -3,12 +3,13 @@ import {
   avatarColour, badgeList, displayName, EMPLOYMENT_LETTER, expiryLine, hoursLine, initials, LIGHT, STATUS_WORD, type CardPerson,
 } from '../../../lib/person-card';
 import { EMPLOYMENT_LABEL } from './[id]/employment-card';
+import { showMobile, telHref } from '../../../lib/phone';
 
 /**
  * The employee card (David, 31 Oct): one compact summary of a person, the same everywhere it appears.
  * `size="full"` is the header of the person's page (contact details and every badge); `compact` is for lists.
  */
-export function PersonCard({ p, today, size = 'compact', link = true }: { p: CardPerson; today: string; size?: 'compact' | 'full'; link?: boolean }) {
+export function PersonCard({ p, today, size = 'compact', link = true, country }: { p: CardPerson; today: string; size?: 'compact' | 'full'; link?: boolean; country?: string }) {
   const c = p.card;
   const light = LIGHT[p.compliance] ?? LIGHT.non_compliant;
   const expiry = expiryLine(c?.nextExpiry ?? null, today);
@@ -61,7 +62,7 @@ export function PersonCard({ p, today, size = 'compact', link = true }: { p: Car
       {size === 'full' && (p.email || p.phone) && (
         <div className="pcard-contact">
           {p.email && <a href={`mailto:${p.email}`}>{p.email}</a>}
-          {p.phone && <a href={`tel:${p.phone.replace(/\s+/g, '')}`}>{p.phone}</a>}
+          {p.phone && <a href={telHref(p.phone)}>{showMobile(p.phone, country)}</a>}
         </div>
       )}
     </div>

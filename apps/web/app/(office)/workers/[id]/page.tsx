@@ -24,6 +24,7 @@ import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
 import { RolePicker } from '../role-picker';
 import { UploadLinkCard, type UploadLinkInfo } from './upload-link-card';
 import { businessZone, todayIn, whenIn } from '../../../../lib/business';
+import { mobileExample, showMobile } from '../../../../lib/phone';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 import { RecruitmentCard } from './recruitment-card';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
@@ -72,7 +73,7 @@ export default async function WorkerPage({ params, searchParams }: {
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
     api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),
     api<EmploymentTerms[]>(`/workers/${id}/employment?withdrawn=true`).catch(() => null),
-    api<{ timezone?: string }>('/settings').catch(() => ({} as { timezone?: string })),
+    api<{ timezone?: string; country?: string }>('/settings').catch(() => ({} as { timezone?: string; country?: string })),
     api<Onboarding>(`/workers/${id}/onboarding`).catch(() => null),
     api<Parameters<typeof OnboardingCard>[0]['checklists']>('/onboarding-checklists').catch(() => []),
     api<AppAccess>(`/workers/${id}/app-access`).catch(() => null),
@@ -118,7 +119,7 @@ export default async function WorkerPage({ params, searchParams }: {
   return (
     <>
       <p style={{ margin: '0 0 8px' }}><Link href="/workers">← {tw.many(T.worker)}</Link></p>
-      <PersonCard p={w} today={today} size="full" link={false} />
+      <PersonCard p={w} today={today} size="full" link={false} country={settings.country} />
       <Notices error={sp.error} done={sp.done} />
       <nav className="ptabs" aria-label="Parts of this record">
         {tabs.map(t => (
@@ -341,7 +342,7 @@ export default async function WorkerPage({ params, searchParams }: {
           <label>Last name<input name="lastName" required defaultValue={w.lastName} maxLength={100} /></label>
           <label>Preferred name<input name="preferredName" defaultValue={w.preferredName ?? ''} maxLength={100} /></label>
           <label>Email<input name="email" type="email" defaultValue={w.email ?? ''} maxLength={200} /></label>
-          <label>Mobile<input name="phone" defaultValue={w.phone ?? ''} maxLength={30} /></label>
+          <label>Mobile<input name="phone" defaultValue={showMobile(w.phone, settings.country)} maxLength={30} inputMode="tel" placeholder={mobileExample(settings.country)} /></label>
           <label>Gender <span className="muted">(optional)</span>
             <select name="gender" defaultValue={w.gender ?? ''}>
               <option value="">Not recorded</option>

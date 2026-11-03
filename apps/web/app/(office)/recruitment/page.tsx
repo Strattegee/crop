@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
-import { businessZone, todayIn } from '../../../lib/business';
+import { businessSettings, businessZone, todayIn } from '../../../lib/business';
+import { mobileExample } from '../../../lib/phone';
 import { industryGroups, type PackInfo } from '../../../lib/industry-groups';
 import type { CardPerson } from '../../../lib/person-card';
 import { T, words } from '../../../lib/terms';
@@ -34,6 +35,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
     api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
   ]);
   const today = todayIn(await businessZone());
+  const country = (await businessSettings()).country;
   const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
   const total = b.columns.reduce((n, c) => n + c.people.length, 0);
 
@@ -49,7 +51,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
           <label>First name<input name="firstName" required maxLength={100} /></label>
           <label>Last name<input name="lastName" required maxLength={100} /></label>
           <label>Email<input name="email" type="email" maxLength={200} /></label>
-          <label>Mobile<input name="phone" maxLength={30} /></label>
+          <label>Mobile<input name="phone" maxLength={30} inputMode="tel" placeholder={mobileExample(country)} /></label>
           <RolePicker groups={roleGroups} label={`${tw.many(T.role)} applied for`} />
           <button className="btn">Add to Applied</button>
         </form>

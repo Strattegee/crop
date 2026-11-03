@@ -61,7 +61,7 @@ describe('audit log (spec: every create, change and delete, with who, when, old 
     const log = (await http().get('/audit?table=workers').set(as('owner')).expect(200)).body.rows as Array<{
       action: string; by: string; via: string; summary: string; fields: { key: string; old: unknown; new: unknown }[] }>;
     expect(log[0]).toMatchObject({ action: 'update', by: 'Alice Allocator', via: 'office', summary: 'Changed Person: phone' });
-    expect(log[0].fields).toEqual([{ key: 'phone', label: 'Phone', old: null, new: '0412 345 678' }]);
+    expect(log[0].fields).toEqual([{ key: 'phone', label: 'Phone', old: null, new: '+61412345678' }]);
     expect(log[1]).toMatchObject({ action: 'insert', by: 'Alice Allocator', summary: 'Added Person' });
     expect(log[1].fields.some(f => f.key === 'first_name' && f.new === 'Ana')).toBe(true);
   });
