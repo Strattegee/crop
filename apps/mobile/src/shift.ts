@@ -9,10 +9,24 @@ export interface ShiftDetail {
   status: 'open' | 'assigned' | 'booked' | 'cancelled' | string; equipmentOnly: boolean;
   localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; assignmentStatus: 'assigned' | 'confirmed' | null; agencyName: string | null;
-  offersPending: number; pulledOutName: string | null; coveringWorkerId?: string | null; coveringName: string | null; cancelledReason: string | null; notes: string | null;
+  offersPending: number; pulledOutName: string | null; coveringWorkerId?: string | null; coveringName: string | null;
+  /** Who usually works it and whether they're away that day (the T line, migration 0077). */
+  usualWorkerId?: string | null; usualName?: string | null; usualAway?: UsualAway | null; cancelledReason: string | null; notes: string | null;
 }
 
 export interface Reason { code: string; message: string }
+
+export type UsualAway = 'on_leave' | 'leave_requested' | 'not_available';
+const AWAY_WORDS: Record<UsualAway, string> = { on_leave: 'On leave', leave_requested: 'Leave requested', not_available: 'Not available' };
+
+/**
+ * The T line as on the web's roster cards (David, 3 Nov): who usually works the shift, with " – On leave" etc. when
+ * they're away that day (never the kind of leave). Null when nobody is the usual person.
+ */
+export function usualLine(s: { usualName?: string | null; usualAway?: UsualAway | null }): string | null {
+  if (!s.usualName) return null;
+  return `T ${s.usualName}${s.usualAway ? ` – ${AWAY_WORDS[s.usualAway]}` : ''}`;
+}
 
 export interface Candidate {
   workerId: string; name: string; employmentType: string | null; weekHours: number; available: boolean;

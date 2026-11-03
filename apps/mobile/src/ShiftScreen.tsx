@@ -3,7 +3,7 @@ import { Alert, Linking, Pressable, RefreshControl, ScrollView, View } from 'rea
 import { Text, TextInput } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import {
-  actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, canSetCovering, confirmLabel, coveringChoices,
+  actionsFor, assignable, assignedMessage, assignQuestion, candidateMeta, candidateState, canSetCovering, confirmLabel, coveringChoices, usualLine,
   coveringMessage, mondayOf, offerable, offeredMessage, pendingOffers, phoneLinks, REQUEST_SENT, requestKind, shiftWhen, stageOf,
   type Action, type Candidate, type CoveringChoice, type FillState, type LeaveLine,
 } from './shift';
@@ -164,7 +164,8 @@ export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBac
           <Text style={styles.cardTitle}>{s.areaName ? `${s.role} · ${s.areaName}` : s.role}</Text>
           <Text>{shiftWhen(s, today)}</Text>
           <Text style={styles.muted}>{s.facilityName}</Text>
-          {!!s.coveringName && <Text style={[styles.muted, styles.small]}>Covering {s.coveringName}</Text>}
+          {!!usualLine(s) && <Text style={[styles.muted, styles.small]}>{usualLine(s)}</Text>}
+          {!!s.coveringName && s.coveringWorkerId !== s.usualWorkerId && <Text style={[styles.muted, styles.small]}>Covering {s.coveringName}</Text>}
           {!!s.notes && <Text style={[styles.muted, styles.small]}>{s.notes}</Text>}
           <Text style={[styles.badge, stage.tone === 'urgent' ? styles.badgeUrgent : stage.tone === 'booked' ? styles.badgeBooked : styles.badgeWaiting]}>{stage.label}</Text>
         </View>

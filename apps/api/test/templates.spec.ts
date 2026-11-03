@@ -184,7 +184,8 @@ describe('roster templates and copying a week', () => {
     const next = '2027-04-12';
     await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: site, toWeek: next, fromWeek: next }).expect(400);
     const r = await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: site, toWeek: next, fromWeek: TARGET }).expect(200);
-    expect(r.body).toMatchObject({ fromWeek: TARGET, weekStart: next, created: 8, assigned: 2 });
+    // Three: Tuesday was left open (Ana on leave) but she is still its usual person (migration 0077), and she's free that week.
+    expect(r.body).toMatchObject({ fromWeek: TARGET, weekStart: next, created: 8, assigned: 3 });
     const plain = await http().post('/roster/copy-week').set(as('alloc')).send({ facilityId: site, toWeek: '2027-04-19', people: false }).expect(200);
     expect(plain.body).toMatchObject({ fromWeek: next, created: 8, assigned: 0, leftOpen: [] });
     expect((await weekShifts('2027-04-19')).every(s => s.status === 'open')).toBe(true);

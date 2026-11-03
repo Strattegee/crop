@@ -7,7 +7,7 @@ import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
   outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
-  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setGender, setRole, setTimes, unassign, useItem,
+  recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setUsual, setGender, setRole, setTimes, unassign, useItem,
   clientConfirmed, undoClientConfirmed,
 } from './actions';
 import { clientConfirmLine } from '../../../lib/client-orders';
@@ -17,7 +17,7 @@ import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import {
-  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, coveringLine, dayWindow, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
+  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers,
 } from './view';
 
@@ -43,6 +43,8 @@ type Shift = {
   genderRequested?: 'F' | 'M' | null; workerGender?: 'F' | 'M' | null; itemCount?: number;
   offersPending?: number; pulledOutName?: string | null; duties?: { id: string; name: string }[];
   coveringWorkerId?: string | null; coveringName?: string | null; startsAt?: string; breakMinutes?: number;
+  /** Who usually works it (the T line, migration 0077) and whether they're away that day. */
+  usualWorkerId?: string | null; usualName?: string | null; usualAway?: UsualAway | null;
   /** The agency the person on it came from (agency fill, migration 0042). */
   agencyName?: string | null;
   /** Named by an agency not on CROP and put on by the office (migration 0060): CROP hasn't checked them. */
@@ -335,7 +337,7 @@ export default async function RosterPage({ searchParams }: {
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
     // For dropping an item: who it goes to (the person on the shift), as the panel's "Give to" does.
     'data-worker': s.workerId ?? '', 'data-worker-name': s.workerName ?? '', 'data-equipment-only': s.equipmentOnly ? '1' : '0',
-    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${s.coveringName ? ` · ${coveringLine(s.coveringName)}` : ''}`,
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${tLines(s).map(l => ` · T ${l.text}`).join('')}`,
   });
   // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
   // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
@@ -361,7 +363,7 @@ export default async function RosterPage({ searchParams }: {
         <span className={`ln who-on${s.workerName || s.equipmentOnly ? '' : ' unfilled'}`}>{s.equipmentOnly ? s.role : s.workerName ?? 'Unfilled'}</span>
         {!s.equipmentOnly && <span className="ln rl">{s.role}</span>}
       </>) : <span className="ln">{kind === 'person' ? (view === 'person' ? `${s.role} · ${s.facilityName}` : s.role) : kind === 'cancelled' ? `${s.role}${view === 'person' ? ` · ${s.facilityName}` : ''}` : s.workerName ?? s.role}</span>}
-      {s.coveringName && <span className="cv">{coveringLine(s.coveringName)}</span>}
+      {tLines(s).map(l => <span key={l.tone} className={`cv tl-${l.tone}`} title={l.title}>{l.text}</span>)}
       {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
       {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
       {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
@@ -1219,6 +1221,28 @@ export default async function RosterPage({ searchParams }: {
             )}
 
             {!selected.equipmentOnly && (() => {
+              // The T line (David, 3 Nov): who usually works this shift. Set from a template or a copied week; changeable here.
+              const choices = usualChoices(roster.people, { id: selected.usualWorkerId ?? null, name: selected.usualName ?? null });
+              const line = tLines({ ...selected, coveringWorkerId: null })[0];
+              return (
+                <section>
+                  <h3>Usual person</h3>
+                  {line && <p className={`small tline tl-${line.tone}`} style={{ margin: '0 0 6px' }}>T {line.text}</p>}
+                  <form action={setUsual.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input type="hidden" name="back" value={here} />
+                    <label className="sr-only" htmlFor="usualWorkerId">Who usually works this {tw.lower(T.shift)}</label>
+                    <select id="usualWorkerId" name="workerId" defaultValue={selected.usualWorkerId ?? ''}>
+                      <option value="">Nobody in particular</option>
+                      {choices.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                    <button className="btn small secondary">Save</button>
+                  </form>
+                  <p className="muted small" style={{ margin: '4px 0 0' }}>Shown on the card&apos;s T line, with &ldquo;On leave&rdquo; or &ldquo;Not available&rdquo; when they&apos;re away that day. It doesn&apos;t put anyone on the {tw.lower(T.shift)}.</p>
+                </section>
+              );
+            })()}
+
+            {!selected.equipmentOnly && (() => {
               // Steve's "T" line: who this shift covers (e.g. someone on leave). People away that day come first.
               const choices = coveringChoices(roster.people, roster.leave ?? [], selected.localDate,
                 { id: selected.coveringWorkerId ?? null, name: selected.coveringName ?? null }, selected.workerId);
@@ -1308,7 +1332,7 @@ export default async function RosterPage({ searchParams }: {
       )}
 
       <div className="roster-legend">
-        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g f">F</b>/<b className="mk mk-g m">M</b> gender requested (pale: the person's own; ringed red: doesn't match)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><i className="leave-key" /> Leave</span>
+        <span><i className="band am" /> A = AM (from 5am)</span><span><i className="band pm" /> P = PM (from midday)</span><span><i className="band nd" /> N = Night (from 7pm)</span><span className="muted">or the letter of the shift type</span><span><b className="mk mk-g f">F</b>/<b className="mk mk-g m">M</b> gender requested (pale: the person's own; ringed red: doesn't match)</span><span><b className="mk mk-v">V</b> vehicle</span><span><b className="mk mk-e">E</b> {tw.lower(T.equipment)}</span><span><b className="mk mk-i">I</b> {tw.lower(T.item, true)}</span><span><b className="mk mk-d">D</b> duties</span><span><b className="mk mk-t">T</b> who usually works it (ringed: away that day)</span><span><i className="leave-key" /> Leave</span>
         <span><i className="rb accepted" /> Accepted (when approval is on)</span>
       </div>
 
