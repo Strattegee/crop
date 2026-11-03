@@ -8,11 +8,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { PACKS } from '../src/industry/packs.js';
+import { packFor, packsFor } from '../src/industry/local.js';
+import { COUNTRY_CODES } from '../src/common/countries.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('industry packs: content', () => {
-  it('every pack is consistent: requirements and operator licences refer to credentials in the same pack', () => {
-    for (const p of PACKS) {
+  it('every pack is consistent in every country: requirements and operator licences refer to credentials in the same pack', () => {
+    for (const p of COUNTRY_CODES.flatMap(packsFor)) {
       const names = new Set(p.credentials.map(c => c.name));
       expect(names.size, `${p.id}: duplicate credential`).toBe(p.credentials.length);
       for (const r of p.roles) for (const n of [...(r.must ?? []), ...(r.should ?? []), ...(r.optional ?? [])]) expect(names.has(n), `${p.id} ${r.name}: ${n}`).toBe(true);
@@ -25,13 +27,46 @@ describe('industry packs: content', () => {
     }
   });
 
-  it('a credential shared by several packs is described the same way in each', () => {
+  it('a credential shared by several packs is described the same way in each (in every country)', () => {
     const seen = new Map<string, string>();
-    for (const p of PACKS) for (const c of p.credentials) {
-      const sig = JSON.stringify([c.category, c.number, c.expiry]);
-      if (seen.has(c.name)) expect(sig, c.name).toBe(seen.get(c.name));
-      else seen.set(c.name, sig);
+    for (const country of COUNTRY_CODES) for (const p of packsFor(country)) for (const c of p.credentials) {
+      const sig = JSON.stringify([c.code, c.category, c.number, c.expiry, c.method]);
+      const k = `${country}:${c.name}`;
+      if (seen.has(k)) expect(sig, k).toBe(seen.get(k));
+      else seen.set(k, sig);
     }
+  });
+
+  it("gives each country its own version: Australia's as written, the others without Australian credentials", () => {
+    expect(packsFor('AU')).toEqual(PACKS);
+    expect(packsFor(null)).toEqual(PACKS);
+    const australian = /AHPRA|HLTAID|NDIS|High Risk Work Licence|White Card|\(VOC\)|Driver Licence \((C|MR|HR),|Chain of Responsibility|RSA\)|Certificate (III|IV) in|Security Licence:|Working with Children Check|National Police Check/;
+    for (const country of ['NZ', 'US', 'GB'] as const) {
+      for (const p of packsFor(country)) {
+        const names = [...p.credentials.map(c => c.name), ...p.roles.flatMap(r => [...(r.must ?? []), ...(r.should ?? []), ...(r.optional ?? [])]),
+          ...p.duties.flatMap(d => [...(d.must ?? []), ...(d.should ?? [])]), ...p.equipmentTypes.map(e => e.operatorCredential ?? '')];
+        for (const n of names) expect(n, `${country} ${p.id}`).not.toMatch(australian);
+        expect(p.description, `${country} ${p.id}`).not.toMatch(/AHPRA|RSA|White Card|high risk work|state security/);
+        for (const c of p.credentials) {
+          const asWritten = PACKS.find(x => x.id === p.id)!.credentials.find(x => x.name === c.name);
+          // Unchanged credentials keep the Australian code, so they still match across countries; swapped ones get the country's.
+          expect(c.code, c.name).toBe(asWritten ? asWritten.code : `${country.toLowerCase()}.${c.code.slice(3)}`);
+        }
+        expect(new Set(p.roles.map(r => r.name)).size, `${country} ${p.id} roles`).toBe(p.roles.length);
+      }
+    }
+    const hc = packFor(PACKS.find(p => p.id === 'construction')!, 'GB');
+    expect(hc.credentials.map(c => c.name)).toContain('CSCS Card');
+    expect(hc.equipmentTypes.find(e => e.name === 'Excavator (5 t)')?.operatorCredential).toBe('Excavator Operator Certificate');
+    // Two Australian checks become one in the USA, needed once.
+    const us = packFor(PACKS.find(p => p.id === 'healthcare')!, 'US');
+    expect(us.credentials.filter(c => c.name === 'Background Check')).toHaveLength(1);
+    const dsw = us.roles.find(r => r.name === 'Disability Support Worker')!;
+    expect(dsw.must).toEqual(['First Aid Certification', 'Manual Handling Training']);
+    expect(dsw.should).toEqual(["Driver's License", 'Background Check']);
+    const nz = packFor(PACKS.find(p => p.id === 'labour-hire')!, 'NZ');
+    expect(nz.roles.map(r => r.name)).toContain('Truck Driver (Class 2)');
+    expect(nz.roles.find(r => r.name === 'Truck Driver (Class 2)')).toMatchObject({ must: ['Driver Licence (Class 2, medium rigid)'], should: [] });
   });
 
   it('a duty shared by several packs is described the same way in each', () => {
@@ -145,6 +180,33 @@ describe('industry packs: applying', () => {
     // Duties stay with their own business.
     const hire = (await http().get('/shift-duties').set(as('admin')).expect(200)).body as { name: string }[];
     expect(hire.some(d => d.name === 'Handles food')).toBe(false);
+  });
+
+  it("gives a business its own country's version of a template", async () => {
+    const owner = new Client({ connectionString: db.ownerUrl });
+    await owner.connect();
+    await owner.query(`insert into tenant_settings(tenant_id, country) select id, 'NZ' from tenants where slug = 'other'
+                       on conflict (tenant_id) do update set country = 'NZ'`);
+    await owner.end();
+    const one = await http().get('/industry-packs/construction').set(as('other')).expect(200);
+    const names = one.body.credentials.map((c: { name: string }) => c.name);
+    expect(names).toContain('Site Safe Passport');
+    expect(names).not.toContain('White Card (General Construction Induction)');
+    expect((await http().get('/industry-packs').set(as('other')).expect(200)).body.find((p: { id: string }) => p.id === 'construction').description).toMatch(/Site Safe/);
+    // Australia's stays as written.
+    expect((await http().get('/industry-packs/construction').set(as('alloc')).expect(200)).body.credentials.map((c: { name: string }) => c.name)).toContain('White Card (General Construction Induction)');
+
+    await http().post('/industry-packs/construction/apply').set(as('other')).expect(200);
+    const types = (await http().get('/credential-types').set(as('other')).expect(200)).body as { id: string; name: string; catalogueCode?: string; industries: string[] }[];
+    const ssp = types.find(t => t.name === 'Site Safe Passport')!;
+    expect(ssp.catalogueCode).toBe('nz.site-safe-passport');
+    expect(types.find(t => t.name === 'Manual Handling Training')?.catalogueCode ?? 'au.manual-handling-training').toBe('au.manual-handling-training');
+    expect(ssp.industries).toEqual(expect.arrayContaining(['construction', 'labour-hire', 'traffic-management']));
+    // (Hospitality went on earlier as Australian; construction's own Australian credentials didn't come.)
+    expect(types.some(t => /White Card|High Risk Work|Plant Ticket/.test(t.name))).toBe(false);
+    const eq = (await http().get('/equipment-types').set(as('other')).expect(200)).body as { name: string; operatorCredentialTypeId?: string; operatorCredentialType?: { id: string } }[];
+    const exc = eq.find(e => e.name === 'Excavator (5 t)')!;
+    expect(exc.operatorCredentialTypeId ?? exc.operatorCredentialType?.id).toBe(types.find(t => t.name === 'Excavator Operator Certificate')!.id);
   });
 
   it('a business can add its own role', async () => {

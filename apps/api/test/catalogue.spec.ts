@@ -22,3 +22,12 @@ describe('industry of each thing (David, 31 Oct)', () => {
     }
   });
 });
+
+describe('industry of each thing in other countries (3 Nov)', () => {
+  it("tags a country's own credentials and roles with the templates they came from", () => {
+    expect(industriesOf('credential', 'Site Safe Passport', 'nz.site-safe-passport')).toEqual(['construction', 'labour-hire', 'traffic-management']);
+    expect(industriesOf('credential', 'CSCS Card')).toEqual(industriesOf('credential', 'White Card (General Construction Induction)'));
+    expect(industriesOf('credential', 'SIA Licence: Door Supervision')).toEqual(['security']);
+    expect(industriesOf('role', 'Truck Driver (Class 4)')).toEqual(industriesOf('role', 'Truck Driver (HR)'));
+  });
+});
