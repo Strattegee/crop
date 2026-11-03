@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { CountryCode } from '../common/countries.js';
 import { DEFAULT_AGENCY_TIMING, type AgencyTiming } from '../agencies/requests.js';
+import type { SwapMode } from '../roster/swaps.js';
 
 export interface AgencySettings {
   expiringWindowDays: number;
@@ -14,18 +15,20 @@ export interface AgencySettings {
   country: CountryCode;
   /** Agency fill (migration 0045): minutes each agency has a request before the next gets it, by how soon the shift starts. */
   agencyTiming: AgencyTiming;
+  /** Shift swaps between workers in the app (migration 0073): off, approve (an owner or admin approves) or automatic. */
+  shiftSwaps: SwapMode;
 }
 
 export async function loadSettings(db: PoolClient, tenantId: string): Promise<AgencySettings> {
   const { rows } = await db.query<{ expiring_window_days: number; timezone: string; sms_monthly_cap: number; min_rest_hours: number; published_changes: AgencySettings['publishedChanges']; country: CountryCode;
-    agency_step_soon_minutes: number; agency_step_today_minutes: number; agency_step_later_minutes: number }>(
+    agency_step_soon_minutes: number; agency_step_today_minutes: number; agency_step_later_minutes: number; shift_swaps: SwapMode }>(
     `select expiring_window_days, timezone, sms_monthly_cap, min_rest_hours, published_changes, country,
-            agency_step_soon_minutes, agency_step_today_minutes, agency_step_later_minutes
+            agency_step_soon_minutes, agency_step_today_minutes, agency_step_later_minutes, shift_swaps
        from tenant_settings where tenant_id = $1`, [tenantId],
   );
   const r = rows[0];
   return r
     ? { expiringWindowDays: r.expiring_window_days, timezone: r.timezone, smsMonthlyCap: r.sms_monthly_cap, minRestHours: r.min_rest_hours, publishedChanges: r.published_changes, country: r.country,
-        agencyTiming: { soonMinutes: r.agency_step_soon_minutes, todayMinutes: r.agency_step_today_minutes, laterMinutes: r.agency_step_later_minutes } }
-    : { expiringWindowDays: 30, timezone: 'Australia/Melbourne', smsMonthlyCap: 2000, minRestHours: 10, publishedChanges: 'open', country: 'AU', agencyTiming: { ...DEFAULT_AGENCY_TIMING } };
+        agencyTiming: { soonMinutes: r.agency_step_soon_minutes, todayMinutes: r.agency_step_today_minutes, laterMinutes: r.agency_step_later_minutes }, shiftSwaps: r.shift_swaps }
+    : { expiringWindowDays: 30, timezone: 'Australia/Melbourne', smsMonthlyCap: 2000, minRestHours: 10, publishedChanges: 'open', country: 'AU', agencyTiming: { ...DEFAULT_AGENCY_TIMING }, shiftSwaps: 'off' };
 }

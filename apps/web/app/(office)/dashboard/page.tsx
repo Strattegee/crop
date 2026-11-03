@@ -4,6 +4,8 @@ import { barWidth, showValue, sparkPoints, standingClass, standingWords, targetL
 import { T, words } from '../../../lib/terms';
 import { mondayOf } from '../roster/view';
 import { AgencyAttentionList, type AgencyAttention } from '../allocations/agency-attention';
+import { Notices } from '../notices';
+import { approveSwap, refuseSwap } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +24,8 @@ type Attention = {
 };
 type ChangeRequest = { id: string; weekStart: string; shiftId: string };
 type Leave = { id: string };
+/** Shift swaps both people agreed in the app, waiting for an owner or admin (migration 0073). */
+type Swap = { id: string; summary: string; canDecide: boolean; shift: { localDate: string } };
 type Onboarding = { id: string; workerId: string; workerName: string; summary: { done: number; total: number; ready: boolean } };
 type Words = Awaited<ReturnType<typeof words>>;
 
@@ -36,11 +40,11 @@ const FOCUSES: Focus[] = ['allocator', 'compliance', 'recruitment', 'overview', 
  * (Allocator, Compliance, Recruitment, or Overview), with the numbers that matter to that work across the top and
  * the lists to act on below. `?focus=` looks at another one.
  */
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ focus?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ focus?: string; error?: string; done?: string }> }) {
   const tw = await words();
   const sp = await searchParams;
   const wanted = sp.focus && (FOCUSES as string[]).includes(sp.focus) ? sp.focus : null;
-  const [dash, facilities, s, types, attention, leave, requests, onboarding, allocations] = await Promise.all([
+  const [dash, facilities, s, types, attention, leave, requests, onboarding, allocations, swaps] = await Promise.all([
     api<Dash>(`/dashboard${wanted ? `?focus=${wanted}` : ''}`).catch(() => null),
     api<unknown[]>('/facilities'), api<Summary>('/compliance/summary'), api<unknown[]>('/credential-types'),
     api<Attention>('/roster/attention').catch(() => null),
@@ -48,6 +52,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     api<ChangeRequest[]>('/roster/change-requests').catch(() => [] as ChangeRequest[]),
     api<Onboarding[]>('/onboardings').catch(() => [] as Onboarding[]),
     api<{ agencyLinks: number }>('/allocations/summary').catch(() => null),
+    api<{ swaps: Swap[] }>('/shift-swaps?status=agreed').then(r => r.swaps).catch(() => [] as Swap[]),
   ]);
   const focus: Focus = dash?.focus ?? 'overview';
   // A business that supplies employers (agency side links) also gets Allocations' Needs attention.
@@ -63,7 +68,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Link href="/allocations">Open Allocations</Link>
       </section>
     ),
-    decisions: <Decisions key="decisions" tw={tw} leave={leave} requests={requests} onboarding={onboarding} toCheck={s.verificationQueue.length} />,
+    decisions: <Decisions key="decisions" tw={tw} leave={leave} requests={requests} onboarding={onboarding} toCheck={s.verificationQueue.length} swaps={swaps} />,
     people: <People key="people" tw={tw} s={s} sites={facilities.length} />,
     checking: <CheckQueue key="checking" tw={tw} s={s} />,
     funnel: dash?.funnel && <Funnel key="funnel" f={dash.funnel} />,
@@ -97,6 +102,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ? (dash.assignedByOwner ? 'Your dashboard, chosen by the owner.' : 'The usual dashboard for your role; the owner can choose another for you in Settings.')
           : 'Looking at another dashboard. Yours is marked.'}
       </p>
+      <Notices error={sp.error} done={sp.done} />
       {facilities.length === 0 && (
         <div className="notice success">Getting started: add your first {tw.lower(T.site)} in <Link href="/facilities">{tw.many(T.site)}</Link>, then build its {tw.lower(T.roster)}.</div>
       )}
@@ -189,7 +195,7 @@ function AttentionSection({ a, tw }: { a: Attention; tw: Words }) {
   );
 }
 
-function Decisions({ tw, leave, requests, onboarding, toCheck }: { tw: Words; leave: Leave[]; requests: ChangeRequest[]; onboarding: Onboarding[]; toCheck: number }) {
+function Decisions({ tw, leave, requests, onboarding, toCheck, swaps }: { tw: Words; leave: Leave[]; requests: ChangeRequest[]; onboarding: Onboarding[]; toCheck: number; swaps: Swap[] }) {
   const first = requests[0];
   const ready = onboarding.filter(o => o.summary.ready);
   const firstOnb = ready[0] ?? onboarding[0];
@@ -211,7 +217,38 @@ function Decisions({ tw, leave, requests, onboarding, toCheck }: { tw: Words; le
         )}
         <div className="card"><div className="muted">{tw.many(T.credential)} waiting for checking</div><div className="stat">{toCheck}</div><Link href="/compliance">Review</Link></div>
       </div>
+      {swaps.length > 0 && <SwapsToApprove tw={tw} swaps={swaps} />}
     </>
+  );
+}
+
+/** Swaps both people agreed in the app; owners and admins approve them here (others see them waiting). */
+function SwapsToApprove({ tw, swaps }: { tw: Words; swaps: Swap[] }) {
+  return (
+    <section className="card dash-swaps" style={{ marginTop: 16 }}>
+      <h2>{tw.one(T.shift)} swaps to approve</h2>
+      <ol className="dash-list">
+        {swaps.map(sw => (
+          <li key={sw.id} data-swap={sw.id}>
+            <div>{sw.summary}</div>
+            {sw.canDecide ? (
+              <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                <form action={approveSwap}><input type="hidden" name="id" value={sw.id} /><button type="submit" className="btn">Approve</button></form>
+                <details>
+                  <summary className="btn secondary">Don&apos;t approve</summary>
+                  <form action={refuseSwap} style={{ marginTop: 6 }}>
+                    <input type="hidden" name="id" value={sw.id} />
+                    <label>Note for the office (not sent to them)<input name="reason" maxLength={300} /></label>
+                    <button type="submit" className="btn secondary">Don&apos;t approve the swap</button>
+                  </form>
+                </details>
+              </div>
+            ) : <div className="muted small">An owner or admin approves swaps.</div>}
+          </li>
+        ))}
+      </ol>
+      <p className="muted small">Both people agreed in the app. Approving puts each on the other&apos;s {tw.lower(T.shift)} (booked) if every rule still allows it; both are emailed either way.</p>
+    </section>
   );
 }
 

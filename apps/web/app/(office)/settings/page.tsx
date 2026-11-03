@@ -17,7 +17,7 @@ type Role = { id: string; name: string; area: string | null; active: boolean; wo
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 const LEVEL_LABEL: Record<string, string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
-type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked' };
+type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked'; shiftSwaps?: 'off' | 'approve' | 'automatic' };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -267,9 +267,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <option value="locked">Nobody can change it (turned off)</option>
             </select>
           </label>
+          <label>{tw.one(T.shift)} swaps in the app
+            <select name="shiftSwaps" defaultValue={settings.shiftSwaps ?? 'off'} disabled={!canEdit}>
+              <option value="off">Off</option>
+              <option value="approve">On: the colleague agrees, then an owner or admin approves</option>
+              <option value="automatic">On: made as soon as the colleague agrees</option>
+            </select>
+          </label>
           {canEdit && <button type="submit" className="btn">Save</button>}
         </form>
-        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off. When someone can't make a change themselves, they can ask for it on the roster, and an owner or admin approves or declines it.</p>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off. When someone can't make a change themselves, they can ask for it on the roster, and an owner or admin approves or declines it. With {tw.lower(T.shift)} swaps on, {tw.lower(T.worker, true)} with the app can ask a colleague to take one of their published {tw.lower(T.shift, true)} or swap it for one of theirs; only colleagues who meet every rule for it are offered, and swaps waiting for approval show on the Dashboard.</p>
       </div>
     </>
   );
