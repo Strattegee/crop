@@ -9,6 +9,7 @@ export const TERMS: TermDef[] = [
   { code: 1010, key: 'worker', concept: 'A person who works shifts', singular: 'Worker', plural: 'Workers' },
   { code: 1015, key: 'client', concept: 'A business the work is done for', singular: 'Client', plural: 'Clients' },
   { code: 1020, key: 'site', concept: 'A place where work happens', singular: 'Site', plural: 'Sites' },
+  { code: 1025, key: 'project', concept: 'A piece of work with its own team, dates and resources (a site of kind project)', singular: 'Project', plural: 'Projects' },
   { code: 1030, key: 'area', concept: 'A part of a site, or a team', singular: 'Area', plural: 'Areas' },
   { code: 1040, key: 'shift', concept: 'A unit of work at a time and place', singular: 'Shift', plural: 'Shifts' },
   { code: 1045, key: 'roster', concept: 'The plan of who works when', singular: 'Roster', plural: 'Rosters' },

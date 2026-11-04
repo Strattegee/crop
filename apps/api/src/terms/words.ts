@@ -7,7 +7,7 @@ import type { PoolClient } from 'pg';
 import { TERMS } from './terms.js';
 
 export const T = {
-  worker: 1010, client: 1015, site: 1020, area: 1030, shift: 1040, roster: 1045,
+  worker: 1010, client: 1015, site: 1020, project: 1025, area: 1030, shift: 1040, roster: 1045,
   credential: 1050, role: 1055, equipment: 1060, item: 1070, bank: 1080, agency: 1090,
 } as const;
 
