@@ -9,7 +9,7 @@ import { APP_POOL } from '../database/database.module.js';
 import { addressChangeRefusal, addressLine, parseAddress, sameAddress, type AddressFields } from './addresses.js';
 import { loadSettings } from './settings.js';
 
-type Row = AddressFields & {
+export type AddressRow = AddressFields & {
   id: string; workerId: string; current: boolean; replacesId: string | null; replacedAt: string | null; replacedById: string | null;
   removedAt: string | null; removedReason: string | null; createdAt: string;
 };
@@ -21,7 +21,7 @@ const COLS = `a.id, a.worker_id as "workerId", a.label, a.line1, a.line2, a.subu
 /** The person's addresses: the current one, the others on the list (newest first), and earlier versions (history). */
 export async function listFor(db: PoolClient, tenantId: string, workerId: string) {
   const home = (await loadSettings(db, tenantId)).country;
-  const rows = (await db.query<Row>(`select ${COLS} from worker_addresses a where a.worker_id = $1 order by a.created_at desc, a.id`, [workerId])).rows
+  const rows = (await db.query<AddressRow>(`select ${COLS} from worker_addresses a where a.worker_id = $1 order by a.created_at desc, a.id`, [workerId])).rows
     .map(r => ({ ...r, line: addressLine(r, home) }));
   const live = rows.filter(r => !r.replacedAt && !r.removedAt);
   return {
@@ -32,22 +32,62 @@ export async function listFor(db: PoolClient, tenantId: string, workerId: string
 }
 
 /** Locks the person (so two changes can't both make an address current) and checks they are one of ours. */
-async function lockWorker(db: PoolClient, workerId: string) {
+export async function lockWorker(db: PoolClient, workerId: string) {
   const w = (await db.query<{ status: string }>('select status from workers where id = $1 for update', [workerId])).rows[0];
   if (!w) throw new NotFoundException('Person not found');
   if (w.status === 'agency') throw new BadRequestException("An agency's people are the agency's to keep details for");
 }
 
 async function addressFor(db: PoolClient, id: string) {
-  const a = (await db.query<Row>(`select ${COLS} from worker_addresses a where a.id = $1`, [id])).rows[0];
+  const a = (await db.query<AddressRow>(`select ${COLS} from worker_addresses a where a.id = $1`, [id])).rows[0];
   if (!a) throw new NotFoundException('Address not found');
   await lockWorker(db, a.workerId);
   // Read again under the lock.
-  return (await db.query<Row>(`select ${COLS} from worker_addresses a where a.id = $1`, [id])).rows[0];
+  return (await db.query<AddressRow>(`select ${COLS} from worker_addresses a where a.id = $1`, [id])).rows[0];
 }
 
 const clearCurrent = (db: PoolClient, workerId: string) =>
   db.query('update worker_addresses set is_current = false where worker_id = $1 and is_current', [workerId]);
+
+/** Adds an address (the person locked by the caller); their first one is current unless `makeCurrent` says otherwise. */
+export async function addAddress(db: PoolClient, tenantId: string, workerId: string, a: AddressFields, makeCurrent: boolean | null) {
+  const hasCurrent = !!(await db.query('select 1 from worker_addresses where worker_id = $1 and is_current', [workerId])).rowCount;
+  const current = makeCurrent ?? !hasCurrent;
+  if (current) await clearCurrent(db, workerId);
+  await insert(db, tenantId, workerId, a, current, null);
+}
+
+/** An address of this person, locked with them, refused when it's history. */
+export async function liveAddress(db: PoolClient, id: string, workerId?: string) {
+  const a = await addressFor(db, id);
+  if (workerId && a.workerId !== workerId) throw new NotFoundException('Address not found');
+  const refusal = addressChangeRefusal(a);
+  if (refusal) throw new ConflictException(refusal);
+  return a;
+}
+
+/** Replaces an address with a corrected version (same place on the list); nothing when it's the same. */
+export async function correctAddress(db: PoolClient, tenantId: string, a: AddressRow, next: AddressFields) {
+  if (sameAddress(next, a)) return;
+  await db.query('update worker_addresses set is_current = false, replaced_at = now() where id = $1', [a.id]);
+  await insert(db, tenantId, a.workerId, next, a.current, a.id);
+}
+
+export async function makeAddressCurrent(db: PoolClient, a: AddressRow) {
+  if (a.current) return;
+  await clearCurrent(db, a.workerId);
+  await db.query('update worker_addresses set is_current = true where id = $1', [a.id]);
+}
+
+export const removeAddress = (db: PoolClient, a: AddressRow, reason: string | null) =>
+  db.query('update worker_addresses set is_current = false, removed_at = now(), removed_reason = $2 where id = $1', [a.id, reason]);
+
+/** The stored fields as a request body, so a correction may send only what changes. */
+export function correctionBody(a: AddressFields, body: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...pick(a), ...body };
+  if ('region' in body && !('state' in body)) merged.state = body.region;
+  return merged;
+}
 
 /**
  * A person's addresses (David, 3 Nov 2026, answer 5: "never overwrite"; previous home addresses kept; several
@@ -78,10 +118,7 @@ export class AddressesController {
       await lockWorker(db, workerId);
       const parsed = parseAddress(body, (await loadSettings(db, t.tenantId)).country);
       if ('problem' in parsed) throw new BadRequestException(parsed.problem);
-      const hasCurrent = !!(await db.query('select 1 from worker_addresses where worker_id = $1 and is_current', [workerId])).rowCount;
-      const current = makeCurrent ?? !hasCurrent;
-      if (current) await clearCurrent(db, workerId);
-      await insert(db, t.tenantId, workerId, parsed.address, current, null);
+      await addAddress(db, t.tenantId, workerId, parsed.address, makeCurrent);
       return listFor(db, t.tenantId, workerId);
     });
   }
@@ -92,17 +129,10 @@ export class AddressesController {
   @HttpCode(200)
   correct(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     return withTenant(this.pool, t.tenantId, async db => {
-      const a = await addressFor(db, id);
-      const refusal = addressChangeRefusal(a);
-      if (refusal) throw new ConflictException(refusal);
-      const merged = { ...pick(a), ...body };
-      if ('region' in body && !('state' in body)) merged.state = body.region;
-      const parsed = parseAddress(merged, (await loadSettings(db, t.tenantId)).country);
+      const a = await liveAddress(db, id);
+      const parsed = parseAddress(correctionBody(a, body ?? {}), (await loadSettings(db, t.tenantId)).country);
       if ('problem' in parsed) throw new BadRequestException(parsed.problem);
-      if (!sameAddress(parsed.address, a)) {
-        await db.query('update worker_addresses set is_current = false, replaced_at = now() where id = $1', [id]);
-        await insert(db, t.tenantId, a.workerId, parsed.address, a.current, id);
-      }
+      await correctAddress(db, t.tenantId, a, parsed.address);
       return listFor(db, t.tenantId, a.workerId);
     });
   }
@@ -113,13 +143,8 @@ export class AddressesController {
   @HttpCode(200)
   makeCurrent(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
-      const a = await addressFor(db, id);
-      const refusal = addressChangeRefusal(a);
-      if (refusal) throw new ConflictException(refusal);
-      if (!a.current) {
-        await clearCurrent(db, a.workerId);
-        await db.query('update worker_addresses set is_current = true where id = $1', [id]);
-      }
+      const a = await liveAddress(db, id);
+      await makeAddressCurrent(db, a);
       return listFor(db, t.tenantId, a.workerId);
     });
   }
@@ -131,10 +156,8 @@ export class AddressesController {
   remove(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body ?? {}, 'reason', { max: 200 });
     return withTenant(this.pool, t.tenantId, async db => {
-      const a = await addressFor(db, id);
-      const refusal = addressChangeRefusal(a);
-      if (refusal) throw new ConflictException(refusal);
-      await db.query('update worker_addresses set is_current = false, removed_at = now(), removed_reason = $2 where id = $1', [id, reason]);
+      const a = await liveAddress(db, id);
+      await removeAddress(db, a, reason);
       return listFor(db, t.tenantId, a.workerId);
     });
   }

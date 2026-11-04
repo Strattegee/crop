@@ -98,10 +98,10 @@ describe('field access: API', () => {
   it('shows the person only what they may see, never the date of birth', async () => {
     const r = await http().get('/my/details').set(as('ana')).expect(200);
     expect(r.body.fields).toEqual([
-      { field: 'name', label: 'Name', value: 'Ana Example', canChange: false, needsApproval: false },
-      { field: 'preferred_name', label: 'Preferred name', value: 'Annie', canChange: true, needsApproval: false },
-      { field: 'email', label: 'Email', value: 'ana@example.com', canChange: false, needsApproval: false },
-      { field: 'mobile', label: 'Mobile', value: '+61412345678', canChange: true, needsApproval: false },
+      { field: 'name', label: 'Name', value: 'Ana Example', raw: { firstName: 'Ana', lastName: 'Example' }, canChange: false, needsApproval: false },
+      { field: 'preferred_name', label: 'Preferred name', value: 'Annie', raw: 'Annie', canChange: true, needsApproval: false },
+      { field: 'email', label: 'Email', value: 'ana@example.com', raw: 'ana@example.com', canChange: false, needsApproval: false },
+      { field: 'mobile', label: 'Mobile', value: '+61412345678', raw: '+61412345678', canChange: true, needsApproval: false },
     ]);
     expect(r.body.addresses).toMatchObject({ canChange: true, needsApproval: false, list: [{ line: '12 Example Street, Richmond VIC 3121', current: true }] });
     expect(JSON.stringify(r.body)).not.toMatch(/1990|dateOfBirth/);

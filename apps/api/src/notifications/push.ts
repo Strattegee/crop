@@ -32,7 +32,7 @@ export function pushText(title: string, body: string) {
 export const PUSH_OFF = 'Push notifications are not switched on yet';
 
 /** Screens of the worker app a tapped notification can open (the app's tabs). */
-export const PUSH_SCREENS = ['shifts', 'offers', 'availability', 'credentials'] as const;
+export const PUSH_SCREENS = ['shifts', 'offers', 'availability', 'credentials', 'details'] as const;
 export type PushScreen = (typeof PUSH_SCREENS)[number];
 
 /** Which screen a message's template opens; null = the app opens as usual. */
@@ -46,6 +46,7 @@ const SCREEN_FOR: Record<string, PushScreen> = {
   shift_swap_refused: 'shifts',
   credential_expiry: 'credentials',
   day_request_answered: 'availability',
+  detail_change_decided: 'details',
 };
 
 export function pushScreen(template: string): PushScreen | null {
