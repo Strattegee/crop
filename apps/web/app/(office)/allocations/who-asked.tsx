@@ -47,7 +47,7 @@ export function WhoAsked({ contacts, client }: { contacts: ClientContact[]; clie
         <input name="requestedByPhone" maxLength={40} placeholder={picked?.phone ?? ''} key={`p${picked?.id ?? ''}`} />
       </label>
       <label style={{ flex: '0 1 130px' }}>How
-        <select name="channel" defaultValue="email">{CHANNELS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
+        <select name="channel" defaultValue="email">{CHANNELS.filter(c => c.value !== 'request_page').map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
       </label>
       <label style={{ flex: '0 1 160px' }}>Their reference <span className="muted">(optional)</span><input name="clientReference" maxLength={60} /></label>
       <label style={{ flex: '2 1 280px' }}>Order notes <span className="muted">(optional, for the office)</span><input name="orderNotes" maxLength={1000} /></label>

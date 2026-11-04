@@ -26,3 +26,25 @@ describe('new customers (David, 3 Nov, answer 4)', () => {
     expect(queueHref(p)).toContain('view=customers');
   });
 });
+
+describe('taking the order from a request (migration 0091)', () => {
+  it('reads the state the customer typed the way a site wants it', async () => {
+    const { regionFor } = await import('../lib/customer-request');
+    expect(regionFor('AU', 'Victoria')).toBe('VIC');
+    expect(regionFor('AU', 'vic.')).toBe('VIC');
+    expect(regionFor('AU', 'new south wales')).toBe('NSW');
+    expect(regionFor('AU', 'Somewhere')).toBe('Somewhere');
+    expect(regionFor('US', 'ca')).toBe('CA');
+    expect(regionFor('NZ', 'Auckland')).toBe('Auckland');
+    expect(regionFor('AU', null)).toBe('');
+  });
+
+  it('knows when an order is still to take and words one taken', async () => {
+    const { needsOrder, orderTakenLine } = await import('../lib/customer-request');
+    expect(needsOrder({ status: 'accepted', orderId: null })).toBe(true);
+    expect(needsOrder({ status: 'accepted', orderId: 'o1' })).toBe(false);
+    expect(needsOrder({ status: 'new' })).toBe(false);
+    expect(orderTakenLine({ orderShifts: 2 }, 'Main shop', n => `${n} shifts`)).toBe('Order taken: 2 shifts at Main shop');
+    expect(orderTakenLine({ orderShifts: 1 }, null, n => `${n} shift`)).toBe('Order taken: 1 shift');
+  });
+});

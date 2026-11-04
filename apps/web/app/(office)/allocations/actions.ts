@@ -184,7 +184,7 @@ export async function acceptCustomer(id: string, name: string, f: FormData) {
   await attempt(CUSTOMERS, async () => {
     const r = await api<{ clientId: string; createdClient: boolean }>(`/customer-requests/${id}/accept`, { method: 'POST', body: clientId ? { clientId } : {} });
     made = r.createdClient;
-  }, () => made ? `${name} is now a client with their contact saved. Add their site, then take the order.` : `Accepted for ${name}. Take the order when you're ready.`);
+  }, () => made ? `${name} is now a client with their contact saved. Take the order from the request below when you're ready.` : `Accepted for ${name}. Take the order from the request below when you're ready.`);
 }
 
 /** Declines a new customer's request (the note is for the office; CROP doesn't email the customer). */
@@ -199,4 +199,44 @@ export async function setRequestPage(f: FormData) {
   const open = f.get('open') === 'on';
   await attempt(CUSTOMERS, () => api('/customer-request-page', { method: 'PUT', body: { open, intro: str(f, 'intro') ?? null } }),
     open ? 'Your request page is on.' : 'Your request page is off: it no longer takes requests.');
+}
+
+/**
+ * Takes the order from an accepted new customer's request in one step (migration 0091): at one of the client's sites,
+ * or at a new site made from the address they gave (owners and admins), then the order with its shifts, linked to the
+ * request so it can't be taken twice. The shifts go into the queue like any order's.
+ */
+export async function orderFromRequest(id: string, clientId: string, f: FormData) {
+  const tw = await words();
+  const placeValue = str(f, 'site');
+  let created = 0;
+  let newSite = false;
+  await attempt(CUSTOMERS, async () => {
+    if (!placeValue) throw new ApiError(400, `Choose the ${tw.lower(T.site)}.`);
+    let facilityId = placeValue;
+    let areaId: string | undefined;
+    if (placeValue === 'new') {
+      facilityId = (await api<{ id: string }>('/facilities', {
+        method: 'POST',
+        body: {
+          clientId, name: str(f, 'siteName'), addressLine: str(f, 'addressLine'), suburb: str(f, 'suburb'),
+          state: str(f, 'state'), postcode: str(f, 'postcode'),
+        },
+      })).id;
+      newSite = true;
+    } else if (placeValue.includes('|')) {
+      [facilityId, areaId] = placeValue.split('|');
+    }
+    created = (await api<{ created: number }>('/client-orders', {
+      method: 'POST',
+      body: {
+        customerRequestId: id, clientId, facilityId, areaId: areaId || undefined, role: str(f, 'role'), date: str(f, 'date'),
+        startTime: str(f, 'startTime'), endTime: str(f, 'endTime'),
+        breakMinutes: str(f, 'breakMinutes') ? Number(str(f, 'breakMinutes')) : undefined, quantity: Number(str(f, 'quantity') ?? 1),
+        channel: 'request_page', requestedByName: str(f, 'requestedByName'), requestedByEmail: str(f, 'requestedByEmail'),
+        requestedByPhone: str(f, 'requestedByPhone'), saveContact: true, orderNotes: str(f, 'orderNotes'),
+        confirmToClient: f.get('confirmToClient') === 'on',
+      },
+    })).created;
+  }, () => `Order taken: ${tw.count(created, T.shift)} added${newSite ? ` at the new ${tw.lower(T.site)}` : ''}. They're in the queue now.`);
 }

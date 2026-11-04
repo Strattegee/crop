@@ -11,9 +11,9 @@ import { bool, email, text } from '../common/validate.js';
 import { fmtDate } from '../roster/eligibility.js';
 import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 
-export const CHANNELS = ['email', 'phone', 'portal', 'other'] as const;
+export const CHANNELS = ['email', 'phone', 'portal', 'other', 'request_page'] as const;
 export type Channel = typeof CHANNELS[number];
-export const CHANNEL_WORDS: Record<Channel, string> = { email: 'Email', phone: 'Phone', portal: 'Portal', other: 'Other' };
+export const CHANNEL_WORDS: Record<Channel, string> = { email: 'Email', phone: 'Phone', portal: 'Portal', other: 'Other', request_page: 'Request page' };
 
 export interface OrderFields {
   clientId: string;
@@ -28,6 +28,8 @@ export interface OrderFields {
   contactId: string | null;
   /** Save the typed details as a new contact of the client (or link the live one of that name). */
   saveContact: boolean;
+  /** The new customer's request this order is taken from (migration 0091), or null. */
+  customerRequestId: string | null;
 }
 
 /** A client contact as stored (migration 0072). */
@@ -90,7 +92,13 @@ export function parseOrder(body: Record<string, unknown>): OrderFields {
   const orderNotes = text(body, 'orderNotes', { max: 1000 });
   const confirmToClient = bool(body, 'confirmToClient') ?? true;
   const saveContact = !contactId && (bool(body, 'saveContact') ?? false);
-  return { clientId, channel: channel as Channel, requestedByName, requestedByEmail, requestedByPhone, clientReference, orderNotes, confirmToClient, contactId, saveContact };
+  // An order taken from a new customer's request (migration 0091): the request it came from, accepted for this client.
+  const customerRequestId = text(body, 'customerRequestId', { max: 40 });
+  if (customerRequestId && !UUID.test(customerRequestId)) throw new BadRequestException('Choose the request this order is for');
+  return {
+    clientId, channel: channel as Channel, requestedByName, requestedByEmail, requestedByPhone, clientReference, orderNotes, confirmToClient, contactId, saveContact,
+    customerRequestId: customerRequestId ?? null,
+  };
 }
 
 /** Why an order can't go on this client and site, or null. Tokens are filled with the business's words. */

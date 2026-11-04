@@ -25,7 +25,8 @@ const COLS = `r.id, r.business_name as "businessName", r.contact_name as "contac
   r.site_name as "siteName", r.address, r.suburb, r.region, r.postcode, r.role, to_char(r.work_date, 'YYYY-MM-DD') as date,
   to_char(r.start_time, 'HH24:MI') as "startTime", to_char(r.end_time, 'HH24:MI') as "endTime", r.people, r.notes, r.status,
   r.created_at as "createdAt", r.decided_at as "decidedAt", r.decided_by_name as "decidedByName", r.decided_note as "decidedNote",
-  r.client_id as "clientId", c.name as "clientName"`;
+  r.client_id as "clientId", c.name as "clientName", o.id as "orderId", o.facility_id as "orderFacilityId",
+  (select count(*)::int from shifts s where s.client_order_id = o.id) as "orderShifts"`;
 
 interface Row {
   id: string; businessName: string; date: string; startTime: string; endTime: string; role: string; people: number;
@@ -121,6 +122,7 @@ export class CustomerRequestsController {
       const year = todayIn(s.timezone).slice(0, 4);
       const rows = (await db.query<Row>(
         `select ${COLS} from customer_requests r left join clients c on c.id = r.client_id
+                 left join client_orders o on o.customer_request_id = r.id
           where ${all ? `(r.status = 'new' or r.created_at > now() - interval '90 days')` : `r.status = 'new'`}
           order by (r.status = 'new') desc, r.created_at desc limit 300`)).rows;
       const waiting = (await db.query<{ n: number }>(`select count(*)::int as n from customer_requests where status = 'new'`)).rows[0].n;
