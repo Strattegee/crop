@@ -78,6 +78,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       )}
 
       <div className="card">
+        <h2>Personal details</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Who can see and change each piece of a {tw.lower(T.worker)}’s details in the app: office only, a look, a change you approve, or their own change.</p>
+        <Link href="/settings/personal-details" className="btn small secondary">Personal details</Link>
+      </div>
+
+      <div className="card">
         <h2>Offices</h2>
         <p className="muted" style={{ marginTop: 0 }}>Your branches: which {tw.lower(T.site, true)} and which people in the office belong to each. Allocations and the dashboard can be narrowed to one office.</p>
         <Link href="/settings/offices" className="btn small secondary">Offices</Link>

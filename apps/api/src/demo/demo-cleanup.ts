@@ -52,7 +52,7 @@ export const PARTIAL: Record<string, string> = {
 };
 /** Set-up and sign-ins: kept as they are. */
 export const KEEP_TABLES = [
-  'tenant_settings', 'invitations', 'business_terms', 'industry_pack_applications', 'credential_types', 'credential_requirements',
+  'tenant_settings', 'field_access', 'invitations', 'business_terms', 'industry_pack_applications', 'credential_types', 'credential_requirements',
   'business_roles', 'shift_duties', 'shift_duty_requirements', 'equipment_types', 'items', 'onboarding_checklists', 'onboarding_steps',
   'dashboard_targets', 'outside_agencies', 'push_devices', 'platform_admin_events', 'agency_connections', 'agency_credential_maps',
   'agency_invitations', 'agency_events',
