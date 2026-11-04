@@ -18,6 +18,8 @@ import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import { lettersOf } from '../../../lib/marker-letters';
+import { listQuery, parseListParams, stageClass } from '../../../lib/roster-list';
+import { ListView } from './list-view';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers,
@@ -107,13 +109,12 @@ const TYPE_SHORT: Record<string, string> = { full_time: 'Full-time', part_time: 
  * purple the person pulled out, green booked, red cancelled.
  */
 function stage(s: Shift, tw: Words): { cls: string; label: string } {
-  if (s.status === 'cancelled') return { cls: 'cancelled', label: 'Cancelled' };
-  if (s.equipmentOnly) return s.status === 'open' ? { cls: 'unfilled', label: `Needs ${tw.lower(T.equipment)}` } : { cls: 'booked', label: `${tw.one(T.equipment)} booked` };
-  if (s.status === 'booked') return { cls: 'booked', label: 'Booked' };
-  if (s.status === 'assigned') return s.agencyName ? { cls: 'accepted', label: 'To approve' } : { cls: 'allocated', label: 'Allocated' };
-  if (s.pulledOutName) return { cls: 'pulled', label: 'Pulled out' };
-  if (s.offersPending) return { cls: 'offered', label: `Offered to ${s.offersPending}` };
-  return { cls: 'unfilled', label: 'Unfilled' };
+  // The colour (stageClass) is shared with the List view (lib/roster-list.ts).
+  const cls = stageClass(s);
+  if (cls === 'cancelled') return { cls, label: 'Cancelled' };
+  if (s.equipmentOnly) return s.status === 'open' ? { cls, label: `Needs ${tw.lower(T.equipment)}` } : { cls, label: `${tw.one(T.equipment)} booked` };
+  if (cls === 'offered') return { cls, label: `Offered to ${s.offersPending}` };
+  return { cls, label: { booked: 'Booked', accepted: 'To approve', allocated: 'Allocated', pulled: 'Pulled out', unfilled: 'Unfilled' }[cls] };
 }
 const dayLabel = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
 const fullDate = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
@@ -136,7 +137,8 @@ const GAP_PX = 30;
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; role?: string; hours?: string; error?: string; done?: string }>;
+  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; role?: string; hours?: string; error?: string; done?: string;
+    layout?: string; group?: string; q?: string; stage?: string; area?: string; person?: string; limit?: string }>;
 }) {
   const money = moneyFor((await businessSettings()).country);
   const tw = await words();
@@ -156,11 +158,14 @@ export default async function RosterPage({ searchParams }: {
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
   // The strip's role and "Has hours left" filters (David, 2 Nov) ride along in every roster URL, so drops keep them.
   const stripFilter = parseStripFilter(sp);
+  // Cards or List (David and Steve, 4 Nov): the list's grouping and filters live in the URL too (week and day only).
+  const listP = parseListParams(sp);
+  const listMode = listP.layout === 'list' && span !== 'month';
   const at = (s: Span, anchor: string) => s === 'week' ? { span: undefined, date: undefined, week: anchor } : { span: s, date: anchor, week: undefined };
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const merged = { ...at(span, range.anchor), site, view, look: look === 'cards' ? undefined : look, shift: sp.shift, log: sp.log === '1' ? '1' : undefined,
-      role: stripFilter.role || undefined, hours: stripFilter.hoursLeft ? 'left' : undefined, ...over };
+      role: stripFilter.role || undefined, hours: stripFilter.hoursLeft ? 'left' : undefined, ...listQuery(listP), ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
@@ -834,6 +839,7 @@ export default async function RosterPage({ searchParams }: {
             {Object.entries(at(span, range.anchor)).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <input type="hidden" name="view" value={view} />
             {look !== 'cards' && <input type="hidden" name="look" value={look} />}
+            {Object.entries(listQuery(listP)).map(([k, v]) => v && k !== 'limit' ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <span className="tool-icon" aria-hidden="true">⌖</span>
             <SiteSelect name="site" value={site} allLabel={`All ${tw.lower(T.site, true)}`} options={activeFacilities.map(f => ({ id: f.id, name: f.name }))} />
             <noscript><button type="submit" className="btn small secondary">Show</button></noscript>
@@ -848,9 +854,9 @@ export default async function RosterPage({ searchParams }: {
           </div>
           <details className="tool-menu">
             <summary>
-              View: {span !== 'month' && <>{view === 'area' ? `By ${tw.lower(T.area)}` : `By ${tw.lower(T.worker)}`} · </>}
+              View: {listMode ? 'List · ' : span !== 'month' && <>{view === 'area' ? `By ${tw.lower(T.area)}` : `By ${tw.lower(T.worker)}`} · </>}
               {span === 'day' ? 'Day' : span === 'week' ? 'Week' : 'Month'}
-              {span === 'week' && look !== 'cards' && <> · {LOOKS.find(l => l.id === look)?.label}</>}
+              {span === 'week' && !listMode && look !== 'cards' && <> · {LOOKS.find(l => l.id === look)?.label}</>}
             </summary>
             <div className="tool-menu-body">
               <div className="tool-menu-title">Period</div>
@@ -858,11 +864,16 @@ export default async function RosterPage({ searchParams }: {
                 <Link key={s2} href={switchTo(s2)} aria-current={span === s2 ? 'true' : undefined}>{s2 === 'day' ? 'Day' : s2 === 'week' ? 'Week' : 'Month'}</Link>
               ))}
               {span !== 'month' && <>
+                <div className="tool-menu-title">Layout</div>
+                <Link href={url({ layout: undefined, group: undefined, q: undefined, stage: undefined, area: undefined, person: undefined, limit: undefined })} aria-current={!listMode ? 'true' : undefined}>Cards</Link>
+                <Link href={url({ layout: 'list' })} aria-current={listMode ? 'true' : undefined} title={`Every ${tw.lower(T.shift)} as a row: group, filter and act on several at once`}>List</Link>
+              </>}
+              {span !== 'month' && !listMode && <>
                 <div className="tool-menu-title">Rows</div>
                 <Link href={url({ view: 'area' })} aria-current={view === 'area' ? 'true' : undefined}>By {tw.lower(T.area)}</Link>
                 <Link href={url({ view: 'person' })} aria-current={view === 'person' ? 'true' : undefined}>By {tw.lower(T.worker)}</Link>
               </>}
-              {span === 'week' && <>
+              {span === 'week' && !listMode && <>
                 <div className="tool-menu-title">{tw.many(T.shift)} show</div>
                 {LOOKS.map(l => <Link key={l.id} href={url({ look: l.id === 'cards' ? undefined : l.id })} aria-current={look === l.id ? 'true' : undefined}>{l.label}</Link>)}
               </>}
@@ -965,7 +976,16 @@ export default async function RosterPage({ searchParams }: {
       })()}
 
       {span !== 'month' && (
-      <div className="roster-layout">
+      <div className={`roster-layout${listMode ? ' list' : ''}`}>
+        {listMode ? (
+          <ListView shifts={allShifts.filter(inView)} p={listP} role={stripFilter.role} tw={tw} letters={letters} dayRequests={roster.dayRequests ?? []}
+            url={url} here={here} selectedId={selected?.id ?? null} allSites={!site} closeHref={selected ? url({ shift: undefined }) : null}
+            people={roster.people.map(x => ({ id: x.id, name: x.name }))} duties={duties.filter(d => d.active).map(d => ({ id: d.id, name: d.name }))}
+            blocked={new Map((attention?.items ?? []).filter(i => i.kind === 'person_blocked' || i.kind === 'equipment_blocked').map(i => [i.shiftId, `${i.title}: ${i.detail}`]))}
+            gaps={new Map(coverGaps.map(g => [g.shiftId, g.title]))}
+            refused={new Set(weekStates.filter(w => w.changeRefusal).map(w => w.facilityId))}
+            stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)} />
+        ) : (<>
         <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter}
           labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), sites: tw.many(T.site) }} />
         <DropZone back={here} labels={{ shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true), person: tw.lower(T.worker), people: tw.lower(T.worker, true) }}>
@@ -1093,6 +1113,7 @@ export default async function RosterPage({ searchParams }: {
             )}
           </table>
         </DropZone>
+        </>)}
 
         {selected && (
           <aside id="shift-panel" className="roster-panel card" aria-label="Selected shift">
