@@ -84,6 +84,15 @@ type Week = { facilityId: string; facilityName: string; state: 'draft' | 'live' 
 type ChangeRequest = { id: string; shiftId: string; kind: string; status: string; summary: string; reason: string | null; requestedByName: string | null; createdAt: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string; canDecide: boolean; canWithdraw: boolean };
 type Change = { id: string; kind: string; summary: string; afterPublish: boolean; actorName: string | null; via: string; at: string; shiftId: string; role: string; areaName: string | null; facilityName: string; localDate: string; localStart: string; localEnd: string };
 const STATE_LABEL: Record<Week['state'], string> = { draft: 'Draft', live: 'Live', history: 'History' };
+/** More sites than this on the week and the title row shows a summary with the sites in a drop-down. */
+const SITES_INLINE = 3;
+/** "27 sites: 25 draft · 2 live (3 changes since)". */
+function weekSummary(rows: Week[], sitesWord: string): string {
+  const n = (st: Week['state']) => rows.filter(r => r.state === st).length;
+  const parts = (['draft', 'live', 'history'] as const).filter(st => n(st) > 0).map(st => `${n(st)} ${STATE_LABEL[st].toLowerCase()}`);
+  const changes = rows.reduce((t, r) => t + (r.state === 'live' ? r.changesSincePublish : 0), 0);
+  return `${rows.length} ${sitesWord}: ${parts.join(' · ')}${changes ? ` (${changes} ${changes === 1 ? 'change' : 'changes'} since)` : ''}`;
+}
 const byWhom = (c: Change) => c.via === 'link' ? 'by reply link' : c.via === 'app' ? 'in the app' : c.actorName ? `by ${c.actorName}` : '';
 /** A saved usual week for one site (migration 0023). */
 type Template = { id: string; facilityId: string; facilityName: string; name: string; shifts: number; withPeople: number; equipmentBookings?: number; createdByName: string | null };
@@ -778,6 +787,19 @@ export default async function RosterPage({ searchParams }: {
               <span><span className="muted">This week is over. It stays as a record and can&apos;t be published.</span></span>
             ) : weekRows.length === 0 ? (
               <span><span className="muted">Nothing on this week yet.</span></span>
+            ) : weekRows.length > SITES_INLINE ? (
+              /* Many sites (C4U has 27): one summary line, the sites in a drop-down list, so the title row stays one line. */
+              <details className="tool-menu states-more">
+                <summary>{weekSummary(weekRows, tw.many(T.site).toLowerCase())}</summary>
+                <ul>
+                  {weekRows.map(w => (
+                    <li key={w.facilityId}>
+                      <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b> {w.facilityName}
+                      {w.state === 'live' && w.changesSincePublish > 0 && <span className="warn"> · {w.changesSincePublish} {w.changesSincePublish === 1 ? 'change' : 'changes'} since</span>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ) : weekRows.map(w => (
               <span key={w.facilityId}>
                 {weekStage === null && <b className={`pill ${w.state}`}>{STATE_LABEL[w.state]}</b>}
