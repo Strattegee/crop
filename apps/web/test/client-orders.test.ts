@@ -40,6 +40,8 @@ describe('client orders on Allocations (David, 2 Nov)', () => {
     expect(allocationsMenu({ agencyLinks: 0, open: 0, hasClients: true, clientShiftsOpen: 5 })).toEqual({ show: true, count: 5 });
     expect(allocationsMenu({ agencyLinks: 1, open: 2, hasClients: true, clientShiftsOpen: 5 })).toEqual({ show: true, count: 7 });
     expect(allocationsMenu({ agencyLinks: 1, open: 2 })).toEqual({ show: true, count: 2 });
+    expect(allocationsMenu({ agencyLinks: 0, open: 0, hasClients: false, customerPage: true, customerRequests: 0 })).toEqual({ show: true, count: 0 });
+    expect(allocationsMenu({ agencyLinks: 0, open: 0, hasClients: true, clientShiftsOpen: 5, customerRequests: 2 })).toEqual({ show: true, count: 7 });
   });
 
   it('words the client-to-confirm stage and the client’s rank (migration 0069)', () => {

@@ -1020,6 +1020,7 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   .states-more:not([open]) > ul { display: none; }
   .roster-add .form-row label { min-width: 0; max-width: 100%; }
   .roster-add .form-row select { max-width: 100%; }
+}
 
 /* Projects (4 Nov): the list and a project's page. */
 .project-table td.num, .project-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -1037,3 +1038,13 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   .proj-stack tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .proj-stack td { display: block; border: 0; padding: 2px 0; }
 }
+
+/* Public "request staff" page (David, 3 Nov, answer 4). */
+.request-page { max-width: 560px; }
+.request-form fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 10px; }
+.request-form legend { font-weight: 600; color: var(--text); padding: 0 4px; }
+.request-form .form-row label { flex: 1 1 120px; }
+.request-form .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.cust-req { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; background: var(--surface); }
+.cust-req h3 { margin: 0 0 4px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cust-req .form-row { margin-top: 8px; }

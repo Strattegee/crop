@@ -160,7 +160,7 @@ export function updatedWords(at: number, now: number): string {
  * (sites without an office) or an office id (offices, David 3 Nov).
  */
 export type QueueParams = {
-  stage: QueueTab; office: string | null; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers';
+  stage: QueueTab; office: string | null; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers' | 'customers';
   /** A calendar period instead of `days` (null = the forward-looking `days`). */
   period?: QueuePeriod | null;
   /** Rows to show for a calendar period (null = the first page). */
@@ -215,7 +215,7 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
     clientId: id(one('clientId')),
     days: (DAY_CHOICES as readonly number[]).includes(dayValue) ? dayValue : 3,
     shift: id(one('shift')),
-    view: view === 'new' || view === 'history' || view === 'employers' ? view : 'queue',
+    view: view === 'new' || view === 'history' || view === 'employers' || view === 'customers' ? view : 'queue',
     period,
     limit: period && Number.isInteger(limit) && limit > PAGE_ROWS ? Math.min(limit, 5000) : null,
     near: one('near') === '1',

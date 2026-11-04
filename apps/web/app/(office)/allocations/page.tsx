@@ -11,6 +11,8 @@ import { Notices } from '../notices';
 import type { CallRow } from '../../../lib/calls';
 import { AgencyAttentionList, type AgencyAttention } from './agency-attention';
 import { offerToPeople, pullOut, putForward, recordYes, withdrawOffers } from './actions';
+import { CustomerRequests } from './customers';
+import { hasCustomers, type AllocationSummary } from '../../../lib/client-orders';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +34,7 @@ const LEVEL: Record<Requirement['severity'], string> = { hard: 'Must have', warn
 const GENDER_ASKED = { F: 'A female worker requested', M: 'A male worker requested' } as const;
 const CLOSED: Record<string, string> = { filled: 'Filled', withdrawn: 'Withdrawn', expired: 'Expired' };
 
-type Summary = { agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number };
+type Summary = AllocationSummary;
 type Site = { id: string; name: string; clientId: string | null; clientName: string | null; active: boolean };
 
 /**
@@ -47,7 +49,11 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   const hasAgency = (summary?.agencyLinks ?? 0) > 0;
   const hasClients = Boolean(summary?.hasClients);
   const parsed = parseQueueParams(sp);
-  const p: QueueParams = { ...parsed, view: !hasClients && hasAgency ? 'employers' : parsed.view === 'employers' && !hasAgency ? 'queue' : parsed.view };
+  const customers = hasCustomers(summary) || parsed.view === 'customers';
+  const p: QueueParams = {
+    ...parsed,
+    view: parsed.view === 'customers' ? 'customers' : !hasClients && hasAgency ? 'employers' : parsed.view === 'employers' && !hasAgency ? 'queue' : parsed.view,
+  };
   const when = whenIn(zone);
   const error = typeof sp.error === 'string' ? sp.error : undefined;
   const done = typeof sp.done === 'string' ? sp.done : undefined;
@@ -64,16 +70,20 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
             {tab('employers', 'Requests from employers')}
           </nav>
         )}
-        {hasClients && (
+        {(hasClients || customers) && (
           <div className="q-header-right">
-            {p.view === 'queue' ? <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'history' })}>Completed and history</Link>
-              : <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'queue' })}>Back to the queue</Link>}
-            <Link className="btn small" href={queueHref({ ...p, shift: null }, { view: 'new' })}>+ New order</Link>
+            {customers && p.view !== 'customers' && (
+              <Link className="btn small secondary" href="/allocations?view=customers">New customers{summary?.customerRequests ? ` (${summary.customerRequests})` : ''}</Link>
+            )}
+            {hasClients && (p.view === 'queue' ? <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'history' })}>Completed and history</Link>
+              : <Link className="btn small secondary" href={queueHref({ ...p, shift: null }, { view: 'queue' })}>Back to the queue</Link>)}
+            {hasClients && <Link className="btn small" href={queueHref({ ...p, shift: null }, { view: 'new' })}>+ New order</Link>}
           </div>
         )}
       </div>
       <Notices error={error} done={done} />
-      {!hasClients && !hasAgency && (
+      {p.view === 'customers' && <CustomerRequests tw={tw} when={when} all={sp.all === '1'} />}
+      {!hasClients && !hasAgency && p.view !== 'customers' && (
         <p className="muted">Nothing to allocate yet. Give a {tw.lower(T.site)} a {tw.lower(T.client)} to take their orders here.</p>
       )}
       {hasClients && p.view === 'queue' && <ClientQueue tw={tw} p={p} when={when} today={todayIn(zone)} />}

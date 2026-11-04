@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { api } from '../../lib/api';
-import { allocationsMenu } from '../../lib/client-orders';
+import { allocationsMenu, type AllocationSummary } from '../../lib/client-orders';
 import { currentAgency, currentUser, OFFICE_ROLES } from '../../lib/current-user';
 import { TopNav, UserMenu, type NavItem, type NavLink } from './nav';
 import { FUNCTIONS } from '../../lib/functions';
@@ -50,7 +50,7 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   // Allocations (function code 2200), after the Roster, only for businesses that supply an employer on CROP (agency
   // fill) or have clients with sites (client orders, 2 Nov); the count is what's still to fill.
   const alloc = canUse(role, 2200)
-    ? allocationsMenu(await api<{ agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number }>('/allocations/summary').catch(() => null))
+    ? allocationsMenu(await api<AllocationSummary>('/allocations/summary').catch(() => null))
     : { show: false, count: 0 };
   const allocLink = link(2200);
   if (alloc.show && allocLink) {
