@@ -39,6 +39,18 @@ docker compose --env-file /srv/crop/.env run --rm migrate node node_modules/@cro
   --tenant cfy --name "Caring For You" --email someone@example.com --role owner
 ```
 
+## Demo day for Caring For You
+
+The **Reset C4U demo day on staging** workflow (GitHub → Actions → Run workflow) gives the staging business `cfy` an invented but realistic agency day to work the Allocations screen with: 5 offices, 15 clients with ranks and contacts, 27 sites, about 450 people with credentials, right to work, availability and leave, 14 days of history (booked, cancelled by kind, pull-outs, offers, calls, messages, officers' work for Live numbers), today and the next 3 days (about 240 client shifts a day in every allocation stage). Leave `day` empty for today; type `RESET` in `confirm` (anything else is a dry run that only lists what would be deleted). Run it the morning of a demo, since the day is worked out from the clock.
+
+It deletes the business's data (shifts, orders, clients, sites, people and their records, offices, calls, messages, audit rows) and keeps the business, real sign-ins, settings, words, credential types, rules, roles and shift types. It refuses unless the container is told `CROP_ENV=staging` (only this workflow does), for any business but `cfy`, on a managed database, and whenever the business holds an email that isn't at example.com or any phone number (so nothing real is ever wiped). Seeded people have `@example.com` emails and no phones, messages are history rows only and client booking emails are recorded as already sent, so nothing is sent to anyone. Seven invented allocation officers are added as sign-ins nobody can use (subject `demo-day:cfy:*`).
+
+The same on the server:
+```sh
+cd /srv/crop/app/deploy/staging
+docker compose --env-file /srv/crop/.env run --rm -T -e CROP_ENV=staging migrate node dist/demo/demo-day-cli.js --tenant cfy --confirm RESET
+```
+
 ## Document storage
 Bucket `crop-staging-docs` (Spaces, SYD1). The access key (limited to that bucket) is in `/srv/crop/.env` as `SPACES_KEY` / `SPACES_SECRET`. Without them, uploads are refused with "Document storage is not set up yet".
 

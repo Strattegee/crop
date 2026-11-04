@@ -2,6 +2,12 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-11-03 (David): demo day for C4U on staging
+
+- Shipped: a demo-day seed for the staging business Caring For You (`cfy`) and the "Reset C4U demo day on staging" workflow, so David and Steve can work the Allocations screen like a normal day in an online meeting. It resets the business and fills it with invented offices, clients, sites, wards, contacts, about 450 people with records, 14 days of history and today plus 3 days ahead (about 240 client shifts a day, every queue stage and band, Live numbers for seven invented officers, usual people, day requests). David's screenshots of C4U's current system were used only for the shape of a day (roles, shift times, mix of stages, how often people return to a site); no name, place, number or note was copied.
+- Safety: staging only (`CROP_ENV=staging`, never a managed database), only `cfy`, refuses when anything looks real (non-example email or any phone), example.com emails only, no phones, nothing queued to send.
+- Also: the Allocations filters wrap on a phone instead of pushing the page sideways.
+
 ## 2026-10-26 afternoon (scheduled run)
 
 - Shipped: availability and leave, first part (backlog item 10). The office can record when each person usually can work (by day, and morning, afternoon or night), one-off changes for a date ("can't do Saturday"), and leave in whole days. Approved leave stops someone being put on a shift or offered one that day; asked-for leave and "not available" show as warnings, so the office can still roster someone after a phone call. The "who can work this shift" and bank-fill lists now put people who are free first. When leave is recorded or approved, CROP lists the shifts the person is already on, so cover can be found. Only owners and admins approve leave. The type of leave is never shown in reasons or messages.

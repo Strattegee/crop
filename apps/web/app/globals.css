@@ -751,8 +751,8 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-view { padding: 4px 10px; border-radius: 6px; font-size: 13px; color: var(--text); text-decoration: none; border: 1px solid var(--border); background: var(--surface); }
 .q-view.on { background: var(--sel-bg); color: var(--sel-text); border-color: var(--sel-bg); }
 .q-filters { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-bottom: 6px; }
-.q-selects { display: flex; gap: 6px; align-items: center; margin: 0; }
-.q-select { font-size: 13px; padding: 4px 6px; max-width: 220px; }
+.q-selects { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; max-width: 100%; }
+.q-select { font-size: 13px; padding: 4px 6px; max-width: min(220px, 100%); min-width: 0; }
 .q-chips { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .q-chip, .q-tab { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; text-decoration: none; white-space: nowrap; }
 .q-chip:hover, .q-tab:hover { background: var(--hover); }
