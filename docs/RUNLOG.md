@@ -740,6 +740,12 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-11-04 (David's session)
 - Fixed: with many sites on a week (C4U's demo has 27), the roster's title row listed every site's Draft/Live state side by side and squeezed them into a tall column of wrapped names over the page. Now it says "27 sites: 25 draft · 2 live" and the sites open in a drop-down list; three or fewer still show inline.
 
+## 2026-11-04 (4 Nov, David): projects, part 1 (data and API)
+- Built: projects for businesses that run their own work (David and Steve's ask). A project is a site of kind "project" (code, description, dates, status, manager), so the roster, templates, cover rules, stock and transfers, equipment bookings, offices and Needs attention work for it unchanged. New: a project team (separate from shifts; team first in who-can-work lists, never a block), equipment allocated to a project for a period (never two places on one day; booking it onto a shift elsewhere is refused with the reason; allocating equipment still booked elsewhere is refused too), what a site used in consumables, and a Projects list and overview in the API. Words: new concept 1025 Project. Decision note `docs/decisions/2026-11-04-projects.md` with what's not built and why, and a proposal for per-project access for David.
+- Checked: API tests (statuses and archiving, team overlap, team-first ranking, allocation overlap and both directions of double booking, moving, another business sees nothing, the app role can't delete or rewrite rows, the demo reset's table lists); every test passes.
+- Next: the screens (second pull request).
+
+
 ## 2026-11-04 (4 Nov, David): roster List view
 - Shipped: a List layout on the roster (View › Layout › List), asked for by David and Steve for businesses with many people. Same data and actions as the cards; rows grouped by date, site, area, person, role or stage; search and filters; tick boxes with bulk Assign, Offer / Release, Confirm, Add duty and Cancel, each shift through the usual endpoint with refusals named. State in the address (`layout=list`, `group`, `q`, `stage`, `area`, `person`, `limit`).
 - Timings with the demo-day seed (27 sites, 454 people, 1,401 shifts in the week of 2 Nov) on a local build: the week as cards 2.6–2.9 s, as a list (first 300 rows) 2.3–2.9 s, as a list of every row (1,324) 2.8–3.5 s (once 6 s); a day as a list 2.4–2.6 s. About 1.8 s of every roster load, cards or list, is Needs attention (`GET /roster/attention`); `GET /roster` itself is 0.15 s.

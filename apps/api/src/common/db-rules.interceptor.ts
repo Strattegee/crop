@@ -3,9 +3,9 @@ import { catchError, Observable, throwError } from 'rxjs';
 
 /**
  * Error codes raised by database rules whose message is already plain English for the person:
- * CRLK1 a locked published roster (0024), CRAG1 an agency link rule (0038). CRAG2 is "not found" (404).
+ * CRLK1 a locked published roster (0024), CRAG1 an agency link rule (0038), CRPJ1 a project rule (0084: team or equipment dates overlap). CRAG2 is "not found" (404).
  */
-const RULE_CODES = new Set(['CRLK1', 'CRAG1']);
+const RULE_CODES = new Set(['CRLK1', 'CRAG1', 'CRPJ1']);
 const NOT_FOUND_CODES = new Set(['CRAG2']);
 
 /**

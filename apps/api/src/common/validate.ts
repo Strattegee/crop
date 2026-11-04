@@ -26,6 +26,7 @@ const LABELS: Record<string, string> = {
   requestedByName: 'Who asked', requestedByEmail: 'Their email', requestedByPhone: 'Their phone', clientReference: 'Their reference',
   orderNotes: 'Order notes', confirmToClient: 'Email the client when filled',
   confirmsBookings: 'Client confirms each booking', rank: 'Client rank',
+  description: 'Description', managerUserId: 'Manager', teamRole: 'Role on the team', lastDay: 'Last day', onDate: 'Date',
   contactId: 'Saved contact', position: 'Position', saveContact: 'Save as a contact',
 };
 const label = (key: string) => LABELS[key] ?? key;

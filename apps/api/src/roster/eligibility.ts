@@ -92,7 +92,7 @@ export interface EligibilityInput {
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
 
 export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
-  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender' | 'request' | 'age';
+  | 'operator' | 'equipment_status' | 'equipment_check' | 'equipment_allocated' | 'leave' | 'availability' | 'employment' | 'gender' | 'request' | 'age';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 

@@ -403,3 +403,20 @@ export class WorkerItemsController {
     });
   }
 }
+
+/** What a site or project used (issued, used on its shifts, net of returns), with cost and charge (projects, 4 Nov). */
+@ApiBearerAuth()
+@ApiSecurity('tenant')
+@Controller('facilities/:id/items')
+export class SiteItemsController {
+  constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
+
+  @Roles(...OFFICE_ROLES)
+  @Get()
+  get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      if (!(await db.query('select 1 from facilities where id = $1', [id])).rowCount) throw new NotFoundException('{Site} not found');
+      return usage(db, 'm.facility_id', id);
+    });
+  }
+}
