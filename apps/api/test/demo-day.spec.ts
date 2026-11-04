@@ -90,10 +90,36 @@ describe('demo-day seed: database and Allocations', () => {
     expect(await count('select count(*)::int as n from users')).toBe(0);
   });
 
+  it('deletes real-looking test entries only when told to, keeping real sign-ins', async () => {
+    // David's own test entries (4 Nov): a person with a real-looking email linked to his sign-in, a client and a site with phones.
+    const u = await owner.query<{ id: string }>(`insert into users(idp_subject, email) values ('david-real', 'david@gmail.com') returning id`);
+    ids.realUser = u.rows[0].id;
+    await owner.query(`insert into memberships(tenant_id, user_id, role) values ($1, $2, 'owner')`, [ids.cfy, ids.realUser]);
+    await owner.query(`insert into workers(tenant_id, first_name, last_name, email, user_id) values ($1, 'David', 'Bee', 'david@gmail.com', $2)`, [ids.cfy, ids.realUser]);
+    const c = await owner.query<{ id: string }>(`insert into clients(tenant_id, name, phone) values ($1, 'Sample Client', '03 9000 0000') returning id`, [ids.cfy]);
+    await owner.query(`insert into facilities(tenant_id, name, phone, client_id) values ($1, 'Sample Site', '03 9000 0001', $2)`, [ids.cfy, c.rows[0].id]);
+    await expect(demoDay(owner, { slug: 'cfy', confirm: 'RESET' })).rejects.toThrow(/may be real[\s\S]*--delete-real-looking/);
+    const dry = await demoDay(owner, { slug: 'cfy', deleteRealLooking: true });
+    expect(dry.dryRun).toBe(true);
+    expect(dry.realLooking).toHaveLength(3);
+    expect(await count(`select count(*)::int as n from workers where tenant_id = $1`, [ids.cfy])).toBe(1);
+    // The other checks still apply with the override.
+    await expect(demoDay(owner, { slug: 'other', confirm: 'RESET', deleteRealLooking: true })).rejects.toThrow(/only runs for cfy/);
+  });
+
   it('seeds a busy day, re-runs cleanly and leaves other businesses alone', async () => {
     const other = await otherCounts();
-    const first = await demoDay(owner, { slug: 'cfy', confirm: 'RESET' });
+    const lines: string[] = [];
+    const first = await demoDay(owner, { slug: 'cfy', confirm: 'RESET', deleteRealLooking: true, log: l => lines.push(l) });
     expect(first.dryRun).toBe(false);
+    expect(first.realLooking).toHaveLength(3);
+    expect(first.removed).toMatchObject({ workers: 1, clients: 1, facilities: 1 });
+    expect(lines.join('\n')).toMatch(/Deleting records that may be real[\s\S]*deleted 1 workers/);
+    expect(lines.join('\n')).toMatch(/\(today\): \d+/);
+    expect(await count(`select count(*)::int as n from workers where tenant_id = $1 and email = 'david@gmail.com'`, [ids.cfy])).toBe(0);
+    // His sign-in and access stay.
+    expect(await count(`select count(*)::int as n from memberships where tenant_id = $1 and user_id = $2`, [ids.cfy, ids.realUser])).toBe(1);
+    expect(await count(`select count(*)::int as n from users where id = $1`, [ids.realUser])).toBe(1);
     const shifts = await count('select count(*)::int as n from shifts where tenant_id = $1', [ids.cfy]);
     expect(shifts).toBeGreaterThan(2500);
     const today = await count(`select count(*)::int as n from shifts s join facilities f on f.id = s.facility_id
@@ -118,11 +144,18 @@ describe('demo-day seed: database and Allocations', () => {
     expect(await count(`select count(*)::int as n from shift_assignments where tenant_id = $1 and removed_reason = 'pulled_out'`, [ids.cfy])).toBeGreaterThan(20);
     expect(await count(`select count(*)::int as n from shifts where tenant_id = $1 and usual_worker_id is not null`, [ids.cfy])).toBeGreaterThan(20);
     expect(await count(`select count(*)::int as n from day_requests where tenant_id = $1 and status = 'open'`, [ids.cfy])).toBeGreaterThan(10);
+    // A small share of past shifts ended with nobody: some never filled, some pulled out and not refilled.
+    const pastShifts = await count(`select count(*)::int as n from shifts where tenant_id = $1 and ends_at <= now() and status <> 'cancelled'`, [ids.cfy]);
+    const unfilled = await count(`select count(*)::int as n from shifts where tenant_id = $1 and ends_at <= now() and status = 'open'`, [ids.cfy]);
+    expect(unfilled).toBeGreaterThan(20);
+    expect(unfilled / pastShifts).toBeLessThan(0.08);
+    expect(await count(`select count(*)::int as n from shifts s where tenant_id = $1 and ends_at <= now() and status = 'open'
+      and exists (select 1 from shift_assignments a where a.shift_id = s.id and a.removed_reason = 'pulled_out')`, [ids.cfy])).toBeGreaterThan(3);
 
     const again = await demoDay(owner, { slug: 'cfy', confirm: 'RESET' });
     expect(again.removed.shifts).toBe(shifts);
     expect(await count(`select count(*)::int as n from users where idp_subject like 'demo-day:cfy:%'`)).toBe(7);
-    expect(await count(`select count(*)::int as n from memberships where tenant_id = $1`, [ids.cfy])).toBe(7);
+    expect(await count(`select count(*)::int as n from memberships where tenant_id = $1`, [ids.cfy])).toBe(8);
     expect(await count(`select count(*)::int as n from industry_pack_applications where tenant_id = $1`, [ids.cfy])).toBe(2);
     expect(await otherCounts()).toEqual(other);
   }, 120_000);
@@ -143,6 +176,14 @@ describe('demo-day seed: database and Allocations', () => {
     expect(q.counts.all).toBeGreaterThan(150);
     expect(q.bands.started + q.bands.soon).toBeGreaterThan(3);
     expect(q.offices.map(o => o.name)).toContain('QLD Sunshine Coast');
+    // The outcome tabs have unfilled history (the current or the previous month holds the 14 days before today).
+    let unfilled = 0;
+    for (const period of ['month', 'prev_month']) {
+      const p = (await http().get(`/allocations/queue?period=${period}&office=all&stage=unfilled`).set({ authorization: `Bearer ${tok}` }).expect(200)).body as {
+        counts: Record<string, number> };
+      unfilled += p.counts.unfilled ?? 0;
+    }
+    expect(unfilled).toBeGreaterThan(20);
     // Best people know who has worked at the site before.
     const released = q.shifts.find(s => s.stage === 'released')!;
     const fill = (await http().get(`/shifts/${released.id}/bank-fill?everyone=true`).set({ authorization: `Bearer ${tok}` }).expect(200)).body as {

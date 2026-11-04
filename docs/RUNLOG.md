@@ -2,6 +2,11 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-11-04 (David): demo-day reset may delete David's test entries
+
+- The demo-day reset refused `cfy` because it holds 3 records that may be real (a person, a client and a site with non-example emails or phones). David: they are his test entries, delete them and reset. Added `--delete-real-looking` (workflow input `delete_real_looking`, no/yes, default no): the reset lists those records and deletes them with everything else; staging only, `cfy` only, RESET and the shared-agency-work check all still apply, and real sign-ins stay. The log now prints deletions per table and the shifts per day by status.
+- The seed now leaves about 3 to 4% of past client shifts unfilled (offers nobody took, or pulled out and not refilled) so the queue's Unfilled tab has realistic rows; everything else is unchanged.
+
 ## 2026-11-04 (David): Allocations by week and month, with what happened
 
 - Shipped: the Allocations period choice now has Current week, Current month and Previous month after Next 24 hours / 3 / 7 / 14 days (David: "I think we need to add to these: Current month, Current week, Previous month"). Calendar periods cover the whole week or month in the business's dates, so they include shifts that have ended or were cancelled, shown with their outcome (worked, unfilled, pulled out and not refilled, never confirmed, cancelled with its kind) under new tabs All done / Worked / Unfilled / Cancelled; shifts still to come keep the live tabs and urgency bands; ended ones are listed by day, latest first, with each day's totals. A month for C4U is about 7,000 shifts: counts cover everything and rows come 250 at a time ("Show 250 more"). An ended shift's panel shows what happened, offers, calls and history instead of fill buttons. The default (Next 3 days) is unchanged.

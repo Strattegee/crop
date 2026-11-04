@@ -13,6 +13,11 @@ on:
         description: Type RESET to delete and reseed (anything else is a dry run)
         required: false
         default: ''
+      delete_real_looking:
+        description: Also delete records that look real (non-example emails, phone numbers) when they are only test entries; real sign-ins are kept
+        type: choice
+        options: ['no', 'yes']
+        default: 'no'
 
 concurrency: deploy-staging
 
@@ -34,12 +39,15 @@ jobs:
           HOST: ${{ vars.STAGING_HOST }}
           DAY: ${{ inputs.day }}
           CONFIRM: ${{ inputs.confirm }}
+          DELETE_REAL: ${{ inputs.delete_real_looking }}
         run: |
           # Validate before anything reaches a remote shell.
           [[ -z "$DAY" || "$DAY" =~ ^20[0-9]{2}-[01][0-9]-[0-3][0-9]$ ]] || { echo "day: YYYY-MM-DD or empty"; exit 1; }
           [[ -z "$CONFIRM" || "$CONFIRM" =~ ^[A-Za-z]{1,10}$ ]] || { echo "confirm: type RESET"; exit 1; }
+          [[ "$DELETE_REAL" == "no" || "$DELETE_REAL" == "yes" ]] || { echo "delete_real_looking: no or yes"; exit 1; }
           ARGS="--tenant cfy"
           [[ -n "$DAY" ]] && ARGS="$ARGS --day $DAY"
+          [[ "$DELETE_REAL" == "yes" ]] && ARGS="$ARGS --delete-real-looking"
           [[ "$CONFIRM" == "RESET" ]] && ARGS="$ARGS --confirm RESET"
           ssh crop@"$HOST" "cd /srv/crop/app/deploy/staging && docker compose --env-file /srv/crop/.env run --rm -T -e CROP_ENV=staging migrate \
             node dist/demo/demo-day-cli.js $ARGS"
