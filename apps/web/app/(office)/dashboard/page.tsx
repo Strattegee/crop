@@ -6,6 +6,8 @@ import { mondayOf } from '../roster/view';
 import { AgencyAttentionList, type AgencyAttention } from '../allocations/agency-attention';
 import { Notices } from '../notices';
 import { approveSwap, refuseSwap } from './actions';
+import { DetailChangesCard } from '../workers/[id]/detail-changes-card';
+import type { DetailChange } from '../../../lib/detail-changes';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +47,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const tw = await words();
   const sp = await searchParams;
   const wanted = sp.focus && (FOCUSES as string[]).includes(sp.focus) ? sp.focus : null;
-  const [dash, facilities, s, types, attention, leave, requests, onboarding, allocations, swaps] = await Promise.all([
+  const [dash, facilities, s, types, attention, leave, requests, onboarding, allocations, swaps, details, settings] = await Promise.all([
     api<Dash>(`/dashboard${wanted ? `?focus=${wanted}` : ''}`).catch(() => null),
     api<unknown[]>('/facilities'), api<Summary>('/compliance/summary').catch(() => NO_SUMMARY) /* supervisors don't get the compliance lists */, api<unknown[]>('/credential-types'),
     api<Attention>('/roster/attention').catch(() => null),
@@ -54,6 +56,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     api<Onboarding[]>('/onboardings').catch(() => [] as Onboarding[]),
     api<{ agencyLinks: number }>('/allocations/summary').catch(() => null),
     api<{ swaps: Swap[] }>('/shift-swaps?status=agreed').then(r => r.swaps).catch(() => [] as Swap[]),
+    api<{ changes: DetailChange[] }>('/detail-changes').then(r => r.changes).catch(() => [] as DetailChange[]),
+    api<{ country?: string }>('/settings').catch(() => ({} as { country?: string })),
   ]);
   const focus: Focus = dash?.focus ?? 'overview';
   // A business that supplies employers (agency side links) also gets Allocations' Needs attention.
@@ -69,7 +73,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Link href="/allocations">Open Allocations</Link>
       </section>
     ),
-    decisions: <Decisions key="decisions" tw={tw} leave={leave} requests={requests} onboarding={onboarding} toCheck={s.verificationQueue.length} swaps={swaps} />,
+    decisions: <Decisions key="decisions" tw={tw} leave={leave} requests={requests} onboarding={onboarding} toCheck={s.verificationQueue.length} swaps={swaps} details={details} country={settings.country} />,
     people: <People key="people" tw={tw} s={s} sites={facilities.length} />,
     checking: <CheckQueue key="checking" tw={tw} s={s} />,
     funnel: dash?.funnel && <Funnel key="funnel" f={dash.funnel} />,
@@ -197,7 +201,7 @@ function AttentionSection({ a, tw }: { a: Attention; tw: Words }) {
   );
 }
 
-function Decisions({ tw, leave, requests, onboarding, toCheck, swaps }: { tw: Words; leave: Leave[]; requests: ChangeRequest[]; onboarding: Onboarding[]; toCheck: number; swaps: Swap[] }) {
+function Decisions({ tw, leave, requests, onboarding, toCheck, swaps, details, country }: { tw: Words; leave: Leave[]; requests: ChangeRequest[]; onboarding: Onboarding[]; toCheck: number; swaps: Swap[]; details: DetailChange[]; country?: string }) {
   const first = requests[0];
   const ready = onboarding.filter(o => o.summary.ready);
   const firstOnb = ready[0] ?? onboarding[0];
@@ -220,6 +224,7 @@ function Decisions({ tw, leave, requests, onboarding, toCheck, swaps }: { tw: Wo
         <div className="card"><div className="muted">{tw.many(T.credential)} waiting for checking</div><div className="stat">{toCheck}</div><Link href="/compliance">Review</Link></div>
       </div>
       {swaps.length > 0 && <SwapsToApprove tw={tw} swaps={swaps} />}
+      <DetailChangesCard changes={details} back="/dashboard" country={country} withNames />
     </>
   );
 }

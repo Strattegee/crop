@@ -25,8 +25,8 @@ export class Registered {
 }
 
 /** The worker app's tabs a tapped notification can open (CROP's `PUSH_SCREENS`). */
-export type PushScreen = 'shifts' | 'offers' | 'availability' | 'credentials';
-const SCREENS: readonly string[] = ['shifts', 'offers', 'availability', 'credentials'];
+export type PushScreen = 'shifts' | 'offers' | 'availability' | 'credentials' | 'details';
+const SCREENS: readonly string[] = ['shifts', 'offers', 'availability', 'credentials', 'details'];
 
 /** Where a tapped notification should go: which business and tab, or null to just open the app. */
 export type PushTap = { tenant: string; screen: PushScreen | null };

@@ -21,6 +21,7 @@ import { EquipmentAllocationsController, ProjectsController, SiteTeamController 
 import { CallsController } from './clients/calls.controller.js';
 import { AddressesController } from './workforce/addresses.controller.js';
 import { FieldAccessController } from './workforce/field-access.controller.js';
+import { DetailChangesController } from './workforce/detail-changes.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { IndustryController } from './industry/industry.controller.js';
 import { PlatformController } from './platform/platform.controller.js';
@@ -54,7 +55,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

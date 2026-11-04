@@ -32,6 +32,8 @@ import { callLine, type CallRow } from '../../../../lib/calls';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
 import type { Addresses } from '../../../../lib/addresses';
 import { AddressesCard } from './addresses-card';
+import { DetailChangesCard } from './detail-changes-card';
+import type { DetailChange } from '../../../../lib/detail-changes';
 import { SupervisorPerson } from './supervisor-person';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +111,10 @@ export default async function WorkerPage({ params, searchParams }: {
     ? await api<{ id: string; facilityId: string; siteName: string; siteKind: string; teamRole: string; areaName: string | null; line: string; state: string }[]>(`/workers/${id}/teams`).catch(() => []) : [];
   const addresses = tab === 'details' && w.status !== 'agency'
     ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
+  const detailChanges = tab === 'details' && w.status !== 'agency'
+    ? await api<{ changes: DetailChange[] }>(`/detail-changes?status=all&workerId=${id}`)
+      .then(r => [...r.changes.filter(c => c.status === 'pending'), ...r.changes.filter(c => c.status !== 'pending').slice(0, 5)]).catch(() => [] as DetailChange[])
+    : [];
   const upcoming = shifts.filter(x => x.localDate >= today && x.status !== 'cancelled');
   const shiftTable = (list: MyShift[]) => list.length === 0 ? <p className="muted" style={{ margin: 0 }}>None.</p> : (
     <table>
@@ -404,6 +410,7 @@ export default async function WorkerPage({ params, searchParams }: {
           <button type="submit" className="btn">Save</button>
         </form>
       </div>
+      <DetailChangesCard changes={detailChanges} back={`/workers/${w.id}?tab=details`} country={settings.country} withNames={false} />
       {addresses && <AddressesCard workerId={w.id} a={addresses} homeCountry={settings.country ?? 'AU'} when={whenIn(zone)} />}
       </>)}
     </>

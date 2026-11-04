@@ -10,6 +10,7 @@ import { finishSignIn, loadSession, signOut } from './src/auth';
 import { AUTH_CLIENT_ID, AUTH_ISSUER, REDIRECT_URI, SCOPES } from './src/config';
 import { AvailabilityTab } from './src/AvailabilityTab';
 import { CredentialsTab } from './src/CredentialsTab';
+import { DetailsScreen } from './src/DetailsScreen';
 import { ManagerHome } from './src/ManagerHome';
 import { forgetPush, onPushTap, registerForPush } from './src/push';
 import { tapTarget, type PushTap } from './src/push-rules';
@@ -181,7 +182,7 @@ function Ready({ tenant, me, open, onSwitch, onSignOut, onSignedOut }: {
 function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onManager }: {
   tenant: string; open: (PushTap & { n: number }) | null; switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void; onManager: (() => void) | null;
 }) {
-  const [tab, setTab] = useState<'shifts' | 'offers' | 'availability' | 'credentials'>('shifts');
+  const [tab, setTab] = useState<'shifts' | 'offers' | 'availability' | 'credentials' | 'details'>('shifts');
   const [my, setMy] = useState<My | null>(null);
   const [shifts, setShifts] = useState<MyShift[]>([]);
   const [offers, setOffers] = useState<MyOffer[]>([]);
@@ -260,6 +261,7 @@ function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onMa
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {onManager && <Pressable onPress={onManager}><Text style={styles.link}>Run the {my?.rosterWord?.lower ?? 'roster'}</Text></Pressable>}
+          {my && <Pressable onPress={() => setTab('details')}><Text style={styles.link}>My details</Text></Pressable>}
           {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
         </View>
       </View>
@@ -272,7 +274,9 @@ function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onMa
           </Pressable>
         ))}
       </View>
-      {tab === 'availability' ? (
+      {tab === 'details' ? (
+        <DetailsScreen tenant={tenant} onBack={() => setTab('shifts')} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
+      ) : tab === 'availability' ? (
         <AvailabilityTab tenant={tenant} word={word} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
       ) : tab === 'credentials' ? (
         <CredentialsTab tenant={tenant} word={my?.credentialWord ?? { one: 'Credential', many: 'Credentials', lower: 'credential', lowerMany: 'credentials' }} roleWord={my?.roleWord} onSignedOut={onSignedOut} footer={<SignOutLink onPress={onSignOut} />} />
