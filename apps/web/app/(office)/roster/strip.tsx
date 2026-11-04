@@ -296,7 +296,7 @@ export function DropZone({ back, labels, children }: { back: string; labels: Zon
               aria-disabled={p.blocked ? 'true' : undefined} tabIndex={-1}
               onClick={() => { if (!p.blocked) assign(p.workerId, p.name, menu.ids); }}
               title={p.blocked ? (p.note ?? undefined) : many ? `Assign to the ${labels.shifts} they can do` : `Assign ${p.name}`}>
-              <span className="nm">{p.name}{p.note && <small>{p.note}</small>}{p.here && !p.blocked && <small className={p.knowsSite ? 'here' : undefined}>{p.here}</small>}</span>
+              <span className="nm">{p.name}{p.note && <small>{p.note}</small>}{(p.here || p.distance) && !p.blocked && <small className={p.knowsSite ? 'here' : undefined}>{[p.distance, p.here].filter(Boolean).join(' · ')}</small>}</span>
               <span className="num">{fmtH(p.hours)}</span>
             </button>
           ))}

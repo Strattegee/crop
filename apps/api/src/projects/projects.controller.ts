@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { acrossSites, withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -12,12 +12,19 @@ import { overallCheckState } from '../roster/equipment.js';
 import { isLow } from '../items/items.js';
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
+import { homeDistances } from '../geo/distance-data.js';
 import {
   allocationClashMessage, clashingAllocation, PROJECT_STATUSES, projectDates, rangeLine, rangeProblem, STATUS_LABEL, TEAM_ROLES,
   type AllocationFact, type DateRange, type ProjectStatus,
 } from './projects.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Adds each member's approximate distance from home to the site (`distanceKm`, null when unknown; never the address). */
+async function withMemberDistance<M extends { workerId: string }>(db: PoolClient, facilityId: string, rows: M[]): Promise<(M & { distanceKm: number | null })[]> {
+  const d = await homeDistances(db, facilityId, [...new Set(rows.map(r => r.workerId))]);
+  return rows.map(r => ({ ...r, distanceKm: d.get(r.workerId) ?? null }));
+}
 
 /** The site's time zone and today's date there. 404 when it isn't the business's. */
 async function siteToday(db: PoolClient, facilityId: string): Promise<{ zone: string; today: string; name: string }> {
@@ -173,9 +180,9 @@ export class ProjectsController {
       const today = todayIn(p.timezone);
       const tomorrow = addDays(today, 1);
       const areas = (await db.query(`select id, name, specialty, active from areas where facility_id = $1 order by active desc, name`, [id])).rows;
-      const team = (await db.query<MemberRow>(
+      const team = await withMemberDistance(db, id, (await db.query<MemberRow>(
         `select ${MEMBER_COLS} from ${MEMBER_FROM} where m.facility_id = $1 and m.removed_at is null and (m.ends_on is null or m.ends_on >= $2)
-          order by m.team_role, lower(w.last_name), lower(w.first_name)`, [id, today])).rows.map(memberOut);
+          order by m.team_role, lower(w.last_name), lower(w.first_name)`, [id, today])).rows.map(memberOut));
       const days = (await db.query<{ day: string; rostered: number; filled: number; unfilled: number }>(
         `select to_char(d.day, 'YYYY-MM-DD') as day, count(s.id)::int as rostered,
                 count(s.id) filter (where s.status in ('assigned', 'booked'))::int as filled,
@@ -230,9 +237,27 @@ export class SiteTeamController {
   list(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('all') all?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const { today } = await siteToday(db, id);
-      return (await db.query<MemberRow>(
+      return withMemberDistance(db, id, (await db.query<MemberRow>(
         `select ${MEMBER_COLS} from ${MEMBER_FROM} where m.facility_id = $1 and m.removed_at is null and ($3 or m.ends_on is null or m.ends_on >= $2)
-          order by m.team_role, lower(w.last_name), lower(w.first_name), m.starts_on desc`, [id, today, all === 'true'])).rows.map(memberOut);
+          order by m.team_role, lower(w.last_name), lower(w.first_name), m.starts_on desc`, [id, today, all === 'true'])).rows.map(memberOut));
+    });
+  }
+
+  /**
+   * How far these people live from the site (`{workerIds}`, up to 2000): `{distances: {workerId: km | null}}`, an
+   * approximate straight line between home and site postcodes, for the add-to-team picker. A read, sent as a POST
+   * because the list can be long. Display only; never an address. Ids that aren't the business's people come back null.
+   */
+  @Roles(...SITE_ROLES)
+  @Post('facilities/:id/distances')
+  @HttpCode(200)
+  distances(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const raw = Array.isArray(body?.workerIds) ? body.workerIds : [];
+    if (raw.length > 2000) throw new BadRequestException('Up to 2000 people at a time');
+    const ids = [...new Set(raw.filter((s): s is string => typeof s === 'string' && UUID.test(s)))];
+    return withTenant(this.pool, t.tenantId, async db => {
+      await siteToday(db, id);
+      return { distances: Object.fromEntries(await homeDistances(db, id, ids)) };
     });
   }
 

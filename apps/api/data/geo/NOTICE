@@ -1,0 +1,13 @@
+Postal code data © GeoNames, CC BY 4.0, https://www.geonames.org/
+Licence: https://creativecommons.org/licenses/by/4.0/
+
+The files postcodes-au.tsv, postcodes-nz.tsv, postcodes-us.tsv and postcodes-gb.tsv are derived from the GeoNames
+postal code downloads (https://download.geonames.org/export/zip/: AU, NZ, US and GB, downloaded 4 Nov 2026). Changes
+made: one point per postcode (the average of the GeoNames rows sharing it), rounded to 3 decimal places; postcodes
+tidied the way CROP stores them; US kept to 5-digit ZIP codes; the UK file holds outward codes only (e.g. "LS1").
+GeoNames provides the data "as is", without warranty of accuracy, timeliness or completeness.
+
+Regenerate with: python3 -I apps/api/scripts/build-postcodes.py <folder with AU/AU.txt, NZ/NZ.txt, US/US.txt, GB/GB.txt>
+
+CROP uses these points only to work out an approximate straight-line distance between a worker's home postcode and
+a site's postcode.

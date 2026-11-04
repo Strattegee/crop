@@ -186,7 +186,7 @@ export function ListTools({ back, closeHref, labels, people, duties, children }:
                   {best.people.map(p => (
                     <button key={p.workerId} className={`lst-best-p${p.blocked ? ' blocked' : p.note ? ' warn' : ''}`} name="best" value={`${p.workerId}|${p.name}`}
                       formAction={bulkAssign} disabled={p.blocked || tooMany} title={p.note ?? undefined}>
-                      <span>{p.name}</span>
+                      <span>{p.name}{p.distance && <small className="muted"> · {p.distance}</small>}</span>
                       {p.note && <small className="muted">{p.note}</small>}
                     </button>
                   ))}

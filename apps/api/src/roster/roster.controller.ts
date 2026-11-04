@@ -19,6 +19,7 @@ import { assignWorker, cancelShift, confirmWorker, removeWorker } from './shift-
 import { CANCEL_KINDS } from './cancel.js';
 import { actorOf } from './publishing.js';
 import { withSiteHistory } from './site-history.js';
+import { withDistance } from '../geo/distance-data.js';
 import { withTeam } from '../projects/team-data.js';
 import { MAX_RANGE_DAYS, UUID, daysBetween, insertShifts, parseShiftRequest, time, uuidField } from './shift-create.js';
 import { END_REASONS, correctionPlan, endPlan, withdrawalPlan, type TermDates } from './employment.js';
@@ -634,14 +635,14 @@ export class ShiftsController {
     });
   }
 
-  /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3) and their past work at the site (`siteHistory`). */
+  /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3) and their past work at the site (`siteHistory`) and how far they live from it (`distanceKm`, display only). */
   @Roles(...SITE_ROLES)
   @Get('shifts/:id/candidates')
   candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
       const shift = await shiftById(db, id);
       if (shift.equipmentOnly) return { shift, candidates: [] }; // nobody goes on an equipment-only shift
-      return { shift, candidates: await withSiteHistory(db, id, await withTeam(db, id, rankCandidates(await eligibilityForShift(db, t.tenantId, id)))) };
+      return { shift, candidates: await withDistance(db, id, await withSiteHistory(db, id, await withTeam(db, id, rankCandidates(await eligibilityForShift(db, t.tenantId, id))))) };
     });
   }
 

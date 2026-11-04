@@ -99,6 +99,15 @@ describe('best people for the right-click menu', () => {
     expect(bestPeople([[a, b]]).every(p => !p.knowsSite)).toBe(true);
   });
 
+  it('adds the distance from home with one site, without changing the order (4 Nov)', () => {
+    const a = { ...c('a', 2), distanceKm: 140.2 };
+    const b = { ...c('b', 4), distanceKm: 0.4 };
+    const d = { ...c('d', 5), distanceKm: null };
+    const r = bestPeople([[a, b, d]], 5, 3, { today: '2026-11-04', site: 'site' });
+    expect(r.map(p => [p.workerId, p.distance])).toEqual([['a', '140 km'], ['b', '<1 km'], ['d', null]]);
+    expect(bestPeople([[a, b]]).map(p => p.distance)).toEqual([null, null]); // several sites: no distance
+  });
+
   it('keeps the order when someone knows the site (display only)', () => {
     const a = { ...c('a', 2), siteHistory: { shiftsHere: 0, lastHere: null } };
     const b = { ...c('b', 9), siteHistory: { shiftsHere: 5, lastHere: '2026-10-30' } };

@@ -10,6 +10,7 @@ import { configureApp } from '../src/configure.js';
 import { deleteOrder, environmentRefusal, tenantRefusal } from '../src/demo/demo-cleanup.js';
 import { DemoRefusal, demoDay } from '../src/demo/demo-day.js';
 import { localToUtc, localDateOf, periodOf } from '../src/demo/demo-time.js';
+import { postcodePoint } from '../src/geo/distance.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('demo-day seed: rules', () => {
@@ -144,6 +145,11 @@ describe('demo-day seed: database and Allocations', () => {
     expect(await count(`select count(*)::int as n from shift_assignments where tenant_id = $1 and removed_reason = 'pulled_out'`, [ids.cfy])).toBeGreaterThan(20);
     expect(await count(`select count(*)::int as n from shifts where tenant_id = $1 and usual_worker_id is not null`, [ids.cfy])).toBeGreaterThan(20);
     expect(await count(`select count(*)::int as n from day_requests where tenant_id = $1 and status = 'open'`, [ids.cfy])).toBeGreaterThan(10);
+    // Invented homes near the offices (4 Nov), so distances show: every postcode is a known place, every site has one.
+    const homes = (await owner.query<{ postcode: string }>(`select postcode from worker_addresses where tenant_id = $1 and is_current`, [ids.cfy])).rows;
+    expect(homes.length).toBeGreaterThan(250);
+    expect(homes.every(h => postcodePoint('AU', h.postcode))).toBe(true);
+    expect(await count(`select count(*)::int as n from facilities where tenant_id = $1 and postcode is null`, [ids.cfy])).toBe(0);
     // A small share of past shifts ended with nobody: some never filled, some pulled out and not refilled.
     const pastShifts = await count(`select count(*)::int as n from shifts where tenant_id = $1 and ends_at <= now() and status <> 'cancelled'`, [ids.cfy]);
     const unfilled = await count(`select count(*)::int as n from shifts where tenant_id = $1 and ends_at <= now() and status = 'open'`, [ids.cfy]);

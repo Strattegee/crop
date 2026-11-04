@@ -341,3 +341,32 @@ export const CALL_NOTES_WORKER = [
 
 /** What a person might ask for a day (in their own words; never health details). */
 export const DAY_REQUEST_NOTES = ['Can only work near a station that day', 'Prefer the same site as yesterday', 'School pick-up at 15:15', 'Would like a short shift'];
+
+/**
+ * Where the invented people live, per office (distance from home, David 4 Nov): real suburb and postcode pairs from
+ * the GeoNames postcode file (places, not people) near each office's sites, so the demo shows distances. Street
+ * lines are made up ("12 Example St"); nobody lives at any of these.
+ */
+export const HOME_PLACES: Record<string, [suburb: string, postcode: string][]> = {
+  mel: [['Footscray', '3011'], ['Seddon', '3011'], ['Newport', '3015'], ['Sunshine', '3020'], ['St Albans', '3021'], ['Ascot Vale', '3032'],
+    ['Moonee Ponds', '3039'], ['Essendon', '3040'], ['Pascoe Vale', '3044'], ['Glenroy', '3046'], ['Brunswick West', '3055'], ['Coburg', '3058'],
+    ['Fawkner', '3060'], ['Northcote', '3070'], ['Thornbury', '3071'], ['Preston', '3072'], ['Reservoir', '3073'], ['Epping', '3076'],
+    ['Heidelberg West', '3081'], ['Bundoora', '3083'], ['Kew', '3101'], ['Balwyn', '3103'], ['Richmond', '3121'], ['Camberwell', '3124'],
+    ['Surrey Hills', '3127'], ['Ashburton', '3147'], ['Bentleigh East', '3165'], ['Hoppers Crossing', '3029'], ['Werribee', '3030']],
+  bay: [['Moorabbin', '3189'], ['Highett', '3190'], ['Cheltenham', '3192'], ['Mentone', '3194'], ['Parkdale', '3195'], ['Chelsea', '3196'],
+    ['Carrum', '3197'], ['Seaford', '3198'], ['Frankston', '3199'], ['Frankston North', '3200'], ['Carrum Downs', '3201'], ['Langwarrin', '3910'],
+    ['Somerville', '3912'], ['Hastings', '3915'], ['Mount Eliza', '3930'], ['Mornington', '3931'], ['Mount Martha', '3934'], ['Dromana', '3936'],
+    ['Rosebud', '3939'], ['Rye', '3941'], ['Cranbourne', '3977']],
+  gee: [['Lara', '3212'], ['Corio', '3214'], ['Norlane', '3214'], ['Bell Park', '3215'], ['Grovedale', '3216'], ['Highton', '3216'], ['Belmont', '3216'],
+    ['Armstrong Creek', '3217'], ['Geelong West', '3218'], ['Whittington', '3219'], ['Newtown', '3220'], ['Drysdale', '3222'], ['Portarlington', '3223'],
+    ['Ocean Grove', '3226'], ['Barwon Heads', '3227'], ['Torquay', '3228'], ['Jan Juc', '3228'], ['Anglesea', '3230']],
+  bal: [['Melton', '3337'], ['Melton South', '3338'], ['Bacchus Marsh', '3340'], ['Darley', '3340'], ['Ballarat East', '3350'], ['Alfredton', '3350'],
+    ['Mount Pleasant', '3350'], ['Wendouree', '3355'], ['Lake Gardens', '3355'], ['Sebastopol', '3356'], ['Delacombe', '3356'], ['Buninyong', '3357'],
+    ['Creswick', '3363'], ['Clunes', '3370']],
+  sun: [['Pelican Waters', '4551'], ['Mooloolah', '4553'], ['Palmwoods', '4555'], ['Buderim', '4556'], ['Sippy Downs', '4556'], ['Mooloolaba', '4557'],
+    ['Maroochydore', '4558'], ['Woombye', '4559'], ['Bli Bli', '4560'], ['Yandina', '4561'], ['Eumundi', '4562'], ['Marcoola', '4564'],
+    ['Tewantin', '4565'], ['Noosaville', '4566'], ['Sunshine Beach', '4567'], ['Alexandra Headland', '4572'], ['Coolum Beach', '4573'], ['Wurtulla', '4575']],
+};
+
+/** Invented street names for the made-up home addresses. */
+export const HOME_STREETS = ['Example St', 'Sample Rd', 'Demo Ave', 'Placeholder Cres', 'Pretend Pde', 'Mockup Ct', 'Test Tce', 'Specimen Way'];
