@@ -5,7 +5,7 @@
  */
 export type Access = 'hidden' | 'see' | 'approve' | 'change';
 export type FieldAccessRow = {
-  field: string; label: string; person: Access; isDefault: boolean; defaultPerson: Access; allowed: Access[]; note: string | null;
+  field: string; group?: 'details' | 'documents'; label: string; person: Access; isDefault: boolean; defaultPerson: Access; allowed: Access[]; note: string | null;
 };
 
 export const ACCESS_ORDER: Access[] = ['hidden', 'see', 'approve', 'change'];
@@ -32,9 +32,14 @@ export function accessFromForm(rows: FieldAccessRow[], get: (field: string) => s
   return out;
 }
 
+/** The settings split into personal details and documents (migration 0088), each in the API's order. */
+export function accessGroups(rows: FieldAccessRow[]): { details: FieldAccessRow[]; documents: FieldAccessRow[] } {
+  return { details: rows.filter(r => r.group !== 'documents'), documents: rows.filter(r => r.group === 'documents') };
+}
+
 /** Details the settings don't cover, and what happens to them (shown so the page answers "what about …?"). */
 export const FIXED_DETAILS: { label: string; line: string }[] = [
   { label: 'Date of birth', line: 'Office only: it is used for the under-18 checks and never shown in the app.' },
-  { label: 'Credentials', line: 'They see their own and can add new ones in the app; the office verifies each one. Earlier versions are kept.' },
-  { label: 'Right to work', line: 'The office records the details; they can see the status and send proof in the app.' },
+  { label: 'Checking documents', line: 'Only the office checks a document, so one sent from the app counts once an owner or administrator has checked it. Earlier versions are kept.' },
+  { label: 'Upload links', line: 'A link the office sends asking for documents works whatever is set here: the office chose to ask.' },
 ];

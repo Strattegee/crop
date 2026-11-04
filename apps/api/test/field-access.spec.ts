@@ -8,7 +8,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { FIELD_DEFAULTS, FIELD_RULES, PERSON_FIELDS, accessList, accessOf, parseAccess, personCan } from '../src/workforce/field-access.js';
+import { DOC_DEFAULTS, FIELD_DEFAULTS, FIELD_RULES, PERSON_FIELDS, accessList, accessOf, parseAccess, personCan } from '../src/workforce/field-access.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('field access: rules (David, 3 Nov, answer 5)', () => {
@@ -19,7 +19,7 @@ describe('field access: rules (David, 3 Nov, answer 5)', () => {
 
   it('fills the gaps with the defaults and ignores anything stored that is no longer allowed', () => {
     expect(accessOf([{ field: 'mobile', person: 'approve' }, { field: 'email', person: 'change' }, { field: 'dob', person: 'see' }]))
-      .toEqual({ ...FIELD_DEFAULTS, mobile: 'approve' });
+      .toEqual({ ...FIELD_DEFAULTS, ...DOC_DEFAULTS, mobile: 'approve' });
   });
 
   it('reads a change and refuses levels a field can’t have, with the reason', () => {
@@ -32,8 +32,8 @@ describe('field access: rules (David, 3 Nov, answer 5)', () => {
   });
 
   it('lists every field and says what the app can do', () => {
-    const list = accessList({ ...FIELD_DEFAULTS, mobile: 'approve' });
-    expect(list.map(r => r.field)).toEqual([...PERSON_FIELDS]);
+    const list = accessList({ ...FIELD_DEFAULTS, ...DOC_DEFAULTS, mobile: 'approve' });
+    expect(list.filter(r => r.group === 'details').map(r => r.field)).toEqual([...PERSON_FIELDS]);
     expect(list.find(r => r.field === 'mobile')).toMatchObject({ person: 'approve', isDefault: false, defaultPerson: 'change' });
     expect(personCan('hidden')).toEqual({ see: false, change: false, needsApproval: false });
     expect(personCan('see')).toEqual({ see: true, change: false, needsApproval: false });
@@ -91,7 +91,7 @@ describe('field access: API', () => {
 
   it('lists CROP’s defaults to any office person', async () => {
     const r = await http().get('/field-access').set(as('alloc')).expect(200);
-    expect(r.body.fields.map((f: { field: string; person: string }) => [f.field, f.person])).toEqual(Object.entries(FIELD_DEFAULTS));
+    expect(r.body.fields.map((f: { field: string; person: string }) => [f.field, f.person])).toEqual(Object.entries({ ...FIELD_DEFAULTS, ...DOC_DEFAULTS }));
     expect(r.body.words.approve).toBe('They can change it; the office approves');
   });
 

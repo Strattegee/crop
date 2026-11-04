@@ -205,9 +205,14 @@ export function myStep(
   s: { id: string; title: string; kind: MyStep['kind']; required: boolean; credentialTypeId: string | null; state: MyStepState; detail: string },
   credentialsWord = 'Credentials',
   rtw: MyRightToWork | null = null,
+  /** Whether they may send this kind of document in the app (Settings › Personal details); true when not given. */
+  canSend: (credentialTypeId: string | null) => boolean = () => true,
 ): MyStep {
   const base = { id: s.id, title: s.title, kind: s.kind, required: s.required, state: s.state, credentialTypeId: s.credentialTypeId, yours: false };
   if (s.state === 'done') return { ...base, line: s.kind === 'credential' || s.kind === 'right_to_work' ? 'Checked' : 'Done' };
+  if ((s.kind === 'credential' || s.kind === 'right_to_work') && s.state === 'to_do' && !canSend(s.credentialTypeId)) {
+    return { ...base, line: 'The office looks after this: please contact them' };
+  }
   switch (s.kind) {
     case 'task': return { ...base, line: 'The office will tick this off' };
     case 'employment': return { ...base, line: 'The office will set up your employment' };
@@ -285,6 +290,29 @@ export function myRightToWork(
       : 'Sent: the office is checking it',
   };
 }
+
+/**
+ * A requirement as the app shows it when the business may not let them send that kind of document
+ * (Settings › Personal details, migration 0088): nothing to add, so they're told to contact the office instead.
+ */
+export function myNeedFor(i: { typeName: string; problem: string; credentialTypeId: string }, canSend: boolean): { line: string; canAdd: boolean } {
+  if (canSend) return { line: myNeedLine(i), canAdd: myNeedAddable(i) };
+  if (i.credentialTypeId === 'right-to-work' || i.problem === 'unverified') return { line: myNeedLine(i), canAdd: false };
+  return { line: `${i.typeName}: please contact the office`, canAdd: false };
+}
+
+/** Their right to work as the app shows it when the business keeps the proof with the office (`see`). */
+export function myRightToWorkSeeOnly(r: MyRightToWork): MyRightToWork {
+  if (r.state === 'none') return { ...r, line: 'The office records your right to work. Please contact them.' };
+  if (!r.canAddFiles) return r;
+  const line = r.state === 'not_accepted' ? 'Not accepted: please contact the office'
+    : r.files.length === 0 ? 'The office is looking after your right to work. Please contact them about your proof.'
+    : 'Sent: the office is checking it';
+  return { ...r, canAddFiles: false, line: r.line.startsWith('Your visa has run out') ? r.line : line };
+}
+
+/** Said when a business keeps a kind of document with the office. */
+export const officeKeepsDocument = (word: string) => `The office looks after ${word} like this one: please contact them`;
 
 /** Why the person can't send a file for their right to work, or null when they can. */
 export function myRightToWorkFileRefusal(rec: { verification: string; files: number } | null): string | null {
