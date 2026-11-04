@@ -5,6 +5,7 @@
  * - the equipment is out of service or retired;
  * - one of its dates (registration, service, inspection…) will be overdue on the shift's local date;
  * - it is already booked at an overlapping time;
+ * - it is allocated to another site or project on the shift's local date (projects, 4 Nov);
  * - the person on the shift doesn't hold the operator credential its type needs (verified, current on the date).
  * Warnings: a date due soon (the business's expiring window), the operator's credential expiring soon,
  * or nobody on the shift yet when an operator is needed. On an equipment-only shift (e.g. dry hire) the
@@ -34,6 +35,8 @@ export interface EquipmentInput {
   windowDays: number;
   /** Booked without a person from the business (e.g. dry hire): whoever hires it supplies the operator. */
   equipmentOnly?: boolean;
+  /** Set when it is allocated to another site or project on the shift's date (migration 0084, `allocatedElsewhere`). */
+  allocatedElsewhere?: string | null;
 }
 
 export type CheckState = 'ok' | 'due_soon' | 'overdue';
@@ -65,6 +68,8 @@ export function equipmentEligibility(shift: ShiftFacts, e: EquipmentInput): Elig
       warnings.push({ code: 'equipment_check', message: `${e.name}'s ${c.name} is due soon (${fmtDate(c.dueOn)})` });
     }
   }
+
+  if (e.allocatedElsewhere) blocks.push({ code: 'equipment_allocated', message: e.allocatedElsewhere });
 
   const clash = e.others.filter(o => o.id !== shift.id).find(o => o.startsAt < shift.endsAt && o.endsAt > shift.startsAt);
   if (clash) blocks.push({ code: 'double_booked', message: `${e.name} is already booked ${clash.label} at ${clash.facilityName}` });

@@ -16,6 +16,7 @@ The first industry template applied suggests words (`PACK_TERMS`); it never over
 | 1010 | A person who works shifts | Worker / Workers |
 | 1015 | A business the work is done for | Client / Clients |
 | 1020 | A place where work happens | Site / Sites |
+| 1025 | A piece of work with its own team, dates and resources: a site of kind project (4 Nov) | Project / Projects |
 | 1030 | A part of a site, or a team | Area / Areas |
 | 1040 | A unit of work at a time and place | Shift / Shifts |
 | 1045 | The plan of who works when | Roster / Rosters |

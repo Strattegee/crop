@@ -5,6 +5,7 @@ import { agencyCredentialsForShifts } from './agency-credentials.js';
 import { loadSettings } from '../workforce/settings.js';
 import { loadShiftFacts } from './eligibility-data.js';
 import type { Eligibility, OtherShift } from './eligibility.js';
+import { allocatedElsewhere, type AllocationFact } from '../projects/projects.js';
 import { equipmentEligibility, type EquipmentCheckFacts, type EquipmentStatus } from './equipment.js';
 
 export interface EquipmentCandidate {
@@ -36,7 +37,8 @@ export async function currentChecks(db: PoolClient, equipmentIds: string[]): Pro
  */
 export async function equipmentForShift(db: PoolClient, tenantId: string, shiftId: string, equipmentIds?: string[]): Promise<EquipmentCandidate[]> {
   const shift = await loadShiftFacts(db, shiftId);
-  const { needs_person: needsPerson } = (await db.query<{ needs_person: boolean }>('select needs_person from shifts where id = $1', [shiftId])).rows[0];
+  const { needs_person: needsPerson, facility_id: facilityId } = (await db.query<{ needs_person: boolean; facility_id: string }>(
+    'select needs_person, facility_id from shifts where id = $1', [shiftId])).rows[0];
   const items = (await db.query<{ id: string; name: string; type_name: string; status: EquipmentStatus; op_id: string | null; op_name: string | null }>(
     `select e.id, e.name, et.name as type_name, e.status, ct.id as op_id, ct.name as op_name
        from equipment e join equipment_types et on et.id = e.equipment_type_id
@@ -63,6 +65,8 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
     others.set(o.equipment_id, list);
   }
 
+  const allocations = await allocationsOn(db, ids, shift.localDate);
+
   const p = (await db.query<{ worker_id: string; name: string }>(
     `select sa.worker_id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name
        from shift_assignments sa join workers w on w.id = sa.worker_id
@@ -78,8 +82,24 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
       name: i.name, status: i.status, checks: checks.get(i.id) ?? [], others: others.get(i.id) ?? [],
       operator: i.op_id ? { credentialTypeId: i.op_id, typeName: i.op_name! } : null, person, windowDays: settings.expiringWindowDays,
       equipmentOnly: !needsPerson,
+      allocatedElsewhere: allocatedElsewhere(i.name, facilityId, shift.localDate, allocations.get(i.id) ?? []),
     }), words),
   }));
+}
+
+/** Live allocations of each piece of equipment covering a date (migration 0084), within withTenant. */
+export async function allocationsOn(db: PoolClient, equipmentIds: string[], onDate: string): Promise<Map<string, AllocationFact[]>> {
+  const out = new Map<string, AllocationFact[]>();
+  for (const r of (await db.query<AllocationFact & { equipmentId: string }>(
+    `select a.id, a.equipment_id as "equipmentId", a.facility_id as "facilityId", f.name as "siteName",
+            to_char(a.starts_on, 'YYYY-MM-DD') as "from", to_char(a.ends_on, 'YYYY-MM-DD') as "to"
+       from equipment_site_allocations a join facilities f on f.id = a.facility_id
+      where a.equipment_id = any($1) and a.removed_at is null and a.starts_on <= $2 and (a.ends_on is null or a.ends_on >= $2)`,
+    [equipmentIds, onDate])).rows) {
+    const { equipmentId, ...a } = r;
+    out.set(equipmentId, [...(out.get(equipmentId) ?? []), a]);
+  }
+  return out;
 }
 
 /** Ready first, then with warnings, then blocked; by type and name. */
