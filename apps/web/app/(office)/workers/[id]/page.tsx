@@ -30,6 +30,8 @@ import { RecruitmentCard } from './recruitment-card';
 import { LogCall } from '../../allocations/log-call';
 import { callLine, type CallRow } from '../../../../lib/calls';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
+import type { Addresses } from '../../../../lib/addresses';
+import { AddressesCard } from './addresses-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,6 +102,8 @@ export default async function WorkerPage({ params, searchParams }: {
     ? await api<RecruitmentEvent[]>(`/workers/${id}/recruitment`).catch(() => [] as RecruitmentEvent[]) : [];
   const calls = tab === 'overview' && w.status !== 'agency'
     ? await api<CallRow[]>(`/calls?workerId=${id}&days=90&limit=8`).catch(() => [] as CallRow[]) : [];
+  const addresses = tab === 'details' && w.status !== 'agency'
+    ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
   const upcoming = shifts.filter(x => x.localDate >= today && x.status !== 'cancelled');
   const shiftTable = (list: MyShift[]) => list.length === 0 ? <p className="muted" style={{ margin: 0 }}>None.</p> : (
     <table>
@@ -382,6 +386,7 @@ export default async function WorkerPage({ params, searchParams }: {
           <button type="submit" className="btn">Save</button>
         </form>
       </div>
+      {addresses && <AddressesCard workerId={w.id} a={addresses} homeCountry={settings.country ?? 'AU'} when={whenIn(zone)} />}
       </>)}
     </>
   );
