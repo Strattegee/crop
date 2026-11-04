@@ -117,12 +117,21 @@ export function byDay<S extends { localDate: string }>(shifts: S[]): { date: str
 export const dayLabel = (d: string) =>
   new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
 
-/** Allocations in the menu: for a business that supplies employers on CROP or has clients; the count is what's still to fill. */
-export function allocationsMenu(s: { agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number } | null): { show: boolean; count: number } {
+/**
+ * Allocations in the menu: for a business that supplies employers on CROP, has clients, or takes requests from new
+ * customers (migration 0089); the count is what's still to fill plus new customers' requests waiting.
+ */
+export type AllocationSummary = { agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number; customerRequests?: number; customerPage?: boolean };
+export function allocationsMenu(s: AllocationSummary | null): { show: boolean; count: number } {
   if (!s) return { show: false, count: 0 };
-  const show = s.agencyLinks > 0 || Boolean(s.hasClients);
-  return { show, count: show ? (s.agencyLinks > 0 ? s.open : 0) + (s.hasClients ? s.clientShiftsOpen ?? 0 : 0) : 0 };
+  const customers = hasCustomers(s);
+  const show = s.agencyLinks > 0 || Boolean(s.hasClients) || customers;
+  return { show, count: show ? (s.agencyLinks > 0 ? s.open : 0) + (s.hasClients ? s.clientShiftsOpen ?? 0 : 0) + (s.customerRequests ?? 0) : 0 };
 }
+
+/** Whether Allocations has the "New customers" view: the request page is on or requests are waiting. */
+export const hasCustomers = (s: Pick<AllocationSummary, 'customerRequests' | 'customerPage'> | null) =>
+  Boolean(s?.customerPage) || (s?.customerRequests ?? 0) > 0;
 
 /** Who asked, how and their reference, for a shift's line: "Pat Ward · Email · ref PO-77". */
 export function askedLine(s: { requestedByName?: string | null; orderChannel?: string | null; clientReference?: string | null }): string {

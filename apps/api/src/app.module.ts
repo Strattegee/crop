@@ -9,6 +9,7 @@ import { AgencyAttentionController } from './agencies/agency-attention.controlle
 import { AgencyOfferLinksController, AgencyOffersController } from './agencies/agency-offers.controller.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClientsController } from './clients/clients.controller.js';
+import { CustomerRequestsController, PublicRequestPageController } from './clients/customer-requests.controller.js';
 import { ClientConfirmations, ClientOrdersController } from './clients/client-orders.controller.js';
 import { AllocationQueueController } from './clients/allocation-queue.controller.js';
 import { DatabaseModule } from './database/database.module.js';
@@ -55,7 +56,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, CustomerRequestsController, PublicRequestPageController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

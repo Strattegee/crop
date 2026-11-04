@@ -184,10 +184,15 @@ export class ClientOrdersController {
   }
 }
 
-/** For the menu (`GET /allocations/summary`): whether the business has clients with sites, and client shifts still to fill in 14 days. */
+/**
+ * For the menu (`GET /allocations/summary`): whether the business has clients with sites, and client shifts still to fill in 14 days;
+ * new customers' requests waiting and whether the public request page is on (migration 0089).
+ */
 export async function clientAllocationSummary(db: PoolClient) {
-  return (await db.query<{ hasClients: boolean; clientShiftsOpen: number }>(
+  return (await db.query<{ hasClients: boolean; clientShiftsOpen: number; customerRequests: number; customerPage: boolean }>(
     `select exists (select 1 from clients c join facilities f on f.client_id = c.id where c.status = 'active' and f.active) as "hasClients",
+            (select count(*)::int from customer_requests where status = 'new') as "customerRequests",
+            coalesce((select customer_requests_open from tenant_settings where tenant_id = app_tenant_id()), false) as "customerPage",
             (select count(*)::int from shifts s join facilities f on f.id = s.facility_id
               where f.client_id is not null and s.needs_person and s.status in ('open', 'assigned')
                 and s.starts_at > now() and s.starts_at < now() + interval '14 days') as "clientShiftsOpen"`)).rows[0];

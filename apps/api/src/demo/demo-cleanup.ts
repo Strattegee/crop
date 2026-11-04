@@ -35,7 +35,7 @@ export function environmentRefusal(env: Record<string, string | undefined>): str
  */
 export const DELETE_TABLES = [
   'allocation_presence', 'areas', 'audit_log', 'availability_dates', 'availability_patterns', 'call_logs', 'client_contacts',
-  'client_order_confirmations', 'client_order_notices', 'client_orders', 'clients', 'credential_documents', 'credential_events',
+  'client_order_confirmations', 'client_order_notices', 'client_orders', 'clients', 'credential_documents', 'customer_requests', 'credential_events',
   'dashboard_snapshots', 'day_requests', 'detail_change_requests', 'employment_terms', 'equipment', 'equipment_checks', 'equipment_site_allocations', 'facilities', 'leave_records',
   'member_offices', 'member_sites', 'notifications', 'offices', 'onboarding_ticks', 'outside_agency_emails', 'recruitment_events', 'reminder_marks',
   'right_to_work_events', 'right_to_work_records', 'roster_change_requests', 'roster_publications', 'roster_template_duties',
@@ -110,10 +110,11 @@ export async function realLookingData(db: ClientBase, tenantId: string): Promise
     ['clients', 'clients', `${realEmail('billing_email')} or ${hasPhone('phone')}`],
     ['client orders', 'client_orders', `${realEmail('requested_by_email')} or ${hasPhone('requested_by_phone')}`],
     ['sites', 'facilities', hasPhone('phone')],
+    ['customer requests', 'customer_requests', `${realEmail('email')} or ${hasPhone('phone')}`],
   ];
   const out: string[] = [];
   for (const [label, table, where] of checks) {
-    const nameCol = table === 'workers' ? `first_name || ' ' || left(last_name, 1) || '.'` : table === 'client_orders' ? `left(requested_by_name, 1) || '.'` : `left(name, 1) || '.'`;
+    const nameCol = table === 'workers' ? `first_name || ' ' || left(last_name, 1) || '.'` : table === 'client_orders' ? `left(requested_by_name, 1) || '.'` : table === 'customer_requests' ? `left(contact_name, 1) || '.'` : `left(name, 1) || '.'`;
     const r = (await db.query<{ n: number; sample: string[] }>(
       `select count(*)::int as n, (array_agg(${nameCol} order by created_at))[1:5] as sample from ${table} where tenant_id = $1 and (${where})`, [tenantId])).rows[0];
     if (r.n) out.push(`${r.n} ${label} with a real-looking email or a phone number (e.g. ${r.sample.join(', ')})`);

@@ -12,7 +12,7 @@ CROPwms provides workforce management software for organisations and a mobile ap
 
 ## From businesses and administrators
 
-We may collect name, work contact information, organisation details, account preferences, subscription records, communications, payment status and service support information. Card details may be handled by \[PAYMENT PROCESSOR — CONFIRM\] rather than stored by CROPwms.
+We may collect name, work contact information, organisation details, account preferences, subscription records, communications, payment status and service support information. Where a business on CROPwms offers a public page for new customers to request staff, we hold what a customer sends through it (their organisation, name, email address, phone number, the address of the site and the work they need) for that business, which decides whether to take them on. Card details may be handled by \[PAYMENT PROCESSOR — CONFIRM\] rather than stored by CROPwms.
 
 ## From and about workers
 

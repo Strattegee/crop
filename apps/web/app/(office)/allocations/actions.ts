@@ -174,3 +174,29 @@ export async function logCall(f: FormData) {
     },
   }), `Call with ${who} logged: ${OUTCOME_LABEL[outcome as CallOutcome] ?? outcome}.`);
 }
+
+const CUSTOMERS = '/allocations?view=customers';
+
+/** Accepts a new customer's request: as a new client, or for a client the business has (`clientId`). */
+export async function acceptCustomer(id: string, name: string, f: FormData) {
+  const clientId = str(f, 'clientId');
+  let made = false;
+  await attempt(CUSTOMERS, async () => {
+    const r = await api<{ clientId: string; createdClient: boolean }>(`/customer-requests/${id}/accept`, { method: 'POST', body: clientId ? { clientId } : {} });
+    made = r.createdClient;
+  }, () => made ? `${name} is now a client with their contact saved. Add their site, then take the order.` : `Accepted for ${name}. Take the order when you're ready.`);
+}
+
+/** Declines a new customer's request (the note is for the office; CROP doesn't email the customer). */
+export async function declineCustomer(id: string, name: string, f: FormData) {
+  const note = str(f, 'note');
+  await attempt(CUSTOMERS, () => api(`/customer-requests/${id}/decline`, { method: 'POST', body: note ? { note } : {} }),
+    `${name}'s request is declined. Let them know if you haven't already.`);
+}
+
+/** Switches the public request page on or off and sets its welcome line. */
+export async function setRequestPage(f: FormData) {
+  const open = f.get('open') === 'on';
+  await attempt(CUSTOMERS, () => api('/customer-request-page', { method: 'PUT', body: { open, intro: str(f, 'intro') ?? null } }),
+    open ? 'Your request page is on.' : 'Your request page is off: it no longer takes requests.');
+}
