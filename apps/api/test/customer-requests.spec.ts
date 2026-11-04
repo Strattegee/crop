@@ -10,6 +10,7 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import {
   customerRequestEmail, decideRefusal, floodRefusal, looksAutomated, parseCustomerRequest, placeLine, requestLine, RequestProblem,
+  requestOrderRefusal,
 } from '../src/clients/customer-requests.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -46,6 +47,15 @@ describe('customer requests: rules (David, 3 Nov, answer 4)', () => {
     expect(floodRefusal(0, 5)).toMatch(/several requests from you/);
     expect(decideRefusal('new')).toBeNull();
     expect(decideRefusal('accepted')).toBe('This request has already been accepted');
+  });
+
+  it('takes the order only from an accepted request, for its client, once (migration 0091)', () => {
+    expect(requestOrderRefusal(undefined, 'c1')).toBe('Request not found');
+    expect(requestOrderRefusal({ status: 'new', clientId: null, orderId: null }, 'c1')).toBe('Accept this request before taking the order');
+    expect(requestOrderRefusal({ status: 'declined', clientId: null, orderId: null }, 'c1')).toBe('This request was declined');
+    expect(requestOrderRefusal({ status: 'accepted', clientId: 'c1', orderId: 'o1' }, 'c1')).toBe('The order for this request has already been taken');
+    expect(requestOrderRefusal({ status: 'accepted', clientId: 'c2', orderId: null }, 'c1')).toBe('This request was accepted for another {client}');
+    expect(requestOrderRefusal({ status: 'accepted', clientId: 'c1', orderId: null }, 'c1')).toBeNull();
   });
 
   it('words the request for the office', () => {
@@ -172,6 +182,37 @@ describe('customer requests: API', () => {
     expect(all.requests.find((x: { id: string }) => x.id === busy.id)).toMatchObject({ status: 'declined', decidedNote: 'Outside our area' });
     expect(all.requests.find((x: { id: string }) => x.id === ids.req)).toMatchObject({ status: 'accepted', clientName: 'Sample Bakery' });
     expect(all.waiting).toBe(4);
+  });
+
+  it('takes the order from an accepted request in one step, once, and shows it on the request (migration 0091)', async () => {
+    const clientId = (await owner.query(`select id from clients where name = 'Sample Bakery'`)).rows[0].id;
+    const site = await http().post('/facilities').set(as('admin'))
+      .send({ name: 'Sample Bakery', clientId, addressLine: '12 Example Street', suburb: 'Fitzroy', state: 'VIC', postcode: '3065' }).expect(201);
+    const date = ahead(7);
+    const body = {
+      customerRequestId: ids.req, clientId, facilityId: site.body.id, role: 'Barista', date, startTime: '07:00', endTime: '15:00', quantity: 2,
+      channel: 'request_page', requestedByName: 'Pat Example', requestedByEmail: 'pat@example.com', saveContact: true, orderNotes: 'Back door entry',
+    };
+    // Waiting and declined requests can't be ordered; nor for another client.
+    const waiting = (await http().get('/customer-requests').set(as('alloc')).expect(200)).body.requests[0];
+    const notYet = await http().post('/client-orders').set(as('alloc')).send({ ...body, customerRequestId: waiting.id }).expect(409);
+    expect(notYet.body.message).toBe('Accept this request before taking the order');
+    const other = (await owner.query(`insert into clients(tenant_id, name) values ($1,'Other Example') returning id`, [ids.c4u])).rows[0].id;
+    const wrong = await http().post('/client-orders').set(as('alloc')).send({ ...body, clientId: other }).expect(400);
+    expect(wrong.body.message).toMatch(/doesn’t belong to this client/);
+    const made = await http().post('/client-orders').set(as('alloc')).send(body).expect(201);
+    expect(made.body).toMatchObject({ created: 2, contactSaved: false });
+    const again = await http().post('/client-orders').set(as('alloc')).send(body).expect(409);
+    expect(again.body.message).toBe('The order for this request has already been taken');
+    const all = (await http().get('/customer-requests?status=all').set(as('alloc')).expect(200)).body;
+    expect(all.requests.find((x: { id: string }) => x.id === ids.req)).toMatchObject({ orderId: made.body.orderId, orderFacilityId: site.body.id, orderShifts: 2 });
+    const orders = (await http().get('/client-orders').set(as('alloc')).expect(200)).body;
+    expect(orders.find((o: { id: string }) => o.id === made.body.orderId)).toMatchObject({ channel: 'request_page', channelWords: 'Request page', total: 2 });
+    // The order's shifts are ordinary client shifts in the queue.
+    const shifts = (await owner.query(`select role, status from shifts where client_order_id = $1`, [made.body.orderId])).rows;
+    expect(shifts).toEqual([{ role: 'Barista', status: 'open' }, { role: 'Barista', status: 'open' }]);
+    // Another business can't use the request.
+    await http().post('/client-orders').set(as('nosy')).send(body).expect(400);
   });
 
   it('stops taking requests once switched off', async () => {

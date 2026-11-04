@@ -62,3 +62,35 @@ export function requestStatus(status: string): [string, 'ok' | 'warn' | 'neutral
   if (status === 'declined') return ['Declined', 'neutral'];
   return ['New', 'warn'];
 }
+
+const AU_STATE_NAMES: Record<string, string> = {
+  victoria: 'VIC', 'new south wales': 'NSW', queensland: 'QLD', 'south australia': 'SA', 'western australia': 'WA',
+  tasmania: 'TAS', 'northern territory': 'NT', 'australian capital territory': 'ACT',
+};
+
+/**
+ * The state as a site form wants it, from what a customer typed ("Victoria", "vic." → "VIC"; US "ca" → "CA").
+ * Anything else (NZ regions, UK counties, a name we don't know) comes back as typed, for the office to check.
+ */
+export function regionFor(country: string, typed: string | null | undefined): string {
+  const t = (typed ?? '').trim().replace(/\.$/, '');
+  if (!t) return '';
+  if (country === 'AU') {
+    const up = t.toUpperCase();
+    if (['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT'].includes(up)) return up;
+    return AU_STATE_NAMES[t.toLowerCase()] ?? t;
+  }
+  if (country === 'US' && /^[a-z]{2}$/i.test(t)) return t.toUpperCase();
+  return t;
+}
+
+/** What an accepted request still needs: its order taken, or nothing (order taken, or not accepted). */
+export function needsOrder(r: { status: string; orderId?: string | null }) {
+  return r.status === 'accepted' && !r.orderId;
+}
+
+/** "Order taken: 2 shifts at Main shop" for an accepted request whose order exists. */
+export function orderTakenLine(r: { orderShifts?: number | null }, siteName: string | null, shiftWord: (n: number) => string) {
+  const n = r.orderShifts ?? 0;
+  return `Order taken: ${shiftWord(n)}${siteName ? ` at ${siteName}` : ''}`;
+}

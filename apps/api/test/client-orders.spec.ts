@@ -18,7 +18,7 @@ describe('client orders: rules (David, 2 Nov)', () => {
   it('checks the order’s own fields', () => {
     expect(parseOrder({ clientId: CLIENT, requestedByName: ' Pat Ward ', requestedByEmail: 'Pat@Bayside.Example', channel: 'phone' })).toEqual({
       clientId: CLIENT, channel: 'phone', requestedByName: 'Pat Ward', requestedByEmail: 'pat@bayside.example', requestedByPhone: null,
-      clientReference: null, orderNotes: null, confirmToClient: true, contactId: null, saveContact: false,
+      clientReference: null, orderNotes: null, confirmToClient: true, contactId: null, saveContact: false, customerRequestId: null,
     });
     expect(parseOrder({ clientId: CLIENT, requestedByName: 'Pat' }).channel).toBe('other');
     expect(parseOrder({ clientId: CLIENT, requestedByName: 'Pat', confirmToClient: false }).confirmToClient).toBe(false);

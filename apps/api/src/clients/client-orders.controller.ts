@@ -10,6 +10,7 @@ import { actorOf } from '../roster/publishing.js';
 import { SHIFT_COLS, SHIFT_FROM, shiftById } from '../roster/roster.controller.js';
 import { UUID, insertShifts, parseShiftRequest } from '../roster/shift-create.js';
 import { wordsFor } from '../terms/words.js';
+import { requestOrderRefusal, type RequestStatus } from './customer-requests.js';
 import { CHANNEL_WORDS, CLIENT_SHIFT_STAGES, contactProblem, whoAsked, type OrderFields, clientChangeEmail, clientConfirmRefusal, clientConfirmationEmail, clientShiftStage, orderPlaceProblem, orderSummary, parseOrder, type ChangeKind, type Channel, type ClientShiftStage, type OrderCounts } from './client-orders.js';
 
 const whole = (v: string | undefined, def: number, min: number, max: number) => {
@@ -42,13 +43,25 @@ export class ClientOrdersController {
         'select client_id as "clientId", active from facilities where id = $1', [req.facilityId])).rows[0];
       const problem = orderPlaceProblem(client, site, order.clientId);
       if (problem) throw new BadRequestException(problem);
+      if (order.customerRequestId) {
+        // Locks the request so two people taking its order at once make one order.
+        const r = (await db.query<{ status: RequestStatus; clientId: string | null; orderId: string | null }>(
+          `select r.status, r.client_id as "clientId", (select o.id from client_orders o where o.customer_request_id = r.id) as "orderId"
+             from customer_requests r where r.id = $1 for update of r`, [order.customerRequestId])).rows[0];
+        const refusal = requestOrderRefusal(r, order.clientId);
+        if (refusal) throw (r ? new ConflictException(refusal) : new NotFoundException(refusal));
+      }
       const { contactId, contactSaved, who } = await this.resolveContact(db, t.tenantId, order);
       const orderId = (await db.query<{ id: string }>(
         `insert into client_orders(tenant_id, client_id, facility_id, channel, requested_by_name, requested_by_email, requested_by_phone,
-                                   client_reference, notes, confirm_to_client, created_by, contact_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+                                   client_reference, notes, confirm_to_client, created_by, contact_id, customer_request_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning id`,
         [t.tenantId, order.clientId, req.facilityId, order.channel, who.name, who.email, who.phone,
-          order.clientReference, order.orderNotes, order.confirmToClient, auth.userId, contactId])).rows[0].id;
+          order.clientReference, order.orderNotes, order.confirmToClient, auth.userId, contactId, order.customerRequestId]).catch(e => {
+        // An order already taken at a site the caller can't see (per-site access) still counts.
+        if ((e as { code?: string }).code === '23505' && order.customerRequestId) throw new ConflictException('The order for this request has already been taken');
+        throw e;
+      })).rows[0].id;
       const made = await insertShifts(db, t.tenantId, auth.userId, req, orderId);
       return { orderId, contactId, contactSaved, ...made };
     }, actorOf(auth));

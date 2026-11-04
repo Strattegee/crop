@@ -66,6 +66,8 @@ export function clientConfirmLine(
 
 export const CHANNELS = [
   { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }, { value: 'portal', label: 'Portal' }, { value: 'other', label: 'Other' },
+  // Orders taken from a new customer's request (migration 0091); never chosen by hand.
+  { value: 'request_page', label: 'Request page' },
 ] as const;
 
 type Site = { id: string; name: string; clientId: string | null; clientName: string | null; active: boolean; areas?: { id: string; name: string; active: boolean }[] };

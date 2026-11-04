@@ -1048,3 +1048,9 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .cust-req { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; background: var(--surface); }
 .cust-req h3 { margin: 0 0 4px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cust-req .form-row { margin-top: 8px; }
+.cust-req .take-order { margin-top: 8px; }
+.cust-req .take-order > summary { display: inline-block; list-style: none; cursor: pointer; }
+.cust-req .take-order > summary::-webkit-details-marker { display: none; }
+.cust-req .new-site { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px 12px; border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; margin: 0; }
+.cust-req .new-site legend { font-size: 13px; padding: 0 4px; }
+.cust-req .new-site label { flex: 1 1 160px; }

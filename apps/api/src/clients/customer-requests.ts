@@ -171,3 +171,19 @@ export function decideRefusal(status: RequestStatus): string | null {
   if (status === 'declined') return 'This request has already been declined';
   return null;
 }
+
+/**
+ * Why an order can't be taken from this request (migration 0091), or null: only an accepted request, for the client
+ * it was accepted for, and only once.
+ */
+export function requestOrderRefusal(
+  r: { status: RequestStatus; clientId: string | null; orderId: string | null } | undefined,
+  clientId: string,
+): string | null {
+  if (!r) return 'Request not found';
+  if (r.status === 'new') return 'Accept this request before taking the order';
+  if (r.status === 'declined') return 'This request was declined';
+  if (r.orderId) return 'The order for this request has already been taken';
+  if (r.clientId !== clientId) return 'This request was accepted for another {client}';
+  return null;
+}
