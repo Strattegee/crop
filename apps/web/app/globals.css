@@ -732,6 +732,9 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   --qs-pull-bg: #e9ddfb; --qs-pull-fg: #4b2389;
   --qs-book-bg: #dff2e6; --qs-book-fg: #17663a;
   --qs-band-soon: #fce3e1; --qs-band-soon-fg: #9b1c14;
+  --qs-unf-bg: #fde8d7; --qs-unf-fg: #8a3a00;
+  --qs-unc-bg: #eef0f3; --qs-unc-fg: #4d5866;
+  --qs-can-bg: #fbdcdc; --qs-can-fg: #9b1c14;
 }
 :root[data-mode='dark'] {
   --qs-new-bg: #26324a; --qs-new-fg: #c3ccdb;
@@ -742,6 +745,9 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
   --qs-pull-bg: #34224f; --qs-pull-fg: #d3b8f5;
   --qs-book-bg: #173a26; --qs-book-fg: #8fdcae;
   --qs-band-soon: #3d1c1c; --qs-band-soon-fg: #f6aaa3;
+  --qs-unf-bg: #45270f; --qs-unf-fg: #f8bf8f;
+  --qs-unc-bg: #2b3342; --qs-unc-fg: #b9c3d2;
+  --qs-can-bg: #4a1c1c; --qs-can-fg: #f6aaa3;
 }
 .content:has(.alloc-page) { max-width: none; padding: 14px 20px; }
 .alloc-page h1 { font-size: 20px; margin: 0; }
@@ -801,6 +807,15 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .qst-client_to_confirm { background: var(--qs-ctc-bg); color: var(--qs-ctc-fg); }
 .qst-pulled_out { background: var(--qs-pull-bg); color: var(--qs-pull-fg); }
 .qst-booked { background: var(--qs-book-bg); color: var(--qs-book-fg); }
+/* Calendar periods (David, 4 Nov): what happened to ended or cancelled shifts. */
+.qst-worked { background: var(--qs-book-bg); color: var(--qs-book-fg); }
+.qst-unfilled { background: var(--qs-unf-bg); color: var(--qs-unf-fg); }
+.qst-unconfirmed { background: var(--qs-unc-bg); color: var(--qs-unc-fg); border: 1px dashed var(--border); }
+.qst-cancelled { background: var(--qs-can-bg); color: var(--qs-can-fg); }
+.qd-done { background: var(--muted); } .qd-worked { background: #2e9d57; } .qd-unfilled { background: #e07a2e; } .qd-cancelled { background: #d63b30; }
+.q-tabs-sep { align-self: center; margin-left: 6px; padding-left: 10px; border-left: 1px solid var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.qb-done { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.q-more { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--divider); }
 .q-soft { background: var(--surface-2); color: var(--text); border: 1px solid var(--divider); }
 .q-rank { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 10px; font-size: 11px; font-weight: 700; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
 .q-rank.top { background: var(--sel-bg); color: var(--sel-text); border-color: var(--sel-bg); }

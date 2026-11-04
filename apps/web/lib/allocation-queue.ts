@@ -3,12 +3,40 @@
  * chips, bands, "starts in" and "waiting" times, and the URL that keeps the screen's state.
  */
 
-export type QueueTab = 'all' | 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked_today';
-export type QueueStage = 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked';
-export type QueueBand = 'started' | 'soon' | 'today' | 'tomorrow' | 'later';
-export const QUEUE_TABS: readonly QueueTab[] = ['all', 'new', 'released', 'accepted', 'worker_to_confirm', 'client_to_confirm', 'pulled_out', 'booked_today'];
+export type LiveTab = 'all' | 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked_today';
+/** Outcome tabs (David, 4 Nov), only for calendar periods; keep in step with the API's `OUTCOME_TABS`. */
+export type OutcomeTab = 'done' | 'worked' | 'unfilled' | 'cancelled';
+export type QueueTab = LiveTab | OutcomeTab;
+export type OutcomeStage = 'worked' | 'unfilled' | 'not_refilled' | 'unconfirmed' | 'cancelled';
+export type QueueStage = 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked' | OutcomeStage;
+export type QueueBand = 'started' | 'soon' | 'today' | 'tomorrow' | 'later' | 'done';
+export const LIVE_TABS: readonly LiveTab[] = ['all', 'new', 'released', 'accepted', 'worker_to_confirm', 'client_to_confirm', 'pulled_out', 'booked_today'];
+export const OUTCOME_TABS: readonly OutcomeTab[] = ['done', 'worked', 'unfilled', 'cancelled'];
+export const QUEUE_TABS: readonly QueueTab[] = [...LIVE_TABS, ...OUTCOME_TABS];
+/** Urgency bands for shifts still to come; "done" rows are shown by day instead (`dayGroups`). */
 export const QUEUE_BANDS: readonly QueueBand[] = ['started', 'soon', 'today', 'tomorrow', 'later'];
 export const DAY_CHOICES = [1, 3, 7, 14] as const;
+/** Calendar periods (David, 4 Nov): whole weeks and months in the business's dates, days already gone included. */
+export type QueuePeriod = 'week' | 'month' | 'prev_month';
+export const QUEUE_PERIODS: readonly QueuePeriod[] = ['week', 'month', 'prev_month'];
+/** Same words as Dashboard › Live numbers. */
+export const PERIOD_LABEL: Record<QueuePeriod, string> = { week: 'Current week', month: 'Current month', prev_month: 'Previous month' };
+/** Rows a calendar period shows at first and adds with each "Show more" (the API's PAGE_ROWS). */
+export const PAGE_ROWS = 250;
+
+/** The period choice, forward-looking first, then the calendar ones: `value` is what the select sends as `period`. */
+export function periodChoices(): { value: string; label: string }[] {
+  return [
+    ...DAY_CHOICES.map(d => ({ value: String(d), label: d === 1 ? 'Next 24 hours' : `Next ${d} days` })),
+    ...QUEUE_PERIODS.map(p => ({ value: p, label: PERIOD_LABEL[p] })),
+  ];
+}
+
+/** The tab a period opens on: everything still needing someone, except the previous month (all done). */
+export const defaultTab = (period: QueuePeriod | null): QueueTab => (period === 'prev_month' ? 'done' : 'all');
+/** The tabs to show: outcome tabs only when the period includes the past. */
+export const tabsFor = (period: QueuePeriod | null): readonly QueueTab[] => (period ? QUEUE_TABS : LIVE_TABS);
+export const isOutcomeStage = (s: QueueStage): s is OutcomeStage => ['worked', 'unfilled', 'not_refilled', 'unconfirmed', 'cancelled'].includes(s);
 
 /** The business's words the labels need. */
 export type QueueWords = { client: string; worker: string; bank: string; shifts: string };
@@ -25,11 +53,26 @@ export function tabLabel(tab: QueueTab, w: QueueWords = DEFAULT_WORDS): string {
     case 'client_to_confirm': return `${w.client} to confirm`;
     case 'pulled_out': return 'Pulled out';
     case 'booked_today': return 'Booked today';
+    case 'done': return 'All done';
+    case 'worked': return 'Worked';
+    case 'unfilled': return 'Unfilled';
+    case 'cancelled': return 'Cancelled';
+  }
+}
+
+/** Short words for a cancel kind on a row's pill (the panel uses the full words). */
+export function cancelPillLabel(kind: string | null | undefined, w: QueueWords = DEFAULT_WORDS): string {
+  switch (kind) {
+    case 'client_cancelled': return `${w.client} cancelled`;
+    case 'client_withdrew': return `${w.client} withdrew`;
+    case 'not_filled': return 'Couldn’t fill';
+    case 'our_mistake': return 'Our mistake';
+    default: return 'Cancelled';
   }
 }
 
 /** A row's stage pill: short words plus the class for Steve's colours. */
-export function stagePill(stage: QueueStage, w: QueueWords = DEFAULT_WORDS): { label: string; cls: string } {
+export function stagePill(stage: QueueStage, w: QueueWords = DEFAULT_WORDS, cancelKind: string | null = null): { label: string; cls: string } {
   switch (stage) {
     case 'new': return { label: 'New', cls: 'qst-new' };
     case 'released': return { label: 'Released', cls: 'qst-released' };
@@ -38,12 +81,43 @@ export function stagePill(stage: QueueStage, w: QueueWords = DEFAULT_WORDS): { l
     case 'client_to_confirm': return { label: `${w.client} to confirm`, cls: 'qst-client_to_confirm' };
     case 'pulled_out': return { label: 'Pulled out', cls: 'qst-pulled_out' };
     case 'booked': return { label: 'Booked', cls: 'qst-booked' };
+    case 'worked': return { label: 'Worked', cls: 'qst-worked' };
+    case 'unfilled': return { label: 'Unfilled', cls: 'qst-unfilled' };
+    case 'not_refilled': return { label: 'Pulled out · unfilled', cls: 'qst-unfilled' };
+    case 'unconfirmed': return { label: 'Never confirmed', cls: 'qst-unconfirmed' };
+    case 'cancelled': return { label: cancelPillLabel(cancelKind, w), cls: 'qst-cancelled' };
   }
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export type DayTotals = { date: string; total: number; worked: number; unfilled: number; cancelled: number };
+
+/**
+ * The heading over one day of ended or cancelled shifts: "Tue 3 Nov · 248 · 231 worked · 9 unfilled · 8 cancelled"
+ * (zeros left out). `totals` cover the whole day on this tab, even when only some of its rows are shown yet.
+ */
+export function dayHeading(t: DayTotals): string {
+  const [y, m, d] = t.date.split('-').map(Number);
+  const wd = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  const parts = [t.worked ? `${t.worked} worked` : null, t.unfilled ? `${t.unfilled} unfilled` : null, t.cancelled ? `${t.cancelled} cancelled` : null].filter(Boolean);
+  return [`${wd} ${d} ${MONTHS[m - 1]}`, String(t.total), ...parts].join(' · ');
+}
+
+/** Groups done rows (already latest day first) into days, keeping the order. */
+export function dayGroups<R extends { localDate: string }>(rows: R[]): { date: string; rows: R[] }[] {
+  const out: { date: string; rows: R[] }[] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && last.date === r.localDate) last.rows.push(r);
+    else out.push({ date: r.localDate, rows: [r] });
+  }
+  return out;
 }
 
 /** Band headings. */
 export function bandTitle(band: QueueBand): string {
-  return { started: 'Started or overdue', soon: 'Starting within 2 hours', today: 'Later today', tomorrow: 'Tomorrow', later: 'Later' }[band];
+  return { started: 'Started or overdue', soon: 'Starting within 2 hours', today: 'Later today', tomorrow: 'Tomorrow', later: 'Later', done: 'Ended or cancelled' }[band];
 }
 
 const MIN = 60_000;
@@ -84,7 +158,13 @@ export function updatedWords(at: number, now: number): string {
  * `office`: null = the API's default (the person's own offices when they have any, else all), `all`, `mine`, `none`
  * (sites without an office) or an office id (offices, David 3 Nov).
  */
-export type QueueParams = { stage: QueueTab; office: string | null; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers' };
+export type QueueParams = {
+  stage: QueueTab; office: string | null; region: string | null; clientId: string | null; days: number; shift: string | null; view: 'queue' | 'new' | 'history' | 'employers';
+  /** A calendar period instead of `days` (null = the forward-looking `days`). */
+  period?: QueuePeriod | null;
+  /** Rows to show for a calendar period (null = the first page). */
+  limit?: number | null;
+};
 
 /** `?office=`: all, mine, none or an office id; anything else is left to the default. */
 export function officeValue(v: string | undefined): string | null {
@@ -115,8 +195,14 @@ export function officeChipList(q: OfficeChipData): { label: string; value: strin
 /** Reads the screen's state from the URL (anything odd falls back to the defaults). */
 export function parseQueueParams(sp: Record<string, string | string[] | undefined>): QueueParams {
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]) as string | undefined;
-  const stage = (QUEUE_TABS as readonly string[]).includes(one('stage') ?? '') ? one('stage') as QueueTab : 'all';
-  const days = Number(one('days'));
+  // `period` is a calendar period, or (from the period select) a number of days; `days` still works on its own.
+  const periodRaw = one('period');
+  const period = (QUEUE_PERIODS as readonly string[]).includes(periodRaw ?? '') ? periodRaw as QueuePeriod : null;
+  const dayValue = Number(period ? NaN : periodRaw ?? one('days'));
+  const stageRaw = one('stage') ?? '';
+  const stage = (LIVE_TABS as readonly string[]).includes(stageRaw) || (period && (OUTCOME_TABS as readonly string[]).includes(stageRaw))
+    ? stageRaw as QueueTab : defaultTab(period);
+  const limit = Number(one('limit'));
   const view = one('view');
   const id = (v: string | undefined) => (v && /^[0-9a-f-]{36}$/i.test(v) ? v : null);
   return {
@@ -124,9 +210,11 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
     office: officeValue(one('office')),
     region: one('region')?.trim().slice(0, 60) || null,
     clientId: id(one('clientId')),
-    days: (DAY_CHOICES as readonly number[]).includes(days) ? days : 3,
+    days: (DAY_CHOICES as readonly number[]).includes(dayValue) ? dayValue : 3,
     shift: id(one('shift')),
     view: view === 'new' || view === 'history' || view === 'employers' ? view : 'queue',
+    period,
+    limit: period && Number.isInteger(limit) && limit > PAGE_ROWS ? Math.min(limit, 5000) : null,
   };
 }
 
@@ -134,15 +222,37 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
 export function queueHref(p: QueueParams, change: Partial<QueueParams> = {}): string {
   const n = { ...p, ...change };
   const q = new URLSearchParams();
+  const period = n.period ?? null;
   if (n.view !== 'queue') q.set('view', n.view);
-  if (n.stage !== 'all') q.set('stage', n.stage);
+  if (n.stage !== defaultTab(period)) q.set('stage', n.stage);
   if (n.office) q.set('office', n.office);
   if (n.region) q.set('region', n.region);
   if (n.clientId) q.set('clientId', n.clientId);
-  if (n.days !== 3) q.set('days', String(n.days));
+  if (period) q.set('period', period);
+  else if (n.days !== 3) q.set('days', String(n.days));
+  if (period && n.limit) q.set('limit', String(n.limit));
   if (n.shift) q.set('shift', n.shift);
   const s = q.toString();
   return s ? `/allocations?${s}` : '/allocations';
+}
+
+/** The API query for the queue: the period (or days), tab, filters and how many rows. */
+export function queueQuery(p: QueueParams): string {
+  const q = new URLSearchParams();
+  if (p.period) q.set('period', p.period); else q.set('days', String(p.days));
+  if (p.stage !== defaultTab(p.period ?? null)) q.set('stage', p.stage);
+  if (p.office) q.set('office', p.office);
+  if (p.region) q.set('region', p.region);
+  if (p.clientId) q.set('clientId', p.clientId);
+  if (p.period && p.limit) q.set('limit', String(p.limit));
+  return q.toString();
+}
+
+/** "Show 250 more" (or however many are left) for a calendar period's list; null when everything is shown. */
+export function showMore(p: QueueParams, shown: number, more: number): { href: string; label: string } | null {
+  if (!p.period || more <= 0) return null;
+  const next = Math.min(more, PAGE_ROWS);
+  return { href: queueHref(p, { limit: shown + PAGE_ROWS }), label: `Show ${next} more (${more} not shown yet)` };
 }
 
 /** The fill panel's people line: "Ready · 24 h that week" or the first warning. */

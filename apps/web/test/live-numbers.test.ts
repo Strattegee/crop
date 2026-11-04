@@ -14,6 +14,9 @@ describe('live numbers page (David, 3 Nov)', () => {
     expect(liveHref(p, { state: null, office: null, period: 'week' })).toBe('/dashboard/live');
     expect(liveQuery(parseLiveParams({}))).toBe('period=week');
     expect(liveQuery(p)).toBe(`period=month&state=VIC&office=${OFFICE}`);
+    // Previous month (David, 4 Nov), as on Allocations.
+    expect(parseLiveParams({ period: 'prev_month' }).period).toBe('prev_month');
+    expect(liveHref(parseLiveParams({ period: 'prev_month' }))).toBe('/dashboard/live?period=prev_month');
   });
 
   it('words percentages, the scope and the dates', () => {
