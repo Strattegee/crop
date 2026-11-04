@@ -736,3 +736,6 @@ Newest first. One entry per working session or scheduled run.
 - Checked: API tests (history kept, one current, another business sees nothing, the app can't edit or delete rows) and a rendering of the card at laptop and phone width; every test passes. Not checked signed in (no local sign-in in this run).
 - Next: the rest of answer 5: field-access settings (who can see and change each field and document kind; whether the person's change needs approval), kept history for name, email and mobile, and "My details" in the app.
 
+
+## 2026-11-04 (David's session)
+- Fixed: with many sites on a week (C4U's demo has 27), the roster's title row listed every site's Draft/Live state side by side and squeezed them into a tall column of wrapped names over the page. Now it says "27 sites: 25 draft · 2 live" and the sites open in a drop-down list; three or fewer still show inline.

@@ -933,3 +933,8 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .live-table td.bad { color: var(--bad); font-weight: 600; }
 .live-updated { display: inline-flex; align-items: center; gap: 6px; }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+
+/* Roster title row with many sites (4 Nov): a summary that opens a list, never a column of wrapped names. */
+.states-more > summary { white-space: nowrap; }
+.states-more > ul { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; margin: 0; padding: 8px 12px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 60vh; overflow-y: auto; min-width: 280px; }
+.states-more > ul li { padding: 3px 0; white-space: nowrap; font-size: 13px; }
