@@ -8,6 +8,7 @@ import { bool, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { addressChangeRefusal, addressLine, parseAddress, sameAddress, type AddressFields } from './addresses.js';
 import { loadSettings } from './settings.js';
+import { detailHistory, type CurrentDetails, type WorkerAuditRow } from './detail-history.js';
 
 export type AddressRow = AddressFields & {
   id: string; workerId: string; current: boolean; replacesId: string | null; replacedAt: string | null; replacedById: string | null;
@@ -106,6 +107,23 @@ export class AddressesController {
     return withTenant(this.pool, t.tenantId, async db => {
       if (!(await db.query(`select 1 from workers where id = $1 and status <> 'agency'`, [workerId])).rowCount) throw new NotFoundException('Person not found');
       return listFor(db, t.tenantId, workerId);
+    });
+  }
+
+  /**
+   * Earlier values of the person's name, preferred name, email, mobile, gender and date of birth, newest first, read
+   * from the audit log (nothing overwritten, answer 5). Office roles, like the details themselves; never supervisors.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('workers/:id/earlier-details')
+  earlier(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) workerId: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      const cur = (await db.query<CurrentDetails>(`select first_name, last_name, preferred_name, email, phone, gender,
+          to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth from workers where id = $1 and status <> 'agency'`, [workerId])).rows[0];
+      if (!cur) throw new NotFoundException('Person not found');
+      const rows = (await db.query<WorkerAuditRow>(`select at, actor_name as "actorName", via, old_values as "oldValues" from audit_log
+          where table_name = 'workers' and row_id = $1 and action = 'update' order by id desc limit 1000`, [workerId])).rows;
+      return detailHistory(cur, rows);
     });
   }
 
