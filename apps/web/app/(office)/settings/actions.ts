@@ -40,5 +40,15 @@ export async function saveSettings(f: FormData) {
 
 /** A role the business uses (it then shows in the roles list, grouped by industry). */
 export async function addRole(f: FormData) {
-  await attempt('/settings', () => api('/roles', { method: 'POST', body: { name: str(f, 'name'), area: str(f, 'area') } }), 'Role added.');
+  await attempt('/settings', () => api('/roles', { method: 'POST', body: { name: str(f, 'name'), area: str(f, 'area'), adultsOnly: f.get('adultsOnly') === 'on' } }), 'Role added.');
+}
+
+/** Roles set as 18 and over only (migration 0082): only the ones that changed are sent. */
+export async function setAdultRoles(f: FormData) {
+  const ticked = new Set(f.getAll('adult').map(String));
+  const was = new Set(f.getAll('was').map(String));
+  const changed = f.getAll('ids').map(String).filter(id => ticked.has(id) !== was.has(id));
+  await attempt('/settings', async () => {
+    for (const id of changed) await api(`/roles/${id}`, { method: 'PATCH', body: { adultsOnly: ticked.has(id) } });
+  }, changed.length ? 'Saved.' : 'Nothing changed.');
 }

@@ -11,6 +11,8 @@ export type CardData = {
   contractedHours: number | null;
   weekHours: number;
   nextShift: { startsAt: string; label: string } | null;
+  /** Under 18 today by the date of birth on their record (office only; never the age). */
+  under18?: boolean;
 };
 
 export type CardPerson = {

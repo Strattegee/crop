@@ -707,3 +707,12 @@ Newest first. One entry per working session or scheduled run.
 - Messages now record who caused them even where the code didn't say, so "messages sent" fills in going forward.
 - Next: David to say whether the daily email and the app's manager screens should carry these numbers.
 
+
+## 2026-11-04 midday, 12:10pm Melbourne (scheduled run)
+
+- Shipped: under 18s (David's answer 8). A person's record can hold their date of birth (optional, seen only by the office: never in the app, in messages or by another business), and their card says "Under 18" while they are. Settings can mark roles (e.g. Bar Attendant) and shift duties (e.g. Serves alcohol) as "18 and over only". Putting someone under 18 on such a shift, or on any shift running between 10pm and 6am, shows a warning in every who-can-work list; it never blocks, and never shows their age.
+- Privacy policy and data processing agreement mention the date of birth. The worker notice is unchanged (a sentence is suggested to David), and the DPA still leaves minors' information out of launch scope until the lawyer has looked at it.
+- Not checked in a browser (no local sign-in in this run); API tests cover the date checks, the badge, the settings, the warnings and another business seeing nothing; every test passes.
+- Left alone: another session's open pull request (#202, Allocations by week and month).
+- Next: other unheld items (answer 5, who can see and change each field, is the next big one).
+- Waiting on David: the lawyer on minors' information and the worker notice sentence before anyone under 18 is recorded; whether 10pm–6am suits every state and whether any 18+ rule should block; push credentials in the Expo project, then a new app build and PUSH_SEND=on; someone local to check the New Zealand, US and UK credential names; sending texts outside Australia; a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; Apple's approval for iPhone builds.

@@ -19,13 +19,13 @@ function requirements(f: FormData) {
 
 export async function addDuty(f: FormData) {
   await attempt(BACK, () => api('/shift-duties', {
-    method: 'POST', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, requirements: requirements(f) },
+    method: 'POST', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, requirements: requirements(f), adultsOnly: f.get('adultsOnly') === 'on' },
   }), 'Duty added. Tick it on a shift in the roster to use it.');
 }
 
 export async function saveDuty(id: string, f: FormData) {
   await attempt(BACK, () => api(`/shift-duties/${id}`, {
-    method: 'PATCH', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, requirements: requirements(f) },
+    method: 'PATCH', body: { name: str(f, 'name'), description: str(f, 'description') ?? null, requirements: requirements(f), adultsOnly: f.get('adultsOnly') === 'on' },
   }), 'Duty saved. Shifts with this duty now need what it lists.');
 }
 

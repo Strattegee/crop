@@ -30,10 +30,23 @@ async function mobileField(db: PoolClient, tenantId: string, body: Record<string
   return m.e164;
 }
 
+/**
+ * Date of birth (migration 0082, office only): undefined when not sent, null when cleared. Not in the future (the
+ * business's date) and not before 1900.
+ */
+async function birthDateField(db: PoolClient, tenantId: string, body: Record<string, unknown>): Promise<string | null | undefined> {
+  if (!body || !('dateOfBirth' in body)) return undefined;
+  const v = date(body, 'dateOfBirth');
+  if (v === null) return null;
+  if (v < '1900-01-01') throw new BadRequestException('Date of birth must be after 1900');
+  if (v > todayIn((await loadSettings(db, tenantId)).timezone)) throw new BadRequestException("Date of birth can't be in the future");
+  return v;
+}
+
 const STATUSES = ['active', 'onboarding', 'applicant', 'inactive', 'offboarded'] as const;
 const EMPLOYMENT = ['full_time', 'part_time', 'casual', 'bank', 'none', 'left'] as const;
 const WORKER_COLUMNS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName",
-  w.email, w.phone, w.status, w.roles, w.notes, w.gender, w.recruitment_stage as "recruitmentStage", w.created_at as "createdAt"`;
+  w.email, w.phone, w.status, w.roles, w.notes, w.gender, to_char(w.date_of_birth, 'YYYY-MM-DD') as "dateOfBirth", w.recruitment_stage as "recruitmentStage", w.created_at as "createdAt"`;
 const CRED_COLUMNS = `c.id, c.credential_type_id as "credentialTypeId", t.name as "typeName", t.category,
   t.verification_method as "verificationMethod", t.verification_url as "verificationUrl",
   c.number, c.issued_by as "issuedBy", to_char(c.issue_date, 'YYYY-MM-DD') as "issueDate", to_char(c.expiry_date, 'YYYY-MM-DD') as "expiryDate",
@@ -112,11 +125,12 @@ export class WorkersController {
     ];
     return withTenant(this.pool, t.tenantId, async db => {
       values[5] = (await mobileField(db, t.tenantId, body)) ?? null;
+      const dateOfBirth = (await birthDateField(db, t.tenantId, body)) ?? null;
       try {
         const row = (await db.query<{ id: string }>(
-          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender, status, recruitment_stage, stage_changed_at)
+          `insert into workers as w (tenant_id, first_name, last_name, preferred_name, email, phone, roles, notes, gender, status, recruitment_stage, stage_changed_at, date_of_birth)
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9, case when $10 then 'applicant'::worker_status else 'active'::worker_status end,
-                   case when $10 then 'applied' end, case when $10 then now() end) returning ${WORKER_COLUMNS}`, [...values, applicant],
+                   case when $10 then 'applied' end, case when $10 then now() end, $11) returning ${WORKER_COLUMNS}`, [...values, applicant, dateOfBirth],
         )).rows[0];
         // An applicant starts on the recruitment board (David, 31 Oct).
         if (applicant) await recruitmentEvent(db, t.tenantId, row.id, auth, 'applied', null);
@@ -164,6 +178,7 @@ export class WorkersController {
       const current = body && 'phone' in body
         ? (await db.query<{ phone: string | null }>('select phone from workers where id = $1', [id])).rows[0]?.phone ?? null : null;
       const phone = await mobileField(db, t.tenantId, body, current);
+      const dateOfBirth = await birthDateField(db, t.tenantId, body);
       try {
         const row = (await db.query(
           `update workers as w set
@@ -174,6 +189,7 @@ export class WorkersController {
              roles = coalesce($10, roles), status = coalesce($11::worker_status, status),
              notes = case when $12::boolean then $13 else notes end,
              gender = case when $14::boolean then $15 else gender end,
+             date_of_birth = case when $16::boolean then $17::date else date_of_birth end,
              updated_at = now()
            where id = $1 returning ${WORKER_COLUMNS}`,
           [id, text(body, 'firstName', { max: 100 }), text(body, 'lastName', { max: 100 }),
@@ -182,7 +198,8 @@ export class WorkersController {
             phone !== undefined, phone ?? null,
             textList(body, 'roles'), oneOf(body, 'status', STATUSES),
             body && 'notes' in body, text(body, 'notes', { max: 2000 }),
-            body && 'gender' in body, gender(body, 'gender')],
+            body && 'gender' in body, gender(body, 'gender'),
+            dateOfBirth !== undefined, dateOfBirth ?? null],
         )).rows[0];
         if (!row) throw new NotFoundException('{Worker} not found');
         return row;

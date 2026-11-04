@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
 import { CATEGORY_LABEL } from '../../../lib/format';
 import { Notices } from '../notices';
-import { addCredentialType, addRole, addRule, removeRule, saveSettings, setTypeActive } from './actions';
+import { addCredentialType, addRole, addRule, removeRule, saveSettings, setAdultRoles, setTypeActive } from './actions';
 import { industryGroups, needsHeadings } from '../../../lib/industry-groups';
 import { addDemoStaff, applyPack, completeDemo } from './industry-actions';
 import { T, words } from '../../../lib/terms';
@@ -13,7 +13,7 @@ import { COUNTRIES, zoneName } from '../../../lib/places';
 export const dynamic = 'force-dynamic';
 
 type CredentialType = { id: string; name: string; category: string; hasNumber: boolean; hasExpiry: boolean; verificationMethod: string | null; active: boolean; industries?: string[] };
-type Role = { id: string; name: string; area: string | null; active: boolean; workerCount: number; industries?: string[] };
+type Role = { id: string; name: string; area: string | null; active: boolean; adultsOnly?: boolean; workerCount: number; industries?: string[] };
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 const LEVEL_LABEL: Record<string, string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
@@ -30,6 +30,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const typeGroups = industryGroups(types, packs);
   const activeTypeGroups = industryGroups(types.filter(t => t.active), packs);
   const roleGroups = industryGroups(roles.filter(r => r.active), packs);
+  // Roles on the business's list (not only typed on a person) can be set as 18 and over only.
+  const listedRoles = roles.filter(r => r.active && !r.id.startsWith('name:')).sort((a, b) => a.name.localeCompare(b.name));
+  const adultRoleCount = listedRoles.filter(r => r.adultsOnly).length;
 
   return (
     <>
@@ -192,15 +195,32 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         {roleGroups.length === 0 ? <p className="muted">None yet. Apply an industry template above, or add one below.</p> : roleGroups.map(g => (
           <div key={g.key} className="chip-group">
             {needsHeadings(roleGroups) && <h3>{g.label}</h3>}
-            <div className="chips">{g.items.map(r => <span key={r.id} className="chip">{r.name}<span className="muted"> {r.workerCount}</span></span>)}</div>
+            <div className="chips">{g.items.map(r => <span key={r.id} className="chip">{r.name}{r.adultsOnly && <b className="badge warn" title="18 and over only" style={{ marginLeft: 4 }}>18+</b>}<span className="muted"> {r.workerCount}</span></span>)}</div>
           </div>
         ))}
         {canEdit && (
           <form action={addRole} className="form-row" style={{ marginTop: 12 }}>
             <label>New {tw.lower(T.role)}<input name="name" required maxLength={60} placeholder="e.g. Barista" /></label>
             <label>{tw.one(T.area)} <span className="muted">(optional)</span><input name="area" maxLength={60} /></label>
+            <label className="inline"><input type="checkbox" name="adultsOnly" /> 18 and over only</label>
             <button type="submit" className="btn secondary">Add {tw.lower(T.role)}</button>
           </form>
+        )}
+        {canEdit && listedRoles.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: 'pointer' }}>18 and over only{adultRoleCount ? ` (${adultRoleCount})` : ''}</summary>
+            <p className="muted small">Tick the {tw.lower(T.role, true)} that only people aged 18 and over should do. Putting someone under 18 (by the date of birth on their record) on one shows a warning, never a block: the office decides, because the rules differ by state and kind of work. Someone under 18 on a {tw.lower(T.shift)} between 10pm and 6am gets a warning too.</p>
+            <form action={setAdultRoles}>
+              <div className="chips">{listedRoles.map(r => (
+                <label key={r.id} className="chip inline">
+                  <input type="hidden" name="ids" value={r.id} />
+                  {r.adultsOnly && <input type="hidden" name="was" value={r.id} />}
+                  <input type="checkbox" name="adult" value={r.id} defaultChecked={!!r.adultsOnly} /> {r.name}
+                </label>
+              ))}</div>
+              <button type="submit" className="btn secondary" style={{ marginTop: 8 }}>Save</button>
+            </form>
+          </details>
         )}
       </div>
 

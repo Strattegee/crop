@@ -22,7 +22,7 @@ const LABELS: Record<string, string> = {
   homeFacilityId: 'Home site', equipmentOnly: 'Equipment only', dueOn: 'Due date', operatorCredentialTypeId: 'Operator credential',
   unit: 'Unit', sku: 'SKU', unitCostCents: 'Unit cost (cents)', chargeCents: 'Charge to client (cents)', tracksStock: 'Count stock', active: 'Active',
   shiftId: 'Shift', workerIds: 'People', expiresInMinutes: 'Offer open for (minutes)', notify: 'Send messages',
-  weekStart: 'Week', toWeek: 'Week to fill', fromWeek: 'Week to copy', people: 'Include people', addToExisting: 'Add to the shifts already there', kind: 'Type of leave', endsOn: 'End date', approved: 'Approved', gender: 'Gender', genderRequested: 'Gender requested', periods: 'Times of day', days: 'Days', change: 'Change', agencyIds: 'Agencies',
+  weekStart: 'Week', toWeek: 'Week to fill', fromWeek: 'Week to copy', people: 'Include people', addToExisting: 'Add to the shifts already there', kind: 'Type of leave', endsOn: 'End date', approved: 'Approved', gender: 'Gender', dateOfBirth: 'Date of birth', adultsOnly: '18 and over only', genderRequested: 'Gender requested', periods: 'Times of day', days: 'Days', change: 'Change', agencyIds: 'Agencies',
   requestedByName: 'Who asked', requestedByEmail: 'Their email', requestedByPhone: 'Their phone', clientReference: 'Their reference',
   orderNotes: 'Order notes', confirmToClient: 'Email the client when filled',
   confirmsBookings: 'Client confirms each booking', rank: 'Client rank',
