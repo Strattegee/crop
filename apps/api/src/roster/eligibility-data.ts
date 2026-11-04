@@ -78,6 +78,18 @@ export async function dutyRulesForShift(db: PoolClient, shiftId: string): Promis
     .map(r => ({ credentialTypeId: r.credential_type_id, typeName: r.type_name, scope: 'all_workers', role: null, severity: r.severity, forDuty: r.duty }));
 }
 
+/** Duties on a shift set as 18 and over (migration 0082), by name. */
+export async function adultDutiesForShift(db: PoolClient, shiftId: string): Promise<string[]> {
+  return (await db.query<{ name: string }>(
+    `select d.name from shift_duty_links l join shift_duties d on d.id = l.duty_id
+      where l.shift_id = $1 and d.active and d.adults_only order by d.name`, [shiftId])).rows.map(r => r.name);
+}
+
+/** Whether the business has set a role as 18 and over (matched like role rules, ignoring case). */
+export async function adultRole(db: PoolClient, role: string): Promise<boolean> {
+  return (await db.query('select 1 from business_roles where adults_only and active and lower(name) = lower($1)', [role])).rowCount! > 0;
+}
+
 /**
  * Works out who may work a shift (within withTenant). Pass workerIds to check particular people
  * (any status), or leave it out for every active worker.
@@ -86,6 +98,7 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
   const shift = await loadShiftFacts(db, shiftId);
   return eligibilityForFacts(db, tenantId, shift, {
     workerIds, operatorNeeds: await operatorNeedsForShift(db, shiftId), extraRules: await dutyRulesForShift(db, shiftId),
+    adultDuties: await adultDutiesForShift(db, shiftId),
   });
 }
 
@@ -98,10 +111,12 @@ export async function eligibilityForShift(db: PoolClient, tenantId: string, shif
 export async function eligibilityForFacts(db: PoolClient, tenantId: string, shift: ShiftFacts & { id?: string }, opts: {
   workerIds?: string[]; operatorNeeds?: OperatorNeed[]; extraRules?: RequirementRule[]; onlyRules?: RequirementRule[];
   roleWarnOnly?: boolean; blockAll?: string[];
+  /** Duties on the shift set as 18 and over (the business's own shifts). */
+  adultDuties?: string[];
 }): Promise<Candidate[]> {
   const { workerIds } = opts;
-  const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null; gender: 'F' | 'M' | null }>(
-    `select w.id, w.gender, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
+  const workers = (await db.query<{ id: string; name: string; roles: string[]; employment_type: string | null; gender: 'F' | 'M' | null; dob: string | null }>(
+    `select w.id, w.gender, to_char(w.date_of_birth, 'YYYY-MM-DD') as dob, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles, et.employment_type
        from workers w
        left join lateral (select employment_type from employment_terms e
                            where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $2 and (e.ends_on is null or e.ends_on >= $2)
@@ -150,6 +165,9 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   const leave = await leaveByWorker(db, ids, shift.localDate);
   const employment = await termsByWorker(db, ids);
   const dayRequests = await dayRequestsByWorker(db, ids, shift.localDate);
+  // 18 and over: the business's own role list. An agency checking an employer's request (onlyRules) doesn't know the
+  // employer's settings, so only late-night work is checked there.
+  const age = { adultRole: opts.onlyRules ? false : await adultRole(db, shift.role), adultDuties: opts.adultDuties ?? [] };
 
   const words = await wordsFor(db);
   const weekFrom = mondayOf(shift.localDate);
@@ -164,6 +182,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
       operatorNeeds, credentials: creds.get(w.id) ?? [], windowDays: ctx.settings.expiringWindowDays,
       availability: availability.get(w.id), leave: leave.get(w.id) ?? [], employment: employment.get(w.id) ?? [],
       roleWarnOnly: opts.roleWarnOnly, gender: w.gender, dayRequests: dayRequests.get(w.id) ?? [],
+      age: { ...age, dateOfBirth: w.dob },
     });
     for (const message of opts.blockAll ?? []) {
       e.blocks.push({ code: 'credential', message });

@@ -42,7 +42,7 @@ type Credential = {
 };
 type Worker = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
-  gender?: 'F' | 'M' | null; status: string; roles: string[]; compliance: string; credentials: Credential[];
+  gender?: 'F' | 'M' | null; dateOfBirth?: string | null; status: string; roles: string[]; compliance: string; credentials: Credential[];
   issues: { typeName: string; severity: string; problem: string }[];
   optional?: { credentialTypeId: string; typeName: string; held: boolean }[];
   notes?: string | null; card?: CardData; recruitmentStage?: string | null;
@@ -366,6 +366,7 @@ export default async function WorkerPage({ params, searchParams }: {
               <option value="M">Male</option>
             </select>
           </label>
+          <label>Date of birth <span className="muted">(optional, office only)</span><input name="dateOfBirth" type="date" defaultValue={w.dateOfBirth ?? ''} max={today} /></label>
           <RolePicker groups={roleGroups} current={w.roles} label={tw.many(T.role)} />
           <label>Status
             <select name="status" defaultValue={w.status}>

@@ -71,6 +71,7 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
               <option value="M">Male</option>
             </select>
           </label>
+          <label>Date of birth <span className="muted">(optional, office only)</span><input name="dateOfBirth" type="date" max={today} /></label>
           <RolePicker groups={roleGroups} label={tw.many(T.role)} />
           {canSetEmployment && <>
             <label>Employment

@@ -1,10 +1,10 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
-import { text } from '../common/validate.js';
+import { bool, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { type IndustryPack } from './packs.js';
 import { packByIdFor, packsFor } from './local.js';
@@ -65,12 +65,12 @@ export class IndustryController {
   @Get('roles')
   roles(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
-      `select r.id, r.name, r.area, r.description, r.active,
+      `select r.id, r.name, r.area, r.description, r.active, r.adults_only as "adultsOnly",
               (select count(*)::int from workers w where w.status = 'active' and r.name = any(w.roles)) as "workerCount", false as "fromPeople"
          from business_roles r
        union all
        -- Roles people have that aren't on the list yet (typed on a person), so every role in use can be picked.
-       select null, x.role, null, null, true, count(*)::int, true
+       select null, x.role, null, null, true, false, count(*)::int, true
          from workers w, unnest(w.roles) as x(role)
         where w.status = 'active' and w.agency_connection_id is null
           and not exists (select 1 from business_roles r where lower(r.name) = lower(x.role))
@@ -85,11 +85,26 @@ export class IndustryController {
   addRole(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { required: true, max: 60 })!;
     const area = text(body, 'area', { max: 60 });
+    const adultsOnly = bool(body, 'adultsOnly') ?? false;
     return withTenant(this.pool, t.tenantId, async db => {
       const r = await db.query(
-        `insert into business_roles(tenant_id, name, area) values ($1,$2,$3) on conflict do nothing
-         returning id, name, area, active`, [t.tenantId, name, area]);
+        `insert into business_roles(tenant_id, name, area, adults_only) values ($1,$2,$3,$4) on conflict do nothing
+         returning id, name, area, active, adults_only as "adultsOnly"`, [t.tenantId, name, area, adultsOnly]);
       if (!r.rowCount) throw new BadRequestException(`There is already a role called ${name}`);
+      return r.rows[0];
+    });
+  }
+
+  /** Sets a role on the business's list as 18 and over only (migration 0082): under-18s on it get a warning. */
+  @Roles('owner', 'admin')
+  @Patch('roles/:id')
+  updateRole(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const adultsOnly = bool(body, 'adultsOnly');
+    if (adultsOnly === null) throw new BadRequestException('Say whether the role is 18 and over only');
+    return withTenant(this.pool, t.tenantId, async db => {
+      const r = await db.query(
+        `update business_roles set adults_only = $2 where id = $1 returning id, name, area, active, adults_only as "adultsOnly"`, [id, adultsOnly]);
+      if (!r.rowCount) throw new NotFoundException('{Role} not found');
       return r.rows[0];
     });
   }

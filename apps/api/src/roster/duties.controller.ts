@@ -15,7 +15,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_REQUIREMENTS = 20;
 const MAX_DUTIES_PER_SHIFT = 20;
 
-const DUTY_COLS = `d.id, d.name, d.description, d.active,
+const DUTY_COLS = `d.id, d.name, d.description, d.active, d.adults_only as "adultsOnly",
   coalesce((select json_agg(json_build_object('credentialTypeId', r.credential_type_id, 'typeName', ct.name, 'severity', r.severity) order by ct.name)
               from shift_duty_requirements r join credential_types ct on ct.id = r.credential_type_id where r.duty_id = d.id), '[]'::json) as requirements`;
 
@@ -85,29 +85,33 @@ export class ShiftDutiesController {
     const name = text(body, 'name', { required: true, max: 80 })!;
     const description = text(body, 'description', { max: 300 });
     const reqs = requirementsField(body) ?? [];
+    const adultsOnly = bool(body, 'adultsOnly') ?? false;
     return withTenant(this.pool, t.tenantId, async db => {
       let id: string;
       try {
-        id = (await db.query<{ id: string }>('insert into shift_duties(tenant_id, name, description) values ($1,$2,$3) returning id', [t.tenantId, name, description])).rows[0].id;
+        id = (await db.query<{ id: string }>('insert into shift_duties(tenant_id, name, description, adults_only) values ($1,$2,$3,$4) returning id',
+          [t.tenantId, name, description, adultsOnly])).rows[0].id;
       } catch (err) { throw duplicate(err, name); }
       await setRequirements(db, t.tenantId, id, reqs);
       return dutyById(db, id);
     });
   }
 
-  /** Change the name, description, whether it's in use, or (replacing the list) what it needs. */
+  /** Change the name, description, whether it's in use, whether it's 18 and over only, or (replacing the list) what it needs. */
   @Roles('owner', 'admin')
   @Patch('shift-duties/:id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const name = text(body, 'name', { max: 80 });
     const description = body && 'description' in body ? text(body, 'description', { max: 300 }) : undefined;
     const active = bool(body, 'active');
+    const adultsOnly = bool(body, 'adultsOnly');
     const reqs = requirementsField(body);
     return withTenant(this.pool, t.tenantId, async db => {
       try {
         const n = (await db.query(
-          `update shift_duties set name = coalesce($2, name), description = case when $3 then $4 else description end, active = coalesce($5, active)
-            where id = $1`, [id, name, description !== undefined, description ?? null, active])).rowCount;
+          `update shift_duties set name = coalesce($2, name), description = case when $3 then $4 else description end, active = coalesce($5, active),
+                  adults_only = coalesce($6, adults_only)
+            where id = $1`, [id, name, description !== undefined, description ?? null, active, adultsOnly])).rowCount;
         if (!n) throw new NotFoundException('Duty not found');
       } catch (err) { throw duplicate(err, name); }
       if (reqs) await setRequirements(db, t.tenantId, id, reqs);

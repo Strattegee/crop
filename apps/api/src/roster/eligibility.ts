@@ -9,8 +9,10 @@
  * - approved leave on the shift date (availability.ts).
  * Warnings (shown, not blocking): warning-level credential rules, credentials expiring soon,
  * less rest between shifts than the business's minimum, requested leave, not being available, and a gender other
- * than the one requested for the shift, or none recorded (David, 30 Oct).
+ * than the one requested for the shift, or none recorded (David, 30 Oct), and someone under 18 on an 18-and-over role
+ * or duty or on late-night work (age.ts, David 3 Nov).
  */
+import { ageReasons, type AgeFacts } from './age.js';
 import { requestReasons, type DayRequestFacts } from './day-requests.js';
 import { addDays, credentialStatus, type ComplianceIssue, type CredentialFacts } from '../workforce/compliance.js';
 import { employmentReason, type TermDates } from './employment.js';
@@ -83,12 +85,14 @@ export interface EligibilityInput {
   gender?: Gender | null;
   /** Their requests for the shift's date (migration 0080): a shift that doesn't fit one is a warning. */
   dayRequests?: DayRequestFacts[];
+  /** Date of birth and the shift's 18-and-over role and duties (migration 0082): under 18 is a warning. */
+  age?: AgeFacts;
 }
 
 export interface OperatorNeed { equipmentName: string; credentialTypeId: string; typeName: string }
 
 export type ReasonCode = 'role' | 'credential' | 'right_to_work' | 'double_booked' | 'visa_hours' | 'rest'
-  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender' | 'request';
+  | 'operator' | 'equipment_status' | 'equipment_check' | 'leave' | 'availability' | 'employment' | 'gender' | 'request' | 'age';
 export interface Reason { code: ReasonCode; message: string }
 export interface Eligibility { eligible: boolean; blocks: Reason[]; warnings: Reason[] }
 
@@ -142,6 +146,7 @@ export function shiftEligibility(shift: ShiftFacts, p: EligibilityInput): Eligib
 
   const g = genderReason(p.name, shift.genderRequested, p.gender);
   if (g) warnings.push(g);
+  if (p.age) warnings.push(...ageReasons(p.name, shift, p.age));
 
   const employed = employmentReason(p.name, shift.localDate, p.employment ?? []);
   if (employed) (employed.hard ? blocks : warnings).push({ code: 'employment', message: employed.message });

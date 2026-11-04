@@ -9,7 +9,7 @@ import { addDuty, saveDuty, setDutyActive } from './actions';
 export const dynamic = 'force-dynamic';
 
 type Duty = {
-  id: string; name: string; description: string | null; active: boolean; industries?: string[];
+  id: string; name: string; description: string | null; active: boolean; adultsOnly?: boolean; industries?: string[];
   requirements: { credentialTypeId: string; typeName: string; severity: 'hard' | 'warning' | 'optional' }[];
 };
 type CredentialType = { id: string; name: string; active: boolean; industries?: string[] };
@@ -77,6 +77,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
             <div className="form-row">
               <label>Name<input name="name" defaultValue={editing.name} maxLength={80} required /></label>
               <label>Description<input name="description" defaultValue={editing.description ?? ''} maxLength={300} /></label>
+              <label className="inline"><input type="checkbox" name="adultsOnly" defaultChecked={!!editing.adultsOnly} /> 18 and over only</label>
             </div>
             <NeedsFields groups={typeGroups} duty={editing} />
             <div className="form-row">
@@ -98,7 +99,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
                 needsHeadings(dutyGroups) && <tr key={`g-${g.key}`} className="grp-row"><th colSpan={3}>{g.label} <span className="muted">({g.items.length})</span></th></tr>,
                 ...g.items.map(d => (
                 <tr key={d.id} style={{ opacity: d.active ? 1 : 0.5 }}>
-                  <td><b>{d.name}</b>{!d.active && ' (off)'}{d.description && <div className="muted small">{d.description}</div>}</td>
+                  <td><b>{d.name}</b>{d.adultsOnly && <b className="badge warn" title="18 and over only: someone under 18 on it gets a warning" style={{ marginLeft: 6 }}>18+</b>}{!d.active && ' (off)'}{d.description && <div className="muted small">{d.description}</div>}</td>
                   <td>
                     {d.requirements.length === 0 ? <span className="muted">Nothing yet</span> : d.requirements.map(r => (
                       <div key={r.credentialTypeId}>{r.typeName} <span className="muted small">· {({ hard: 'must have', warning: 'should have', optional: 'optional' } as const)[r.severity]}</span></div>
@@ -129,6 +130,7 @@ export default async function ShiftDutiesPage({ searchParams }: { searchParams: 
             <div className="form-row">
               <label>Name<input name="name" required maxLength={80} placeholder="e.g. Serves alcohol" /></label>
               <label>Description<input name="description" maxLength={300} placeholder="e.g. The bar is open" /></label>
+              <label className="inline"><input type="checkbox" name="adultsOnly" /> 18 and over only</label>
             </div>
             <NeedsFields groups={typeGroups} />
             <button type="submit" className="btn">Add</button>

@@ -2,6 +2,7 @@
  * The employee card (David, 31 Oct): a compact summary of a person, the same everywhere it appears (the person's
  * page, the worker list, later the recruitment board and the roster). Pure rules here; the data in `cardsFor`.
  */
+import { isUnder18 } from '../roster/age.js';
 import type { PoolClient } from 'pg';
 import { addDays } from './compliance.js';
 
@@ -37,6 +38,8 @@ export interface Card extends CardFacts {
   weekHours: number;
   /** The next shift that hasn't started, e.g. "Sat 1 Nov 06:00 · The Grand Café". */
   nextShift: { startsAt: string; label: string } | null;
+  /** Under 18 today by their date of birth (migration 0082); false when it isn't recorded. Never the age itself. */
+  under18: boolean;
 }
 
 /** Monday on or before a date (YYYY-MM-DD). */
@@ -46,7 +49,7 @@ const mondayOf = (d: string) => addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCD
 export async function cardsFor(db: PoolClient, ids: string[], today: string): Promise<Map<string, Card>> {
   const out = new Map<string, Card>();
   if (!ids.length) return out;
-  for (const id of ids) out.set(id, { nextExpiry: null, held: [], toCheck: 0, employmentType: null, contractedHours: null, weekHours: 0, nextShift: null });
+  for (const id of ids) out.set(id, { nextExpiry: null, held: [], toCheck: 0, employmentType: null, contractedHours: null, weekHours: 0, nextShift: null, under18: false });
 
   const creds = new Map<string, CardCredential[]>();
   for (const r of (await db.query<CardCredential & { worker_id: string }>(
@@ -64,6 +67,11 @@ export async function cardsFor(db: PoolClient, ids: string[], today: string): Pr
       where worker_id = any($1) and withdrawn_at is null and starts_on <= $2 and (ends_on is null or ends_on >= $2)
       order by worker_id, starts_on desc`, [ids, today])).rows) {
     Object.assign(out.get(r.worker_id)!, { employmentType: r.employment_type, contractedHours: r.contracted_hours });
+  }
+
+  for (const r of (await db.query<{ id: string; dob: string }>(
+    `select id, to_char(date_of_birth, 'YYYY-MM-DD') as dob from workers where id = any($1) and date_of_birth is not null`, [ids])).rows) {
+    out.get(r.id)!.under18 = isUnder18(r.dob, today);
   }
 
   const monday = mondayOf(today);

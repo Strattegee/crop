@@ -26,6 +26,7 @@ export function PersonCard({ p, today, size = 'compact', link = true, country }:
             {link ? <Link href={`/workers/${p.id}`}>{name}</Link> : name}
             {p.preferredName && size === 'full' && <span className="muted"> ({p.firstName})</span>}
             {p.gender && <b className={`mk mk-g soft ${p.gender.toLowerCase()}`} title={p.gender === 'F' ? 'Female' : 'Male'}>{p.gender}</b>}
+            {c?.under18 && <span className="badge warn" title="Under 18 by the date of birth on their record">Under 18</span>}
             {STATUS_WORD[p.status] && <span className="badge neutral">{STATUS_WORD[p.status]}</span>}
           </div>
           <div className="pcard-roles">{p.roles.join(', ') || 'No roles yet'}</div>
