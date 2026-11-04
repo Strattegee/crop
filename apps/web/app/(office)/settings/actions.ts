@@ -31,10 +31,13 @@ export async function removeRule(id: string) {
   await attempt('/settings', () => api(`/credential-requirements/${id}`, { method: 'DELETE' }), 'Rule removed.');
 }
 
+/** Blank = 0 (distance never counts); anything else goes as typed for the API to check. */
+const freeKm = (v: string | null | undefined) => (!v || v.trim() === '' ? 0 : Number(v));
+
 export async function saveSettings(f: FormData) {
   await attempt('/settings', () => api('/settings', {
     method: 'PATCH',
-    body: { expiringWindowDays: Number(str(f, 'expiringWindowDays')), timezone: str(f, 'timezone'), country: str(f, 'country'), smsMonthlyCap: Number(str(f, 'smsMonthlyCap')), publishedChanges: str(f, 'publishedChanges'), shiftSwaps: str(f, 'shiftSwaps') },
+    body: { expiringWindowDays: Number(str(f, 'expiringWindowDays')), timezone: str(f, 'timezone'), country: str(f, 'country'), smsMonthlyCap: Number(str(f, 'smsMonthlyCap')), publishedChanges: str(f, 'publishedChanges'), shiftSwaps: str(f, 'shiftSwaps'), distanceFreeKm: freeKm(str(f, 'distanceFreeKm')) },
   }), 'Settings saved.');
 }
 

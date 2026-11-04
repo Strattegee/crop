@@ -17,7 +17,7 @@ type Role = { id: string; name: string; area: string | null; active: boolean; ad
 type Rule = { id: string; typeName: string; scope: string; role: string | null; severity: string };
 const LEVEL_LABEL: Record<string, string> = { hard: 'Must have', warning: 'Should have', optional: 'Optional' };
 type PackSummary = { id: string; name: string; description: string; appliedAt: string | null; counts: { roles: number; credentials: number; shiftCodes: number; equipmentTypes: number; items: number; duties?: number } };
-type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked'; shiftSwaps?: 'off' | 'approve' | 'automatic' };
+type Settings = { expiringWindowDays: number; timezone: string; country?: string; smsMonthlyCap: number; publishedChanges: 'open' | 'managers' | 'locked'; shiftSwaps?: 'off' | 'approve' | 'automatic'; distanceFreeKm?: number };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -312,9 +312,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <option value="automatic">On: made as soon as the colleague agrees</option>
             </select>
           </label>
+          <label>Distance from home counts beyond (km; blank or 0 = never)
+            <input name="distanceFreeKm" type="number" min={0} max={1000} defaultValue={settings.distanceFreeKm ? settings.distanceFreeKm : ''} disabled={!canEdit} />
+          </label>
           {canEdit && <button type="submit" className="btn">Save</button>}
         </form>
-        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off. When someone can't make a change themselves, they can ask for it on the roster, and an owner or admin approves or declines it. With {tw.lower(T.shift)} swaps on, {tw.lower(T.worker, true)} with the app can ask a colleague to take one of their published {tw.lower(T.shift, true)} or swap it for one of theirs; only colleagues who meet every rule for it are offered, and swaps waiting for approval show on the Dashboard.</p>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>When ranking people for a {tw.lower(T.shift)}, anyone who lives further than this from the {tw.lower(T.site)} (straight line between postcodes) comes after the others who are just as suitable, nearer first in 10 km steps; within it, or when we don't know, distance makes no difference. It never stops anyone being offered or booked. Texts over the monthly limit aren't sent; they show as "Not sent" in Messages. Every change to a published roster is recorded with who made it. Staff can still accept offers they were sent unless changes are turned off. When someone can't make a change themselves, they can ask for it on the roster, and an owner or admin approves or declines it. With {tw.lower(T.shift)} swaps on, {tw.lower(T.worker, true)} with the app can ask a colleague to take one of their published {tw.lower(T.shift, true)} or swap it for one of theirs; only colleagues who meet every rule for it are offered, and swaps waiting for approval show on the Dashboard.</p>
       </div>
     </>
   );

@@ -13,6 +13,8 @@ export interface MyShift {
   duties: string[];
   label: string;
   state: 'booked' | 'to_confirm';
+  /** Approximate straight-line km from their home postcode to the site (David, 4 Nov); null when unknown. */
+  distanceKm?: number | null;
 }
 
 export interface MyOffer {
@@ -20,6 +22,22 @@ export interface MyOffer {
   expiresAt: string | null;
   offeredAt: string;
   shift: Omit<MyShift, 'state'>;
+}
+
+/**
+ * "12 km from home", "under 1 km from home"; null when unknown (David, 4 Nov: so people see how far it is before
+ * accepting). Keep in step with `homeWords` in the API's geo/distance.ts.
+ */
+export function fromHome(km: number | null | undefined): string | null {
+  if (km === null || km === undefined || !Number.isFinite(km) || km < 0) return null;
+  if (km < 1) return 'under 1 km from home';
+  return `${Math.round(km).toLocaleString('en-AU')} km from home`;
+}
+
+/** The site line on a shift or offer: "Harbour Kitchen · 12 km from home" (distance only when known). */
+export function siteLine(s: { site: string; distanceKm?: number | null }): string {
+  const d = fromHome(s.distanceKm);
+  return d ? `${s.site} · ${d}` : s.site;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

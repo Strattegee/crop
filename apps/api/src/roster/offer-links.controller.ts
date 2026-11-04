@@ -1,3 +1,4 @@
+import { homeDistances } from '../geo/distance-data.js';
 import { Controller, Get, HttpCode, Inject, NotFoundException, Param, Post } from '@nestjs/common';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -35,11 +36,13 @@ export class OfferLinksController {
   }
 
   private async view(db: PoolClient, offerId: string) {
-    const o = (await db.query<{ shift_id: string; status: string; expires_at: Date | null; first: string; business: string }>(
-      `select o.shift_id, o.status, o.expires_at, coalesce(w.preferred_name, w.first_name) as first, t.name as business
+    const o = (await db.query<{ shift_id: string; worker_id: string; status: string; expires_at: Date | null; first: string; business: string }>(
+      `select o.shift_id, o.worker_id, o.status, o.expires_at, coalesce(w.preferred_name, w.first_name) as first, t.name as business
          from shift_offers o join workers w on w.id = o.worker_id join tenants t on t.id = o.tenant_id where o.id = $1`, [offerId])).rows[0];
     const s = await shiftById(db, o.shift_id);
     const w = await wordsFor(db);
+    // How far the site is from their home (David, 4 Nov): the number only, never an address.
+    const distanceKm = (await homeDistances(db, s.facilityId, [o.worker_id])).get(o.worker_id) ?? null;
     return {
       business: o.business,
       // The business's word for a shift (Settings → Words we use), for the page's wording.
@@ -49,7 +52,7 @@ export class OfferLinksController {
       expiresAt: o.expires_at,
       shift: {
         label: shiftLabel(s), role: s.role, date: s.localDate, start: s.localStart, end: s.localEnd,
-        site: s.facilityName, area: s.areaName, timezone: s.timezone, cancelled: s.status === 'cancelled',
+        site: s.facilityName, area: s.areaName, timezone: s.timezone, cancelled: s.status === 'cancelled', distanceKm,
       },
     };
   }

@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { acrossSites } from '@crop/db';
-import { postcodeDistance } from './distance.js';
+import { DEFAULT_DISTANCE_FREE_KM, farAwayLast, postcodeDistance } from './distance.js';
 
 /**
  * Approximate straight-line distance (km, 0.1) from each person's current home address postcode to a site's
@@ -23,14 +23,42 @@ export async function homeDistances(db: PoolClient, facilityId: string, workerId
   return out;
 }
 
+/**
+ * How far one person's home is from each of several sites (km, 0.1; null when unknown), for their own offers and
+ * shifts in the app (David, 4 Nov). Only the numbers leave this function.
+ */
+export async function myDistances(db: PoolClient, workerId: string, facilityIds: string[]): Promise<Map<string, number | null>> {
+  const ids = [...new Set(facilityIds)];
+  const out = new Map<string, number | null>(ids.map(id => [id, null]));
+  if (!ids.length) return out;
+  const home = await acrossSites(db, async () => (await db.query<{ country: string; postcode: string | null }>(
+    `select country, postcode from worker_addresses
+      where is_current and removed_at is null and replaced_at is null and worker_id = $1`, [workerId])).rows[0]);
+  if (!home?.postcode) return out;
+  for (const f of (await db.query<{ id: string; country: string; postcode: string | null }>(
+    'select id, country, postcode from facilities where id = any($1)', [ids])).rows) out.set(f.id, postcodeDistance(home, f));
+  return out;
+}
+
 /** The shift's site, for `withDistance`. */
 async function shiftSite(db: PoolClient, shiftId: string): Promise<string | null> {
   return (await db.query<{ facility_id: string }>('select facility_id from shifts where id = $1', [shiftId])).rows[0]?.facility_id ?? null;
 }
 
-/** Adds `distanceKm` (null when unknown) to each candidate: display only, never a block and not part of the order. */
-export async function withDistance<C extends { workerId: string }>(db: PoolClient, shiftId: string, list: C[]): Promise<(C & { distanceKm: number | null })[]> {
+/** The business's free range (km; 0 = distance never counts), within withTenant. */
+export async function distanceFreeKm(db: PoolClient): Promise<number> {
+  const r = (await db.query<{ distance_free_km: number }>('select distance_free_km from tenant_settings where tenant_id = app_tenant_id()')).rows[0];
+  return r ? r.distance_free_km : DEFAULT_DISTANCE_FREE_KM;
+}
+
+/**
+ * Adds `distanceKm` (null when unknown) to each candidate and puts people beyond the business's free range after the
+ * others in their eligibility group (`farAwayLast`; David, 4 Nov). Never a block.
+ */
+export async function withDistance<C extends { workerId: string; eligible: boolean; available?: boolean; warnings: unknown[]; team?: unknown }>(
+  db: PoolClient, shiftId: string, list: C[],
+): Promise<(C & { distanceKm: number | null })[]> {
   const facilityId = await shiftSite(db, shiftId);
   const d = facilityId ? await homeDistances(db, facilityId, list.map(c => c.workerId)) : new Map<string, number | null>();
-  return list.map(c => ({ ...c, distanceKm: d.get(c.workerId) ?? null }));
+  return farAwayLast(list.map(c => ({ ...c, distanceKm: d.get(c.workerId) ?? null })), await distanceFreeKm(db));
 }

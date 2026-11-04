@@ -10,7 +10,9 @@ export type OfferView = {
   word?: { one: string; lower: string };
   /** Agency offers: the employer the agency's person would work for. */
   employer?: string;
-  shift: { label: string; role: string; date: string; start: string; end: string; site: string; area: string | null; timezone: string; cancelled: boolean };
+  shift: { label: string; role: string; date: string; start: string; end: string; site: string; area: string | null; timezone: string; cancelled: boolean;
+    /** Approximate km from their home postcode to the site (David, 4 Nov); null or missing when unknown. */
+    distanceKm?: number | null };
 };
 
 export type OfferResult = { ok: true; view: OfferView } | { ok: false; status: number; message: string };
