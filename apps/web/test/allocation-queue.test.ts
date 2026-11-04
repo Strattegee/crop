@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
+  BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, nearHereLine, nearestFirst, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
 } from '../lib/allocation-queue';
 
 const NOW = Date.parse('2026-11-02T08:00:00Z');
@@ -45,8 +45,8 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('keeps the screen’s state in the URL, short', () => {
     const id = '6f1c1f8e-0b6a-4a51-9a51-1b2c3d4e5f60';
     const p = parseQueueParams({ stage: 'released', region: 'VIC', days: '7', shift: id, clientId: 'nope', view: 'odd' });
-    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null });
-    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null });
+    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null, near: false });
+    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null, near: false });
     expect(parseQueueParams({ office: 'ALL' }).office).toBe('all');
     expect(parseQueueParams({ office: id }).office).toBe(id);
     expect(parseQueueParams({ office: 'Melbourne' }).office).toBeNull();
@@ -163,5 +163,27 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
       .toEqual({ ok: false, text: 'Nothing released. Not released (1): X: Someone is on it now.' });
     const many = Array.from({ length: 7 }, (_, i) => ({ label: `S${i}`, offered: 0, reason: 'Already offered' }));
     expect(bulkReleaseMessage([{ label: 'ok', offered: 3 }, ...many]).text).toContain('S4: Already offered; and 2 more.');
+  });
+});
+
+describe('distance from home on the fill panel (David, 4 Nov)', () => {
+  const p = (name: string, distanceKm: number | null, eligible = true) => ({ workerId: name, name, eligible, distanceKm, offer: null });
+  it('words the best person line with the distance first', () => {
+    expect(nearHereLine(12.4, 'Worked here 3 times · last 22 Sep')).toBe('12 km · Worked here 3 times · last 22 Sep');
+    expect(nearHereLine(null, 'New to this site')).toBe('New to this site');
+    expect(nearHereLine(0.2, 'New to this site')).toBe('<1 km · New to this site');
+  });
+  it('sorts nearest first only when asked, unknown last, otherwise the API order', () => {
+    const list = [p('A', 30), p('B', null), p('C', 5), p('D', 30), p('E', 2, false)];
+    expect(nearestFirst(list).map(x => x.name)).toEqual(['E', 'C', 'A', 'D', 'B']);
+    expect(bestPeople(list).map(x => x.name)).toEqual(['A', 'B', 'C', 'D']);
+    expect(bestPeople(list, 5, null, true).map(x => x.name)).toEqual(['C', 'A', 'D', 'B']);
+    expect(releasePick(list, 'top', null, true)).toEqual(['C', 'A', 'D', 'B']);
+  });
+  it('keeps Nearest first in the URL', () => {
+    const q = parseQueueParams({ near: '1', shift: '00000000-0000-4000-8000-000000000001' });
+    expect(q.near).toBe(true);
+    expect(queueHref(q)).toContain('near=1');
+    expect(queueHref(q, { near: false })).not.toContain('near');
   });
 });

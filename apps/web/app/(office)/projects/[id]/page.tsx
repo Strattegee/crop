@@ -3,6 +3,7 @@ import { api } from '../../../../lib/api';
 import { currentAgency } from '../../../../lib/current-user';
 import { Badge } from '../../../../lib/format';
 import { moneyFor } from '../../../../lib/money';
+import { DISTANCE_TITLE, distanceWords } from '../../../../lib/distance';
 import { placeLine, zoneName } from '../../../../lib/places';
 import { PlaceFields } from '../../../../lib/place-fields';
 import {
@@ -20,7 +21,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 type Member = { id: string; workerId: string; name: string; roles: string[]; teamRole: string; areaId: string | null; areaName: string | null;
-  startsOn: string; endsOn: string | null; state: 'current' | 'upcoming' | 'ended'; line: string };
+  startsOn: string; endsOn: string | null; state: 'current' | 'upcoming' | 'ended'; line: string; distanceKm?: number | null };
 type Allocation = { id: string; equipmentId: string; equipmentName: string; typeName: string; equipmentStatus: string; areaId: string | null;
   areaName: string | null; note: string | null; startsOn: string; endsOn: string | null; state: 'current' | 'upcoming' | 'ended'; line: string;
   checkState?: 'ok' | 'due_soon' | 'overdue'; checks?: { name: string; dueOn: string }[] };
@@ -78,6 +79,13 @@ export default async function ProjectPage({ params, searchParams }: {
 
   const team = tab === 'team' ? await api<Member[]>(`/facilities/${id}/team${sp.past ? '?all=true' : ''}`) : p.team;
   const people = tab === 'team' ? await api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []) : [];
+  // How far each person lives from here (David, 4 Nov): approximate km between postcodes, never the address.
+  const joining = tab === 'team' ? joinable(people, team) : [];
+  const away = joining.length
+    ? (await api<{ distances: Record<string, number | null> }>(`/facilities/${id}/distances`, { method: 'POST', body: { workerIds: joining.map(w => w.id) } })
+      .catch(() => ({ distances: {} as Record<string, number | null> }))).distances
+    : {};
+  const showDistance = team.some(m => m.distanceKm != null);
   const allocations = tab === 'equipment' ? await api<Allocation[]>(`/facilities/${id}/equipment${sp.past ? '?all=true' : ''}`) : [];
   const [equipment, sites] = tab === 'equipment' ? await Promise.all([
     api<{ id: string; name: string; typeName: string; status: string }[]>('/equipment').catch(() => []),
@@ -130,7 +138,7 @@ export default async function ProjectPage({ params, searchParams }: {
           <h2>Team</h2>
           {p.team.length === 0 ? <p className="muted" style={{ margin: 0 }}>Nobody on the team yet. <Link href={href('team')}>Add people</Link>; they come first when you fill this {tw.lower(T.project)}&apos;s {shifts}.</p> : (
             <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {p.team.slice(0, 12).map(m => <li key={m.id}><Link href={`/workers/${m.workerId}`}>{m.name}</Link> <span className="muted small">· {TEAM_ROLE_LABEL[m.teamRole]}{m.areaName && ` · ${m.areaName}`}{m.state === 'upcoming' && ` · ${m.line}`}</span></li>)}
+              {p.team.slice(0, 12).map(m => <li key={m.id}><Link href={`/workers/${m.workerId}`}>{m.name}</Link> <span className="muted small">· {TEAM_ROLE_LABEL[m.teamRole]}{m.areaName && ` · ${m.areaName}`}{m.state === 'upcoming' && ` · ${m.line}`}{distanceWords(m.distanceKm) && ` · ${distanceWords(m.distanceKm)} from home`}</span></li>)}
               {p.team.length > 12 && <li><Link href={href('team')}>All {p.team.length}</Link></li>}
             </ul>
           )}
@@ -193,13 +201,14 @@ export default async function ProjectPage({ params, searchParams }: {
           <p className="muted small">Who belongs to this {tw.lower(T.project)}. Separate from {shifts}: the team comes first when you fill its {shifts}, and anyone else can still work them.</p>
           {team.length === 0 ? <p className="muted">Nobody yet.</p> : (
             <table className="proj-stack">
-              <thead><tr><th>Person</th><th>On the team as</th><th>{tw.one(T.area)}</th><th>Dates</th><th /></tr></thead>
+              <thead><tr><th>Person</th><th>On the team as</th><th>{tw.one(T.area)}</th><th>Dates</th>{showDistance && <th title={DISTANCE_TITLE}>From home</th>}<th /></tr></thead>
               <tbody>{team.map(m => (
                 <tr key={m.id} style={{ opacity: m.state === 'ended' ? 0.55 : 1 }}>
                   <td><Link href={`/workers/${m.workerId}`}>{m.name}</Link><div className="muted small">{m.roles.join(', ')}</div></td>
                   <td>{TEAM_ROLE_LABEL[m.teamRole]}</td>
                   <td>{m.areaName ?? <span className="muted">Whole {tw.lower(T.project)}</span>}</td>
                   <td className="small">{m.line}</td>
+                  {showDistance && <td className="small" title={DISTANCE_TITLE}>{distanceWords(m.distanceKm) ?? <span className="muted">–</span>}</td>}
                   <td>
                     <div className="proj-row-actions">
                       <details>
@@ -226,7 +235,7 @@ export default async function ProjectPage({ params, searchParams }: {
             <label>Person
               <select name="workerId" required defaultValue="">
                 <option value="" disabled>Choose…</option>
-                {joinable(people, team).map(w => <option key={w.id} value={w.id}>{w.preferredName || w.firstName} {w.lastName}{w.roles.length ? ` (${w.roles.join(', ')})` : ''}</option>)}
+                {joining.map(w => <option key={w.id} value={w.id}>{w.preferredName || w.firstName} {w.lastName}{w.roles.length ? ` (${w.roles.join(', ')})` : ''}{distanceWords(away[w.id]) ? ` · ${distanceWords(away[w.id])}` : ''}</option>)}
               </select>
             </label>
             <label>As<select name="teamRole" defaultValue="worker"><option value="worker">Worker</option><option value="supervisor">Supervisor</option></select></label>

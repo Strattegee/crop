@@ -17,6 +17,7 @@ import { actorOf } from './publishing.js';
 import { rosterChangeRefusal } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
 import { withSiteHistory } from './site-history.js';
+import { withDistance } from '../geo/distance-data.js';
 import { withTeam } from '../projects/team-data.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,8 +61,8 @@ export class BankFillController {
       const latest = new Map<string, OfferRow>();
       for (const o of offers) latest.set(o.workerId, o);
       const all = rankCandidates(await eligibilityForShift(db, t.tenantId, id));
-      const pool = await withSiteHistory(db, id, await withTeam(db, id,
-        everyone === 'true' ? all : all.filter(c => (BANK_FILL_TYPES as readonly string[]).includes(c.employmentType ?? ''))));
+      const pool = await withDistance(db, id, await withSiteHistory(db, id, await withTeam(db, id,
+        everyone === 'true' ? all : all.filter(c => (BANK_FILL_TYPES as readonly string[]).includes(c.employmentType ?? '')))));
       return {
         shift: t.role === 'supervisor' ? supervisorShift(shift) : shift,
         candidates: pool.map(c => ({ ...c, offer: latest.get(c.workerId) ? { id: latest.get(c.workerId)!.id, status: latest.get(c.workerId)!.status } : null })),

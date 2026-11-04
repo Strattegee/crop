@@ -87,7 +87,7 @@ export async function createClientOrder(f: FormData) {
     + contactSavedNote(contactSaved, str(f, 'requestedByName'), tw.lower(T.client)));
 }
 
-type BankCandidate = { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null };
+type BankCandidate = { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null; distanceKm?: number | null };
 const backTo = (f: FormData) => {
   const b = str(f, 'back') ?? '/allocations';
   return b.startsWith('/allocations') ? b : '/allocations';
@@ -104,7 +104,8 @@ export async function offerFromQueue(shiftId: string, how: 'top' | 'release', f:
   let offered = 0;
   await attempt(backTo(f), async () => {
     const { shift, candidates } = await api<{ shift: { pulledOutName: string | null }; candidates: BankCandidate[] }>(`/shifts/${shiftId}/bank-fill?everyone=true`);
-    const pick = releasePick(candidates, how, shift.pulledOutName); // never the person who just pulled out of it
+    // Never the person who just pulled out of it; with "Nearest first" on, the top five are the nearest (as the panel shows them).
+    const pick = releasePick(candidates, how, shift.pulledOutName, f.get('near') === '1');
     if (!pick.length) throw new ApiError(409, `Nobody else can work this ${tw.lower(T.shift)} right now. Try ${tw.lower(T.agency, true)}, or open it in the ${tw.lower(T.roster)} to see why.`);
     await api(`/shifts/${shiftId}/offers`, { method: 'POST', body: { workerIds: pick } });
     offered = pick.length;

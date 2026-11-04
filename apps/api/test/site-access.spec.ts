@@ -114,7 +114,7 @@ describe('site access: API and database (migration 0086)', () => {
       await http().post(`/workers/${ids[k]}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
     }
     await http().post(`/workers/${ids.ana}/addresses`).set(as('admin')).send({ label: 'Home', line1: '12 Example Street', suburb: 'Richmond', state: 'VIC', postcode: '3121' }).expect(201);
-    ids.A = (await http().post('/facilities').set(as('admin')).send({ name: 'Alpha House', state: 'VIC' }).expect(201)).body.id;
+    ids.A = (await http().post('/facilities').set(as('admin')).send({ name: 'Alpha House', state: 'VIC', postcode: '3000' }).expect(201)).body.id;
     ids.B = (await http().post('/facilities').set(as('admin')).send({ name: 'Bravo House', state: 'VIC' }).expect(201)).body.id;
     ids.limUser = await userId('lim@x.com');
     ids.supUser = await userId('sup@x.com');
@@ -203,6 +203,22 @@ describe('site access: API and database (migration 0086)', () => {
     await http().post(`/shifts/${ids.a1}/unassign`).set(as('sup')).send({ pulledOut: true }).expect(200);
     const cands = (await http().get(`/shifts/${ids.a1}/candidates`).set(as('sup')).expect(200)).body.candidates as { name: string }[];
     expect(cands.map(c => c.name).sort()).toEqual(['Ana Example', 'Ben Example']);
+    // Distance from home (David, 4 Nov): a supervisor sees how far, never the address or postcode.
+    const near = cands as unknown as { name: string; distanceKm: number | null }[];
+    const anaKm = near.find(c => c.name === 'Ana Example')!.distanceKm;
+    expect(anaKm).toBeGreaterThan(1);
+    expect(anaKm).toBeLessThan(10);
+    expect(near.find(c => c.name === 'Ben Example')!.distanceKm).toBeNull(); // no address on file
+    const fill = (await http().get(`/shifts/${ids.a1}/bank-fill?everyone=true`).set(as('sup')).expect(200)).body;
+    expect(fill.candidates.find((c: { name: string }) => c.name === 'Ana Example').distanceKm).toBe(anaKm);
+    const dist = (await http().post(`/facilities/${ids.A}/distances`).set(as('sup')).send({ workerIds: [ids.ana, ids.ben, 'nope'] }).expect(200)).body;
+    expect(dist).toEqual({ distances: { [ids.ana]: anaKm, [ids.ben]: null } });
+    for (const body of [cands, fill, dist]) expect(JSON.stringify(body)).not.toMatch(/Richmond|3121|Example Street/);
+    // Not their site: nothing; another business: nothing.
+    await http().post(`/facilities/${ids.B}/distances`).set(as('sup')).send({ workerIds: [ids.ana] }).expect(404);
+    await http().post(`/facilities/${ids.A}/distances`).set(as('nosy')).send({ workerIds: [ids.ana] }).expect(404);
+    const nosySite = (await http().post('/facilities').set(as('nosy')).send({ name: 'Nosy Place', state: 'VIC', postcode: '3000' }).expect(201)).body.id;
+    expect((await http().post(`/facilities/${nosySite}/distances`).set(as('nosy')).send({ workerIds: [ids.ana] }).expect(200)).body).toEqual({ distances: { [ids.ana]: null } });
     await http().post(`/shifts/${ids.a1}/assign`).set(as('sup')).send({ workerId: ids.ana }).expect(200);
     // Offering queues messages (the message log is written, though supervisors can't read it).
     const offered = await http().post(`/shifts/${ids.a2}/offers`).set(as('sup')).send({ workerIds: [ids.ana] });

@@ -15,7 +15,7 @@ import { packById } from '../industry/packs.js';
 import { applyPack } from '../industry/apply-pack.js';
 import {
   CALL_NOTES_WORKER, CLIENTS, DAY_REQUEST_NOTES, FIRST_F, FIRST_M, OFFICERS, OFFICES, ORDER_NOTES, OFFICER_SUBJECT, ROLE_GROUPS,
-  SLOTS, SURNAMES, WEEKEND, WORKER_NOTES, officerEmail, type AreaKind, type ClientDef, type SiteDef,
+  HOME_PLACES, HOME_STREETS, SLOTS, SURNAMES, WEEKEND, WORKER_NOTES, officerEmail, type AreaKind, type ClientDef, type SiteDef,
 } from './demo-data.js';
 import { DemoRefusal, planCleanup, realLookingData, runCleanup, tenantRefusal, triggerTables } from './demo-cleanup.js';
 import { addDays, daysBetween, localDateOf, localTimeOf, localToUtc, mondayOf, periodOf, seededRandom, weekdayOf } from './demo-time.js';
@@ -259,6 +259,8 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
   const workers: Worker[] = [];
   const workerRows: Row[] = [];
   const termRows: Row[] = [];
+  const addressRows: Row[] = [];
+  const officeStateOf = (k: string) => OFFICES.find(o => o.key === k)?.state ?? 'VIC';
   const credRows: Row[] = [];
   const credEventRows: Row[] = [];
   const rtwRows: Row[] = [];
@@ -294,6 +296,12 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
       const created = new Date(localToUtc(startsOn, '10:00', zone).getTime() - 3 * 86_400_000);
       workerRows.push({ id: w.id, tenant_id: tenantId, first_name: first, last_name: last, preferred_name: null, email: w.email, status: 'active',
         roles, notes: chance(0.18) ? pick(WORKER_NOTES) : null, created_at: created, updated_at: created, gender: w.gender, recruitment_stage: null, stage_changed_at: null });
+      // An invented home near their office (a real suburb and postcode, a made-up street), so distances show.
+      if (chance(0.94)) {
+        const [suburb, postcode] = pick(HOME_PLACES[office] ?? HOME_PLACES.mel!);
+        addressRows.push({ id: randomUUID(), tenant_id: tenantId, worker_id: w.id, label: 'Home', line1: `${Math.floor(between(1, 199))} ${pick(HOME_STREETS)}`,
+          line2: null, suburb, region: officeStateOf(office), postcode, country: 'AU', is_current: true, created_at: created });
+      }
       termRows.push({ id: randomUUID(), tenant_id: tenantId, worker_id: w.id, employment_type: employment,
         contracted_hours: employment === 'part_time' ? pick([24, 30, 32]) : null, starts_on: startsOn, created_by: lead.id, created_at: created });
 
@@ -398,6 +406,7 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
 
   await put('workers', workerRows);
   await put('employment_terms', termRows);
+  await put('worker_addresses', addressRows);
   await put('worker_credentials', credRows);
   await put('credential_events', credEventRows);
   await put('right_to_work_records', rtwRows);

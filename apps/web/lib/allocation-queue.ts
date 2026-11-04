@@ -2,6 +2,7 @@
  * The allocation queue on Allocations (David chose layout A, 2 Nov 2026): pure helpers for tabs, office (region)
  * chips, bands, "starts in" and "waiting" times, and the URL that keeps the screen's state.
  */
+import { distanceWords } from './distance';
 
 export type LiveTab = 'all' | 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked_today';
 /** Outcome tabs (David, 4 Nov), only for calendar periods; keep in step with the API's `OUTCOME_TABS`. */
@@ -164,6 +165,8 @@ export type QueueParams = {
   period?: QueuePeriod | null;
   /** Rows to show for a calendar period (null = the first page). */
   limit?: number | null;
+  /** The fill panel's best people nearest first (`near=1`). */
+  near?: boolean;
 };
 
 /** `?office=`: all, mine, none or an office id; anything else is left to the default. */
@@ -215,6 +218,7 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
     view: view === 'new' || view === 'history' || view === 'employers' ? view : 'queue',
     period,
     limit: period && Number.isInteger(limit) && limit > PAGE_ROWS ? Math.min(limit, 5000) : null,
+    near: one('near') === '1',
   };
 }
 
@@ -232,6 +236,7 @@ export function queueHref(p: QueueParams, change: Partial<QueueParams> = {}): st
   else if (n.days !== 3) q.set('days', String(n.days));
   if (period && n.limit) q.set('limit', String(n.limit));
   if (n.shift) q.set('shift', n.shift);
+  if (n.near) q.set('near', '1');
   const s = q.toString();
   return s ? `/allocations?${s}` : '/allocations';
 }
@@ -266,8 +271,26 @@ export function personLine(c: { eligible: boolean; weekHours: number; warnings: 
  * The best people for the panel: up to `n` who can work it (ready first, as the API ranks them), skipping anyone
  * whose offer is still waiting and the person who just pulled out of it (`skipName`).
  */
-export function bestPeople<C extends { name: string; eligible: boolean; offer?: { status: string } | null }>(cands: C[], n = 5, skipName: string | null = null): C[] {
-  return cands.filter(c => c.eligible && c.offer?.status !== 'pending' && c.name !== skipName).slice(0, n);
+export function bestPeople<C extends { name: string; eligible: boolean; offer?: { status: string } | null; distanceKm?: number | null }>(
+  cands: C[], n = 5, skipName: string | null = null, near = false,
+): C[] {
+  const ok = cands.filter(c => c.eligible && c.offer?.status !== 'pending' && c.name !== skipName);
+  return (near ? nearestFirst(ok) : ok).slice(0, n);
+}
+
+/**
+ * "Nearest first" (David, 4 Nov; the panel's optional sort): people by distance from home, unknown distances last,
+ * otherwise in the API's order. Only when the office asks for it: distance is never part of the usual ranking.
+ */
+export function nearestFirst<C extends { distanceKm?: number | null }>(cands: C[]): C[] {
+  const far = (c: C) => (c.distanceKm === null || c.distanceKm === undefined ? Infinity : c.distanceKm);
+  return cands.map((c, i) => ({ c, i })).sort((a, b) => far(a.c) - far(b.c) || a.i - b.i).map(x => x.c);
+}
+
+/** The best person's second line: "12 km · Worked here 3 times · last 22 Sep" (distance only when known). */
+export function nearHereLine(distanceKm: number | null | undefined, here: string): string {
+  const d = distanceWords(distanceKm);
+  return d ? `${d} · ${here}` : here;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -294,13 +317,14 @@ export const BULK_MAX = 20;
 export const RELEASE_MAX = 50;
 
 /**
- * Who gets an offer from the queue: `top` = the best five, `release` = everyone who can work it (up to 50); never
- * anyone whose offer is still waiting, nor the person who pulled out of it.
+ * Who gets an offer from the queue: `top` = the best five (the nearest five with `near`, as the panel shows them),
+ * `release` = everyone who can work it (up to 50); never anyone whose offer is still waiting, nor the person who
+ * pulled out of it.
  */
-export function releasePick<C extends { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null }>(
-  cands: C[], how: 'top' | 'release', pulledOutName: string | null,
+export function releasePick<C extends { workerId: string; name: string; eligible: boolean; offer?: { status: string } | null; distanceKm?: number | null }>(
+  cands: C[], how: 'top' | 'release', pulledOutName: string | null, near = false,
 ): string[] {
-  return bestPeople(cands, how === 'top' ? 5 : RELEASE_MAX, pulledOutName).map(c => c.workerId);
+  return bestPeople(cands, how === 'top' ? 5 : RELEASE_MAX, pulledOutName, near).map(c => c.workerId);
 }
 
 /** The rows a band can release in one go: still New (nobody on it, nothing offered), in queue order, at most BULK_MAX. */

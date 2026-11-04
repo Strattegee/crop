@@ -840,6 +840,10 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-person .cut { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .q-name { font-weight: 600; font-size: 13px; }
 .q-here { color: var(--ok); }
+/* "Nearest first" on the fill panel's best people (distance from home, 4 Nov): a small toggle at the heading's end. */
+.q-sort { margin-left: auto; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--text); text-decoration: none; white-space: nowrap; }
+.q-sort:hover { background: var(--hover); }
+.q-sort.on { background: var(--sel-bg); color: var(--sel-text); border-color: var(--sel-bg); }
 .q-person-btns { display: flex; gap: 4px; }
 .q-person-btns form, .q-actions form, .q-big-actions form { margin: 0; }
 .q-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }

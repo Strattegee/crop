@@ -109,7 +109,7 @@ describe('projects: API', () => {
 
   it('sets up a project as a site of kind project', async () => {
     const p = (await http().post('/facilities').set(as('admin')).send({
-      name: 'Smith St Apartments', kind: 'project', code: 'P-2041', description: 'Six-storey build', state: 'VIC',
+      name: 'Smith St Apartments', kind: 'project', code: 'P-2041', description: 'Six-storey build', state: 'VIC', postcode: '3000',
       startsOn: ahead(-30), endsOn: ahead(150), managerUserId: ids.allocUser,
     }).expect(201)).body;
     expect(p).toMatchObject({ kind: 'project', code: 'P-2041', status: 'active', active: true, managerName: 'Alex Allocator', endsOn: ahead(150) });
@@ -170,6 +170,14 @@ describe('projects: API', () => {
     const ana = (await http().post(`/facilities/${ids.smith}/team`).set(as('alloc')).send({ workerId: ids.ana }).expect(201)).body;
     await http().post(`/site-members/${ana.id}/remove`).set(as('alloc')).send({ reason: 'Wrong person' }).expect(201);
     expect(((await http().get(`/facilities/${ids.smith}/team`).set(as('alloc')).expect(200)).body as { name: string }[]).map(x => x.name)).toEqual(['Ben Example']);
+    // How far they live from the project (David, 4 Nov): worked out from the home postcode, never the address.
+    await http().post(`/workers/${ids.ben}/addresses`).set(as('admin')).send({ line1: '1 Example Street', suburb: 'Geelong', state: 'VIC', postcode: '3220' }).expect(201);
+    const near = (await http().get(`/facilities/${ids.smith}/team`).set(as('alloc')).expect(200)).body as { distanceKm: number | null }[];
+    expect(near[0].distanceKm).toBeGreaterThan(55);
+    expect(near[0].distanceKm).toBeLessThan(70);
+    expect((await http().get(`/projects/${ids.smith}`).set(as('alloc')).expect(200)).body.team[0].distanceKm).toBe(near[0].distanceKm);
+    expect((await http().get(`/shifts/${s}/candidates`).set(as('alloc')).expect(200)).body.candidates
+      .map((x: { name: string; distanceKm: number | null }) => `${x.name}:${x.distanceKm === null ? '-' : 'km'}`)).toEqual(['Ben Example:km', 'Ana Example:-']);
     const audit = await owner.query(`select action from audit_log where table_name = 'site_members' and row_id = $1 order by id`, [ana.id]);
     expect(audit.rows.map(r => r.action)).toEqual(['insert', 'update']);
   });

@@ -5,6 +5,7 @@ import { DEFAULT_MARKER_LETTERS, type MarkerLetters } from '../../../lib/marker-
  */
 
 import { hereLine } from '../../../lib/allocation-queue';
+import { distanceWords } from '../../../lib/distance';
 
 export type Span = 'day' | 'week' | 'month';
 
@@ -542,9 +543,17 @@ export function multiAssignMessage(name: string, results: AssignOutcome[], count
 export type MenuCandidate = {
   workerId: string; name: string; weekHours: number; eligible: boolean; warnings: { message: string }[]; blocks: { message: string }[];
   siteHistory?: { shiftsHere: number; lastHere: string | null };
+  /** Approximate straight-line km from their home postcode to the site (null = unknown). */
+  distanceKm?: number | null;
 };
-/** `here` is the person's past work at the site ("Worked here 3 times · last 22 Sep"), only when every shift is at one site. */
-export type BestPerson = { workerId: string; name: string; hours: number; canDo: number; of: number; note: string | null; blocked: boolean; here: string | null; knowsSite: boolean };
+/**
+ * `here` is the person's past work at the site ("Worked here 3 times · last 22 Sep") and `distance` how far they live
+ * from it ("12 km"; David, 4 Nov), both only when every shift is at one site; display only.
+ */
+export type BestPerson = {
+  workerId: string; name: string; hours: number; canDo: number; of: number; note: string | null; blocked: boolean; here: string | null; knowsSite: boolean;
+  distance: string | null;
+};
 /** For the past-work line: the business's date and its word for a site (lower case). */
 export type HereWords = { today: string; site: string };
 
@@ -572,6 +581,7 @@ export function bestPeople(lists: MenuCandidate[][], top = 5, blockedShown = 3, 
       : e.warn ? reasonFor(e.c.name, e.warn) : null,
     here: here ? hereLine(e.c.siteHistory, here.today, here.site) : null,
     knowsSite: !!here && (e.c.siteHistory?.shiftsHere ?? 0) > 0,
+    distance: here ? distanceWords(e.c.distanceKm) : null,
   });
   return [...all.filter(e => e.canDo > 0).slice(0, top), ...all.filter(e => e.canDo === 0).slice(0, blockedShown)].map(row);
 }
