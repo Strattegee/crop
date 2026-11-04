@@ -15,8 +15,10 @@ import { addDays, rightToWorkIssue, todayIn } from '../workforce/compliance.js';
 import { rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { loadSettings } from '../workforce/settings.js';
 import { onboardingProgress } from '../workforce/onboarding.controller.js';
+import { loadFieldAccess } from '../workforce/field-access.controller.js';
+import { docAccess, type Access } from '../workforce/field-access.js';
 import { NOTICE_VERSION, noticeRefusal, noticeState, noticeUrl } from './notice.js';
-import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myRightToWork, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
+import { appAccessRefusal, appAccessState, removeAccessRefusal, MAX_MY_DAYS, myOnboardingLine, myRightToWork, myRightToWorkSeeOnly, myShiftState, myStep, notLinkedMessage } from './worker-app.js';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
@@ -173,7 +175,8 @@ export async function myOnboarding(db: PoolClient, tenantId: string, workerId: s
   if (!live) return null;
   const p = await onboardingProgress(db, tenantId, live.id);
   const rtw = p.steps.some(s => s.kind === 'right_to_work') ? await loadMyRightToWork(db, tenantId, workerId) : null;
-  const steps = p.steps.map(s => myStep(s, credentialsWord, rtw));
+  const canSend = await documentSending(db);
+  const steps = p.steps.map(s => myStep(s, credentialsWord, rtw, canSend));
   return {
     checklistName: p.checklistName, startedAt: p.startedAt,
     done: p.summary.done, total: p.summary.total, ready: p.summary.ready,
@@ -192,7 +195,23 @@ export async function loadMyRightToWork(db: PoolClient, tenantId: string, worker
   const settings = await loadSettings(db, tenantId);
   const facts = (await rightToWorkByWorker(db, [workerId])).get(workerId) ?? null;
   const issue = rightToWorkIssue(facts, todayIn(settings.timezone), settings.expiringWindowDays);
-  return myRightToWork(rec, issue?.problem ?? null);
+  const mine = myRightToWork(rec, issue?.problem ?? null);
+  return (await loadFieldAccess(db)).doc_right_to_work === 'approve' ? mine : myRightToWorkSeeOnly(mine);
+}
+
+/**
+ * Settings › Personal details for documents (migration 0088), as the app needs it: for a credential type id (or
+ * null / 'right-to-work' for right to work), whether the person may send it in the app, and whether they see it.
+ */
+export async function documentSending(db: PoolClient): Promise<(credentialTypeId: string | null) => boolean> {
+  const a = await documentAccess(db);
+  return id => a(id) === 'approve';
+}
+
+export async function documentAccess(db: PoolClient): Promise<(credentialTypeId: string | null) => Access> {
+  const access = await loadFieldAccess(db);
+  const cats = new Map((await db.query<{ id: string; category: string }>('select id, category::text from credential_types')).rows.map(r => [r.id, r.category]));
+  return id => docAccess(access, id === null || id === 'right-to-work' ? 'right_to_work' : cats.get(id) ?? '');
 }
 
 /** The worker app's own view (any signed-in member linked to a person here): their shifts and offers. */

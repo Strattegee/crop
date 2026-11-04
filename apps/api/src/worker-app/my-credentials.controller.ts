@@ -1,5 +1,5 @@
 import {
-  BadRequestException, ConflictException, Controller, Get, Inject, NotFoundException, Param, ParseUUIDPipe, Post, UploadedFile, UseInterceptors, Body,
+  BadRequestException, ConflictException, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, ParseUUIDPipe, Post, UploadedFile, UseInterceptors, Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiSecurity } from '@nestjs/swagger';
@@ -15,11 +15,11 @@ import { checkAndStore } from '../documents/file-checks.js';
 import { appliesTo, credentialStatus } from '../workforce/compliance.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { T, wordsFor } from '../terms/words.js';
-import { loadMyRightToWork, myOnboarding, requireLinked } from './worker-app.controller.js';
+import { documentAccess, loadMyRightToWork, myOnboarding, requireLinked } from './worker-app.controller.js';
 import { tellOffice } from './tell-office.js';
 import {
   appCredentialEmail, appRightToWorkEmail,
-  myAddRefusal, myRightToWorkFileRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedAddable, myNeedLine,
+  myAddRefusal, myRightToWorkFileRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedFor, myNeedLine, officeKeepsDocument,
 } from './worker-app.js';
 
 const LEVEL_ORDER = { hard: 0, warning: 1, optional: 2 } as const;
@@ -42,6 +42,10 @@ export class MyCredentialsController {
       const w = await requireLinked(db, auth);
       const roles = (await db.query<{ roles: string[] }>('select roles from workers where id = $1', [w.id])).rows[0].roles;
       const ctx = await complianceContext(db, t.tenantId);
+      // What the business lets them see and send of each kind of document (Settings › Personal details).
+      const access = await documentAccess(db);
+      const sees = (id: string) => access(id) !== 'hidden';
+      const sends = (id: string) => access(id) === 'approve';
       const rows = (await db.query<{
         id: string; credentialTypeId: string; typeName: string; number: string | null; issuedBy: string | null;
         issueDate: string | null; expiryDate: string | null; verification: string; needsEvidence: boolean; files: string[];
@@ -53,23 +57,29 @@ export class MyCredentialsController {
                            where d.worker_credential_id = c.id and d.removed_at is null), '[]'::json) as files
            from worker_credentials c join credential_types t on t.id = c.credential_type_id
           where c.worker_id = $1 order by lower(t.name), c.expiry_date desc nulls first, c.created_at desc`, [w.id])).rows;
-      const credentials = rows.map(({ verification, ...c }) => ({
+      const credentials = rows.filter(c => sees(c.credentialTypeId)).map(({ verification, ...c }) => ({
         ...c, check: myCheckState(verification), status: credentialStatus(c.expiryDate, ctx.today, ctx.settings.expiringWindowDays),
-        canAddFiles: myEvidenceRefusal(verification, c.files.length) === null,
+        canAddFiles: sends(c.credentialTypeId) && myEvidenceRefusal(verification, c.files.length) === null,
       }));
 
       const facts = (await credentialFactsByWorker(db, [w.id])).get(w.id) ?? [];
       const rtw = (await rightToWorkByWorker(db, [w.id])).get(w.id) ?? null;
       const rightToWork = await loadMyRightToWork(db, t.tenantId, w.id);
-      const needs = ctx.evaluate(roles, facts, rtw).issues.map(i => ({
-        credentialTypeId: i.credentialTypeId, typeName: i.typeName, must: i.severity === 'hard', problem: i.problem,
-        line: i.credentialTypeId === 'right-to-work' ? `Right to work: ${lowerFirst(rightToWork.line)}` : myNeedLine(i), canAdd: myNeedAddable(i),
-      }));
+      const needs = ctx.evaluate(roles, facts, rtw).issues
+        .filter(i => i.credentialTypeId === 'right-to-work' || sees(i.credentialTypeId))
+        .map(i => {
+          const shown = myNeedFor(i, sends(i.credentialTypeId));
+          return {
+            credentialTypeId: i.credentialTypeId, typeName: i.typeName, must: i.severity === 'hard', problem: i.problem,
+            line: i.credentialTypeId === 'right-to-work' ? `Right to work: ${lowerFirst(rightToWork.line)}` : shown.line, canAdd: shown.canAdd,
+          };
+        });
 
       // Credentials their onboarding checklist still needs (the office may ask for more than their role's rules).
       const start = await myOnboarding(db, t.tenantId, w.id);
       const listed = new Set(needs.map(n => n.credentialTypeId));
-      const startNeeds = (start?.steps ?? []).filter(s => s.kind === 'credential' && s.yours && s.credentialTypeId && !listed.has(s.credentialTypeId));
+      const startNeeds = (start?.steps ?? []).filter(s => s.kind === 'credential' && s.yours && s.credentialTypeId && !listed.has(s.credentialTypeId)
+        && sends(s.credentialTypeId));
 
       // What they can add: every active credential type, the ones asked of their role first (strongest level wins).
       const levels = new Map<string, Level>();
@@ -80,10 +90,11 @@ export class MyCredentialsController {
       }
       const types = (await db.query<{ id: string; name: string; hasNumber: boolean; hasExpiry: boolean }>(
         `select id, name, has_number as "hasNumber", has_expiry as "hasExpiry" from credential_types where active order by lower(name)`,
-      )).rows.map(ty => ({ ...ty, level: levels.get(ty.id) ?? null }))
+      )).rows.filter(ty => sends(ty.id)).map(ty => ({ ...ty, level: levels.get(ty.id) ?? null }))
         .sort((a, b) => (a.level ? LEVEL_ORDER[a.level] : 3) - (b.level ? LEVEL_ORDER[b.level] : 3));
 
       const typeName = new Map(types.map(ty => [ty.id, ty.name]));
+      // (Checklist steps for documents they can't send are already left out: `myStep` doesn't make them theirs.)
       for (const s of startNeeds) {
         const name = typeName.get(s.credentialTypeId!) ?? s.title;
         const problem = s.need ?? 'missing';
@@ -114,6 +125,7 @@ export class MyCredentialsController {
       const type = (await db.query<{ name: string; category: string; has_expiry: boolean; has_number: boolean }>(
         'select name, category, has_expiry, has_number from credential_types where id = $1 and active', [typeId])).rows[0];
       if (!type) throw new NotFoundException('Not found: choose again');
+      if ((await documentAccess(db))(typeId) !== 'approve') throw new ForbiddenException(officeKeepsDocument((await wordsFor(db)).lower(T.credential, true)));
       if (type.has_expiry && !fields.expiryDate) throw new BadRequestException('Expiry date is required for this {credential}');
       if (type.has_number && !fields.number) throw new BadRequestException('Number is required for this {credential}');
       const today = (await complianceContext(db, t.tenantId)).today;
@@ -162,10 +174,13 @@ export class MyCredentialsController {
 
   private async ownForUpload(db: PoolClient, auth: AuthContext, id: string) {
     const w = await requireLinked(db, auth);
-    const c = (await db.query<{ verification: string; files: number }>(
-      `select c.verification, (select count(*)::int from credential_documents d where d.worker_credential_id = c.id and d.removed_at is null) as files
+    const c = (await db.query<{ verification: string; files: number; typeId: string }>(
+      `select c.verification, c.credential_type_id as "typeId",
+              (select count(*)::int from credential_documents d where d.worker_credential_id = c.id and d.removed_at is null) as files
          from worker_credentials c where c.id = $1 and c.worker_id = $2`, [id, w.id])).rows[0];
-    if (!c) throw new NotFoundException('{Credential} not found');
+    const access = c ? (await documentAccess(db))(c.typeId) : 'hidden';
+    if (!c || access === 'hidden') throw new NotFoundException('{Credential} not found');
+    if (access !== 'approve') throw new ForbiddenException(officeKeepsDocument((await wordsFor(db)).lower(T.credential, true)));
     const refusal = myEvidenceRefusal(c.verification, c.files, (await wordsFor(db)).lower(T.credential));
     if (refusal) throw new ConflictException(refusal);
   }
@@ -214,6 +229,7 @@ export class MyRightToWorkController {
 
   private async plan(db: PoolClient, auth: AuthContext, lock: boolean) {
     const w = await requireLinked(db, auth);
+    if ((await documentAccess(db))('right-to-work') !== 'approve') throw new ForbiddenException('The office looks after your right to work proof: please contact them');
     const r = (await db.query<{ id: string; verification: string; files: number }>(
       `select r.id, r.verification,
               (select count(*)::int from credential_documents d where d.right_to_work_id = r.id and d.removed_at is null) as files

@@ -5,10 +5,10 @@ import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
-import { ACCESS_WORDS, accessList, accessOf, parseAccess, type Access, type PersonField } from './field-access.js';
+import { ACCESS_WORDS, DOC_WORDS, accessList, accessOf, parseAccess, type Access, type AccessField } from './field-access.js';
 
 /** The business's field-access settings, CROP's defaults filling the gaps. */
-export async function loadFieldAccess(db: PoolClient): Promise<Record<PersonField, Access>> {
+export async function loadFieldAccess(db: PoolClient): Promise<Record<AccessField, Access>> {
   return accessOf((await db.query<{ field: string; person: string }>('select field, person from field_access')).rows);
 }
 
@@ -23,14 +23,14 @@ export async function loadFieldAccess(db: PoolClient): Promise<Record<PersonFiel
 export class FieldAccessController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  /** `{ fields: [{field, label, person, isDefault, defaultPerson, allowed, note}], words }`. */
+  /** `{ fields: [{field, group, label, person, isDefault, defaultPerson, allowed, note}], words, docWords }`. */
   @Roles(...OFFICE_ROLES)
   @Get('field-access')
   list(@Tenant() t: Membership) {
-    return withTenant(this.pool, t.tenantId, async db => ({ fields: accessList(await loadFieldAccess(db)), words: ACCESS_WORDS }));
+    return withTenant(this.pool, t.tenantId, async db => ({ fields: accessList(await loadFieldAccess(db)), words: ACCESS_WORDS, docWords: DOC_WORDS }));
   }
 
-  /** `{ fields: { mobile: 'approve', … } }` (any subset). */
+  /** `{ fields: { mobile: 'approve', doc_vaccination: 'hidden', … } }` (any subset). */
   @Roles('owner', 'admin')
   @Put('field-access')
   save(@Tenant() t: Membership, @Body() body: Record<string, unknown>) {
@@ -38,13 +38,13 @@ export class FieldAccessController {
     if ('problem' in parsed) throw new BadRequestException(parsed.problem);
     return withTenant(this.pool, t.tenantId, async db => {
       const now = await loadFieldAccess(db);
-      for (const [field, person] of Object.entries(parsed.changes) as [PersonField, Access][]) {
+      for (const [field, person] of Object.entries(parsed.changes) as [AccessField, Access][]) {
         if (now[field] === person) continue;
         await db.query(
           `insert into field_access(tenant_id, field, person) values ($1, $2, $3)
              on conflict (tenant_id, field) do update set person = excluded.person, updated_at = now()`, [t.tenantId, field, person]);
       }
-      return { fields: accessList(await loadFieldAccess(db)), words: ACCESS_WORDS };
+      return { fields: accessList(await loadFieldAccess(db)), words: ACCESS_WORDS, docWords: DOC_WORDS };
     });
   }
 }

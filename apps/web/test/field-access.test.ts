@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accessChoices, accessFromForm, accessSummary, type FieldAccessRow } from '../lib/field-access';
+import { accessChoices, accessFromForm, accessGroups, accessSummary, type FieldAccessRow } from '../lib/field-access';
 
 const words = { hidden: 'Office only', see: 'They can see it', approve: 'They can change it; the office approves', change: 'They can change it' };
 const row = (field: string, over: Partial<FieldAccessRow> = {}): FieldAccessRow => ({
@@ -25,5 +25,12 @@ describe('personal details settings (David, 3 Nov, answer 5)', () => {
     const rows = [row('mobile'), row('name', { allowed: ['see', 'approve'] })];
     const form: Record<string, string> = { mobile: 'approve', name: 'hidden', other: 'see' };
     expect(accessFromForm(rows, f => form[f] ?? null)).toEqual({ mobile: 'approve' });
+  });
+
+  it('splits personal details from documents', () => {
+    const rows = [row('mobile', { group: 'details' }), row('doc_check', { group: 'documents' }), row('name')];
+    const g = accessGroups(rows);
+    expect(g.details.map(r => r.field)).toEqual(['mobile', 'name']);
+    expect(g.documents.map(r => r.field)).toEqual(['doc_check']);
   });
 });
