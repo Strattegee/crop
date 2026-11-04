@@ -745,3 +745,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: API tests (statuses and archiving, team overlap, team-first ranking, allocation overlap and both directions of double booking, moving, another business sees nothing, the app role can't delete or rewrite rows, the demo reset's table lists); every test passes.
 - Next: the screens (second pull request).
 
+
+## 2026-11-04 (4 Nov, David): roster List view
+- Shipped: a List layout on the roster (View › Layout › List), asked for by David and Steve for businesses with many people. Same data and actions as the cards; rows grouped by date, site, area, person, role or stage; search and filters; tick boxes with bulk Assign, Offer / Release, Confirm, Add duty and Cancel, each shift through the usual endpoint with refusals named. State in the address (`layout=list`, `group`, `q`, `stage`, `area`, `person`, `limit`).
+- Timings with the demo-day seed (27 sites, 454 people, 1,401 shifts in the week of 2 Nov) on a local build: the week as cards 2.6–2.9 s, as a list (first 300 rows) 2.3–2.9 s, as a list of every row (1,324) 2.8–3.5 s (once 6 s); a day as a list 2.4–2.6 s. About 1.8 s of every roster load, cards or list, is Needs attention (`GET /roster/attention`); `GET /roster` itself is 0.15 s.
+- Also: on a phone the many-sites summary in the title row and the Add shifts form no longer push the page sideways.
+- Checked: unit tests for the list's rules; in a browser with the demo seed (light, dark, phone): ticking, Shift-click runs, tick all, folding, J/K/X, best people for ticked shifts, a bulk offer to the best five (5 shifts, 25 offers).
