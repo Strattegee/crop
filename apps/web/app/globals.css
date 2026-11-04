@@ -938,3 +938,82 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .states-more > summary { white-space: nowrap; }
 .states-more > ul { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; margin: 0; padding: 8px 12px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 60vh; overflow-y: auto; min-width: 280px; }
 .states-more > ul li { padding: 3px 0; white-space: nowrap; font-size: 13px; }
+
+/* The roster's List view (David and Steve, 4 Nov): one compact row per shift, like the Allocations queue, grouped and
+   filtered from the URL, tick boxes for bulk actions; Steve's stage colours as the row's left edge and the pill's dot. */
+.roster-layout.list > .lst { flex: 999 1 640px; min-width: 0; }
+.lst-filters { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 6px; }
+.lst-search { font-size: 13px; padding: 4px 8px; width: 250px; max-width: 100%; min-width: 0; }
+.lst-groupby { gap: 4px; }
+.lst .q-tab .rb { display: inline-block; width: 12px; height: 6px; border-radius: 3px; }
+.lst-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; margin-bottom: 6px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface); font-size: 13px; min-height: 38px; }
+.lst-bulk.on { border-style: solid; border-color: var(--orange); background: var(--hover); position: sticky; top: 0; z-index: 6; }
+.lst-busy { color: var(--muted); font-size: 12px; }
+.lst-pop { position: relative; }
+.lst-pop > summary { list-style: none; cursor: pointer; }
+.lst-pop > summary::-webkit-details-marker { display: none; }
+.lst-pop-body { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.lst-pop-body.lst-pop-row, .lst-pop-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lst-pop-row select { min-width: 0; max-width: 100%; flex: 1 1 160px; }
+.lst-best { display: flex; flex-direction: column; gap: 4px; }
+.lst-best-p { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 1px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.lst-best-p:hover:not(:disabled) { background: var(--hover); }
+.lst-best-p.warn { border-left: 3px solid #e0a100; }
+.lst-best-p.blocked, .lst-best-p:disabled { opacity: 0.55; cursor: not-allowed; }
+.lst-best-p small { font-size: 11px; }
+.lst-scroll { max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); }
+.lst-table { min-width: 1080px; }
+.lst-row { display: grid; grid-template-columns: var(--lst-cols); gap: 8px; align-items: center; padding: 0 10px 0 6px; min-height: 32px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); background: var(--surface); position: relative; box-shadow: inset 3px 0 0 transparent; }
+.lst-row:not(.lst-head):hover { background: var(--hover); }
+.lst-row.sel { background: var(--hover); outline: 2px solid var(--orange); outline-offset: -2px; }
+.lst-row.ticked { background: var(--hover); }
+.lst-row .cut { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lst-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.lst-head { position: sticky; top: 0; z-index: 4; min-height: 28px; background: var(--surface-2); font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.lst-row.st-unfilled { box-shadow: inset 3px 0 0 #9aa5b1; } .lst-row.st-offered { box-shadow: inset 3px 0 0 #f3df7a; }
+.lst-row.st-allocated { box-shadow: inset 3px 0 0 #d9a400; } .lst-row.st-accepted { box-shadow: inset 3px 0 0 #e05ea3; }
+.lst-row.st-pulled { box-shadow: inset 3px 0 0 #7d3c98; } .lst-row.st-booked { box-shadow: inset 3px 0 0 #2e9d57; }
+.lst-row.st-cancelled { box-shadow: inset 3px 0 0 #d93025; color: var(--muted); }
+.lst-row.st-cancelled .lst-time a { text-decoration: line-through; }
+.lst-tick { display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+.lst-tick input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.lst-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lst-time a { color: inherit; text-decoration: none; font-weight: 600; }
+/* The whole row opens the shift (the time is the link; its ::after covers the row), tick boxes and buttons above it. */
+.lst-time a::after { content: ''; position: absolute; inset: 0; }
+.lst-time a:focus-visible { outline: none; }
+.lst-row:has(a[data-lrow]:focus-visible) { outline: 2px solid var(--orange); outline-offset: -2px; }
+.lst-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lst-pill { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--text); max-width: 100%; overflow: hidden; }
+.lst-pill .rb { flex: 0 0 auto; display: inline-block; width: 8px; height: 8px; border-radius: 4px; }
+.lst-mk { position: relative; z-index: 1; }
+.lst-mk .mkcol { display: flex; flex-direction: row; flex-wrap: wrap; gap: 2px; }
+.lst-warn { display: flex; flex-wrap: wrap; gap: 3px; position: relative; z-index: 1; }
+.lst-w { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 9px; line-height: 18px; color: var(--warn); background: var(--warn-bg); white-space: nowrap; }
+.lst-w.bad { color: var(--bad); background: var(--bad-bg); }
+.lst-act { display: flex; justify-content: flex-end; position: relative; z-index: 1; }
+.lst-act form { margin: 0; }
+.lst-act .btn.small { padding: 2px 8px; }
+.lst-ghead { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 6px; min-height: 30px; background: var(--surface-2); border-bottom: 1px solid var(--border); position: sticky; top: 28px; z-index: 3; }
+.lst-ghead .lst-tick { width: 30px; flex: 0 0 30px; }
+.lst-gbtn { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; background: none; border: 0; padding: 4px 0; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; text-align: left; }
+.lst-gline { color: var(--muted); font-size: 12px; }
+.lst-caret { display: inline-block; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--muted); transition: transform .15s; align-self: center; }
+.lst-group.folded .lst-caret { transform: rotate(-90deg); }
+.lst-group.folded > .lst-row, .lst-group.folded > .lst-more { display: none; }
+.lst-more { padding: 6px 12px 6px 46px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--divider); }
+.lst-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 12px; font-size: 12px; border-top: 1px solid var(--border); }
+@media (max-width: 760px) {
+  .lst-scroll { max-height: 70vh; }
+  .lst-search { width: 100%; }
+}
+/* Many sites on a phone: the week's summary wraps instead of pushing the page sideways. */
+@media (max-width: 760px) {
+  .states-more { max-width: 100%; }
+  .states-more > summary { white-space: normal; }
+  .states-more > ul { min-width: 0; width: max-content; max-width: calc(100vw - 32px); }
+  .states-more > ul li { white-space: normal; }
+  .states-more:not([open]) > ul { display: none; }
+  .roster-add .form-row label { min-width: 0; max-width: 100%; }
+  .roster-add .form-row select { max-width: 100%; }
+}
