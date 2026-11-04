@@ -46,6 +46,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 3500 | Compliance | Compliance |
 | 4000 | Clients | term 1015 |
 | 4100 | Sites | term 1020 |
+| 4200 | Projects: work the business runs itself (a site of kind project), the list and a project's page (4 Nov) | term 1025 |
 | 5000 | Equipment (reserved) | term 1060 |
 | 5500 | Items (reserved) | term 1070 |
 | 6000 | Messages | Messages |

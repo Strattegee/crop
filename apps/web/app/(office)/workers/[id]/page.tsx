@@ -102,6 +102,8 @@ export default async function WorkerPage({ params, searchParams }: {
     ? await api<RecruitmentEvent[]>(`/workers/${id}/recruitment`).catch(() => [] as RecruitmentEvent[]) : [];
   const calls = tab === 'overview' && w.status !== 'agency'
     ? await api<CallRow[]>(`/calls?workerId=${id}&days=90&limit=8`).catch(() => [] as CallRow[]) : [];
+  const teams = tab === 'overview' && w.status !== 'agency'
+    ? await api<{ id: string; facilityId: string; siteName: string; siteKind: string; teamRole: string; areaName: string | null; line: string; state: string }[]>(`/workers/${id}/teams`).catch(() => []) : [];
   const addresses = tab === 'details' && w.status !== 'agency'
     ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
   const upcoming = shifts.filter(x => x.localDate >= today && x.status !== 'cancelled');
@@ -166,6 +168,19 @@ export default async function WorkerPage({ params, searchParams }: {
           {shiftTable(upcoming.slice(0, 8))}
           {upcoming.length > 8 && <p className="small" style={{ marginBottom: 0 }}><Link href={`/workers/${id}?tab=shifts`}>All {upcoming.length} {tw.lower(T.shift, true)}</Link></p>}
         </div>
+      {teams.length > 0 && (
+        <div className="card">
+          <h2>Teams</h2>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {teams.map(m => (
+              <li key={m.id}>
+                <Link href={m.siteKind === 'project' ? `/projects/${m.facilityId}?tab=team` : `/facilities/${m.facilityId}`}>{m.siteName}</Link>
+                <span className="muted small"> · {m.teamRole === 'supervisor' ? 'Supervisor' : 'Worker'}{m.areaName && ` · ${m.areaName}`} · {m.line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {appAccess && w.status !== 'agency' && (
         <AppAccessCard workerId={id} a={appAccess} first={w.preferredName || w.firstName} canGive={canVerify} timeZone={zone} />
       )}

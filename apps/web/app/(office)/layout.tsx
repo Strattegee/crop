@@ -17,7 +17,7 @@ const GROUPS: { codes: number[]; label?: (w: Awaited<ReturnType<typeof words>>) 
   { codes: [1000] },
   { codes: [2000] },
   { codes: [3000, 3100, 3200, 3500], label: w => w.many(T.worker) },
-  { codes: [4000, 4100], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
+  { codes: [4000, 4100, 4200], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
   { codes: [5000, 5500], label: w => `${w.one(T.equipment)} & ${w.lower(T.item, true)}` },
   { codes: [6000] },
 ];
@@ -38,7 +38,9 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
     return { href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label };
   };
   const items: NavItem[] = GROUPS.map(g => {
-    const links = g.codes.map(link).filter((l): l is NavLink => l !== null);
+    const links = g.codes.map(link).filter((l): l is NavLink => l !== null)
+      // A business whose site word is its project word (the construction template) would see the same label twice.
+      .map((l, _, all) => (l.code === 4100 && all.some(x => x.code === 4200 && x.label === l.label) ? { ...l, label: 'All locations' } : l));
     return { label: g.label ? g.label(w) : links[0]?.label ?? '', links };
   }).filter(i => i.links.length);
   // Allocations (function code 2200), after the Roster, only for businesses that supply an employer on CROP (agency

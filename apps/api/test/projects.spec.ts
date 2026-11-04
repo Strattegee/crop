@@ -48,8 +48,10 @@ describe('projects: rules (David and Steve, 4 Nov)', () => {
   });
 
   it('words dates', () => {
-    expect(projectDates('2026-11-09', '2027-04-30')).toBe('Mon 9 Nov – Fri 30 Apr');
-    expect(projectDates(null, '2027-04-30')).toBe('Due Fri 30 Apr');
+    expect(projectDates('2026-11-09', '2027-04-30')).toBe('Mon 9 Nov 2026 – Fri 30 Apr 2027');
+    expect(projectDates('2026-11-09', '2026-12-30', '2026')).toBe('Mon 9 Nov – Wed 30 Dec');
+    expect(projectDates('2027-02-01', null, '2026')).toBe('From Mon 1 Feb 2027');
+    expect(projectDates(null, '2027-04-30', '2027')).toBe('Due Fri 30 Apr');
     expect(projectDates(null, null)).toBeNull();
     expect(rangeLine({ from: '2026-11-01', to: null }, '2026-11-04')).toBe('No end date');
     expect(rangeLine({ from: '2026-11-09', to: null }, '2026-11-04')).toBe('From Mon 9 Nov');

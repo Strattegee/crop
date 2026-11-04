@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 type Facility = {
   id: string; name: string; clientId: string | null; clientName: string | null; addressLine: string | null; suburb: string | null;
   state: string | null; postcode: string | null; country: string; timezone: string; phone: string | null; parkingNotes: string | null; entryNotes: string | null;
-  officeId: string | null; officeName: string | null;
+  officeId: string | null; officeName: string | null; kind?: string;
   areas: { id: string; name: string; specialty: string | null; active: boolean }[];
 };
 
@@ -29,6 +29,7 @@ export default async function FacilityPage({ params, searchParams }: { params: P
       <p style={{ margin: '0 0 8px' }}>{f.clientId ? <Link href={`/clients/${f.clientId}`}>← {f.clientName}</Link> : <Link href="/facilities">← Facilities</Link>}</p>
       <h1>{f.name}</h1>
       <p className="muted" style={{ marginTop: 0 }}>{address || 'No address yet'} · {zoneName(f.timezone)} time{f.phone && <> · {f.phone}</>}{f.officeName && <> · {f.officeName} office</>}</p>
+      {f.kind === 'project' && <p style={{ marginTop: 0 }}>This is a {tw.lower(T.project)}: its team, {tw.lower(T.equipment)} and {tw.lower(T.item, true)} are on <Link href={`/projects/${f.id}`}>its {tw.lower(T.project)} page</Link>.</p>}
       <Notices error={sp.error} done={sp.done} />
 
       <div className="card" style={{ overflowX: 'auto' }}>

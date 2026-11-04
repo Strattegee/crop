@@ -147,7 +147,7 @@ export class ProjectsController {
            from p left join clients c on c.id = p.client_id left join offices o on o.id = p.office_id
           order by case p.status when 'active' then 0 when 'on_hold' then 1 when 'planned' then 2 when 'completed' then 3 else 4 end,
                    lower(p.name)`, [status])).rows;
-      return rows.map(({ timezone: _, ...r }) => ({ ...r, statusLabel: STATUS_LABEL[r.status], dates: projectDates(r.startsOn, r.endsOn) }));
+      return rows.map(({ timezone, ...r }) => ({ ...r, statusLabel: STATUS_LABEL[r.status], dates: projectDates(r.startsOn, r.endsOn, todayIn(timezone).slice(0, 4)) }));
     });
   }
 
@@ -202,7 +202,7 @@ export class ProjectsController {
           where s.facility_id = $1 and s.needs_person and s.status <> 'cancelled' and (s.starts_at at time zone $2)::date between $3 and $4`,
         [id, p.timezone, weekFrom, addDays(weekFrom, 6)])).rows[0];
       return {
-        ...p, statusLabel: p.status ? STATUS_LABEL[p.status] : null, dates: projectDates(p.startsOn, p.endsOn), today, weekStart: weekFrom,
+        ...p, statusLabel: p.status ? STATUS_LABEL[p.status] : null, dates: projectDates(p.startsOn, p.endsOn, today.slice(0, 4)), today, weekStart: weekFrom,
         areas, team, days, week, equipment: equipmentRows, stock,
         counts: {
           team: team.filter(m => m.state === 'current').length,
