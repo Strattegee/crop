@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { addressChangeRefusal, addressLine, parseAddress, sameAddress } from '../src/workforce/addresses.js';
+import { detailHistory } from '../src/workforce/detail-history.js';
 import { startFakeIdp } from './fake-idp.js';
 
 describe('addresses: rules (David, 3 Nov, answer 5)', () => {
@@ -37,6 +38,27 @@ describe('addresses: rules (David, 3 Nov, answer 5)', () => {
     expect(addressChangeRefusal({ replacedAt: null, removedAt: null })).toBeNull();
     expect(addressChangeRefusal({ replacedAt: 'x', removedAt: null })).toMatch(/corrected/);
     expect(addressChangeRefusal({ replacedAt: null, removedAt: 'x' })).toMatch(/taken off/);
+  });
+});
+
+describe('earlier details: rules (answer 5, nothing overwritten)', () => {
+  const now = { first_name: 'Sam', last_name: 'Sample', preferred_name: 'Sammy', email: 'new@example.com', phone: '+61400000002', gender: 'F', date_of_birth: null };
+  it('walks the audit log back from today, newest first, naming who changed it', () => {
+    const h = detailHistory(now, [
+      { at: '2026-11-03T02:00:00Z', actorName: 'Ola Office', via: 'office', oldValues: { last_name: 'Example', phone: '+61400000001' } },
+      { at: '2026-11-02T02:00:00Z', actorName: 'Sam Sample', via: 'app', oldValues: { preferred_name: null, notes: 'x' } },
+      { at: '2026-11-01T02:00:00Z', actorName: 'Ola Office', via: 'office', oldValues: { first_name: 'Samantha', email: 'old@example.com' } },
+      { at: '2026-10-31T02:00:00Z', actorName: 'Ola Office', via: 'office', oldValues: { notes: null } },
+    ]);
+    expect(h.name).toEqual([
+      { value: 'Sam Example', changedAt: '2026-11-03T02:00:00.000Z', by: 'Ola Office', via: 'office' },
+      { value: 'Samantha Example', changedAt: '2026-11-01T02:00:00.000Z', by: 'Ola Office', via: 'office' },
+    ]);
+    expect(h.mobile.map(e => e.value)).toEqual(['+61400000001']);
+    expect(h.preferred_name).toEqual([{ value: null, changedAt: '2026-11-02T02:00:00.000Z', by: 'Sam Sample', via: 'app' }]);
+    expect(h.email.map(e => e.value)).toEqual(['old@example.com']);
+    expect(h.gender).toEqual([]);
+    expect(h.date_of_birth).toEqual([]);
   });
 });
 
@@ -143,6 +165,19 @@ describe('addresses: API', () => {
     await http().post(`/worker-addresses/${ids.home}/current`).set(as('nosy')).expect(404);
     const seen = await withTenant(appPool, ids.nosy, async c => (await c.query('select count(*)::int as n from worker_addresses')).rows[0].n);
     expect(seen).toBe(0);
+  });
+
+  it('lists earlier name, email and mobile values from the audit log, for the office only', async () => {
+    await http().patch(`/workers/${ids.sam}`).set(as('admin')).send({ lastName: 'Sample', email: 'sam@example.com' }).expect(200);
+    await http().patch(`/workers/${ids.sam}`).set(as('alloc')).send({ email: 'sam.s@example.com', notes: 'only a note' }).expect(200);
+    await http().patch(`/workers/${ids.sam}`).set(as('alloc')).send({ notes: 'another note' }).expect(200);
+    const h = (await http().get(`/workers/${ids.sam}/earlier-details`).set(as('alloc')).expect(200)).body;
+    expect(h.name).toMatchObject([{ value: 'Sam Example' }]);
+    expect(h.email.map((e: { value: string | null }) => e.value)).toEqual(['sam@example.com', null]);
+    expect(h.email[0].by).toBeTruthy();
+    expect(h.mobile).toEqual([]);
+    await http().get(`/workers/${ids.sam}/earlier-details`).set(as('worker')).expect(403);
+    await http().get(`/workers/${ids.sam}/earlier-details`).set(as('nosy')).expect(404);
   });
 
   it('never lets the app edit or delete an address row', async () => {

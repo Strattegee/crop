@@ -33,6 +33,8 @@ import type { RecruitmentEvent } from '../../../../lib/recruitment';
 import type { Addresses } from '../../../../lib/addresses';
 import { AddressesCard } from './addresses-card';
 import { DetailChangesCard } from './detail-changes-card';
+import { EarlierDetailsCard } from './earlier-details-card';
+import { changedIn, type EarlierDetails } from '../../../../lib/earlier-details';
 import type { DetailChange } from '../../../../lib/detail-changes';
 import { SupervisorPerson } from './supervisor-person';
 
@@ -111,6 +113,8 @@ export default async function WorkerPage({ params, searchParams }: {
     ? await api<{ id: string; facilityId: string; siteName: string; siteKind: string; teamRole: string; areaName: string | null; line: string; state: string }[]>(`/workers/${id}/teams`).catch(() => []) : [];
   const addresses = tab === 'details' && w.status !== 'agency'
     ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
+  const earlier = tab === 'details' && w.status !== 'agency'
+    ? await api<EarlierDetails>(`/workers/${id}/earlier-details`).catch(() => null) : null;
   const detailChanges = tab === 'details' && w.status !== 'agency'
     ? await api<{ changes: DetailChange[] }>(`/detail-changes?status=all&workerId=${id}`)
       .then(r => [...r.changes.filter(c => c.status === 'pending'), ...r.changes.filter(c => c.status !== 'pending').slice(0, 5)]).catch(() => [] as DetailChange[])
@@ -409,6 +413,7 @@ export default async function WorkerPage({ params, searchParams }: {
           </label>
           <button type="submit" className="btn">Save</button>
         </form>
+        <EarlierDetailsCard h={earlier} country={settings.country} when={changedIn(zone)} />
       </div>
       <DetailChangesCard changes={detailChanges} back={`/workers/${w.id}?tab=details`} country={settings.country} withNames={false} />
       {addresses && <AddressesCard workerId={w.id} a={addresses} homeCountry={settings.country ?? 'AU'} when={whenIn(zone)} />}
