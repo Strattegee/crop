@@ -48,3 +48,11 @@ describe('taking the order from a request (migration 0091)', () => {
     expect(orderTakenLine({ orderShifts: 1 }, null, n => `${n} shift`)).toBe('Order taken: 1 shift');
   });
 });
+
+describe('how an order arrived (migration 0091)', () => {
+  it('names orders from the request page, which the order form never offers', async () => {
+    const { CHANNELS } = await import('../lib/client-orders');
+    expect(CHANNELS.find(c => c.value === 'request_page')?.label).toBe('Request page');
+    expect(CHANNELS.filter(c => c.value !== 'request_page').map(c => c.value)).toEqual(['email', 'phone', 'portal', 'other']);
+  });
+});
