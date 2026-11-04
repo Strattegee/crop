@@ -28,12 +28,21 @@ export interface DemoOptions {
   day?: string;
   /** Must be RESET to change anything; otherwise a dry run that only reports. */
   confirm?: string;
+  /**
+   * Delete records that look real (a non-example email or a phone number) along with everything else, instead of
+   * refusing (David, 4 Nov: his own test entries in cfy). Every other safety check still applies.
+   */
+  deleteRealLooking?: boolean;
   /** The clock (tests). */
   now?: Date;
   log?: (line: string) => void;
 }
 
-export interface DemoResult { dryRun: boolean; tenantId: string; day: string; removed: Record<string, number>; created: Record<string, number> }
+export interface DemoResult {
+  dryRun: boolean; tenantId: string; day: string; removed: Record<string, number>; created: Record<string, number>;
+  /** What looked real and was (or, in a dry run, would be) deleted because `deleteRealLooking` was given. */
+  realLooking: string[];
+}
 
 const HISTORY_DAYS = 14;
 /** Scales every area's daily pattern (about 240 client shifts a day). */
@@ -47,7 +56,9 @@ const PACKS = ['healthcare', 'labour-hire'];
 
 type Row = Record<string, unknown>;
 type Fate = 'booked' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'released' | 'new' | 'pulled_out'
-  | 'client_cancelled' | 'client_withdrew' | 'our_mistake' | 'not_filled';
+  | 'client_cancelled' | 'client_withdrew' | 'our_mistake' | 'not_filled'
+  /** Past only: ended with nobody on it (offers went out, nobody took it), or pulled out and not refilled. */
+  | 'unfilled';
 type Phase = 'past' | 'started' | 'today' | 'd1' | 'd2' | 'd3';
 
 /** Resets the business and seeds the demo day (or, without confirm RESET, reports what it would do). */
@@ -69,7 +80,11 @@ export async function demoDay(db: ClientBase, opts: DemoOptions): Promise<DemoRe
     if (Math.abs(daysBetween(localDateOf(now, zone), day)) > 7) throw new DemoRefusal('Choose a day within a week of today');
 
     const real = await realLookingData(db, tenantId);
-    if (real.length) throw new DemoRefusal(`This business holds data that may be real, so nothing was changed:\n  ${real.join('\n  ')}`);
+    if (real.length && !opts.deleteRealLooking) {
+      throw new DemoRefusal(`This business holds data that may be real, so nothing was changed:\n  ${real.join('\n  ')}\n`
+        + 'If these are only test entries, run again with --delete-real-looking (workflow: delete_real_looking = yes) to delete them too.');
+    }
+    if (real.length) log(`${opts.confirm === 'RESET' ? 'Deleting' : 'Would delete'} records that may be real, as asked (--delete-real-looking):\n  ${real.join('\n  ')}`);
     const demoUsers = (await db.query<{ id: string }>(`select id from users where idp_subject like $1`, [`demo-day:${opts.slug}:%`])).rows.map(r => r.id);
     const plan = await planCleanup(db, tenantId, demoUsers);
     const removed = Object.fromEntries(Object.entries(plan.counts).filter(([, n]) => n > 0));
@@ -77,19 +92,29 @@ export async function demoDay(db: ClientBase, opts: DemoOptions): Promise<DemoRe
       await db.query('rollback');
       log(`Dry run for ${opts.slug} (${day}): nothing changed. Type RESET to delete and reseed.`);
       for (const [k, n] of Object.entries(removed)) log(`  would delete ${n} ${k}`);
-      return { dryRun: true, tenantId, day, removed, created: {} };
+      return { dryRun: true, tenantId, day, removed, created: {}, realLooking: real };
     }
 
     const triggered = await triggerTables(db);
     for (const tb of triggered) await db.query(`alter table ${tb} disable trigger user`);
     await runCleanup(db, tenantId, demoUsers, plan);
     log(`Deleted ${Object.values(removed).reduce((a, b) => a + b, 0)} rows from ${Object.keys(removed).length} tables`);
+    for (const [k, n] of Object.entries(removed)) log(`  deleted ${n} ${k}`);
 
     const created = await seed(db, tenantId, opts.slug, day, now, zone);
     for (const tb of triggered) await db.query(`alter table ${tb} enable trigger user`);
     await db.query('commit');
     for (const [k, n] of Object.entries(created)) log(`  created ${n} ${k}`);
-    return { dryRun: false, tenantId, day, removed, created };
+    // Shifts per day by status (ended open = unfilled), for the run's log.
+    const days = await db.query<{ d: string; n: number; open: number; assigned: number; booked: number; cancelled: number; unfilled: number }>(
+      `select to_char((s.starts_at at time zone f.timezone)::date, 'YYYY-MM-DD') as d, count(*)::int as n,
+              count(*) filter (where s.status = 'open' and s.ends_at > $2)::int as open, count(*) filter (where s.status = 'assigned')::int as assigned,
+              count(*) filter (where s.status = 'booked')::int as booked, count(*) filter (where s.status = 'cancelled')::int as cancelled,
+              count(*) filter (where s.status = 'open' and s.ends_at <= $2)::int as unfilled
+         from shifts s join facilities f on f.id = s.facility_id where s.tenant_id = $1 group by 1 order by 1`, [tenantId, now]);
+    log('Shifts by day: total (open still to fill / allocated / booked / cancelled / ended unfilled)');
+    for (const r of days.rows) log(`  ${r.d}${r.d === day ? ' (today)' : ''}: ${r.n} (${r.open} / ${r.assigned} / ${r.booked} / ${r.cancelled} / ${r.unfilled})`);
+    return { dryRun: false, tenantId, day, removed, created, realLooking: real };
   } catch (err) {
     await db.query('rollback').catch(() => undefined);
     throw err;
@@ -468,7 +493,7 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
 
   // What happens to each shift.
   const FATES: Record<Phase, [Fate, number][]> = {
-    past: [['client_cancelled', 0.05], ['client_withdrew', 0.03], ['our_mistake', 0.005], ['booked', 1]],
+    past: [['client_cancelled', 0.05], ['client_withdrew', 0.03], ['our_mistake', 0.005], ['unfilled', 0.025], ['booked', 1]],
     started: [['booked', 1]],
     today: [['client_cancelled', 0.03], ['client_withdrew', 0.015], ['new', 0.07], ['released', 0.13], ['pulled_out', 0.025], ['accepted', 0.05],
       ['worker_to_confirm', 0.03], ['client_to_confirm', 0.05], ['booked', 1]],
@@ -553,7 +578,11 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
       // Someone who was on it and pulled out (they stay free for other work).
       const p = workers.find(w => canWork(w, s) && rnd() < 0.15) ?? null;
       s.pulled = p;
-      if (s.phase === 'past') { const w = choose(s, p); if (w) { s.worker = w; book(w, s); } else s.fate = 'not_filled'; }
+      if (s.phase === 'past') {
+        // About a third were never refilled: the shift ended with nobody (Unfilled on the queue's outcome tabs).
+        const w = chance(0.3) ? null : choose(s, p);
+        if (w) { s.worker = w; book(w, s); } else s.fate = 'unfilled';
+      }
     } else if (NEEDS_PERSON.includes(s.fate)) {
       const w = choose(s);
       if (w) { s.worker = w; book(w, s); }
@@ -730,6 +759,19 @@ async function seed(db: ClientBase, tenantId: string, slug: string, day: string,
         confirmRows.push({ id: randomUUID(), tenant_id: tenantId, order_id: order.id, shift_id: s.id, worker_id: w.id, notification_id: null,
           sent_at: new Date(Math.min(bookedAt.getTime() + MIN, nowMs - 10_000)), starts_at: s.startsAt, ends_at: s.endsAt, area_id: s.areaId });
       }
+    } else if (s.fate === 'unfilled') {
+      // Ended open: offers went out and nobody took it (they ran out at the start), the office rang round too.
+      const from = Math.max(t0, lastAt) + 5 * MIN;
+      const sentAt = at(from, Math.max(from, start - 2 * HOUR));
+      for (const o of offerPool(s, [s.pulled], Math.floor(between(2, 9)))) {
+        const declined = chance(0.55);
+        offerRows.push({ id: randomUUID(), tenant_id: tenantId, shift_id: s.id, worker_id: o.id, status: declined ? 'declined' : 'pending',
+          expires_at: declined ? null : new Date(start), offered_by: officer.id, created_at: sentAt,
+          responded_at: declined ? at(sentAt.getTime() + 4 * MIN, start - 10 * MIN) : null, responded_by: null, responded_via: declined ? 'app' : null });
+        message(s, o, 'shift_offer', sentAt, officer);
+        if (chance(0.3)) call(officer, at(sentAt.getTime() + 10 * MIN, start - 15 * MIN), pick(['no_answer', 'left_message', 'said_no']), s, o, null, null);
+      }
+      lastAt = sentAt.getTime();
     } else if (s.fate === 'released' || (s.fate === 'pulled_out' && chance(0.6))) {
       const n = s.fate === 'released' ? Math.floor(between(3, 13)) : Math.floor(between(2, 6));
       const sentAt = at(Math.max(t0, lastAt) + 2 * MIN, Math.max(t0, lastAt) + 50 * MIN);
