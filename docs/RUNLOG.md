@@ -728,3 +728,11 @@ Newest first. One entry per working session or scheduled run.
 - Left alone: another session's open pull request (#202, Allocations by week and month).
 - Next: other unheld items (answer 5, who can see and change each field, is the next big one).
 - Waiting on David: the lawyer on minors' information and the worker notice sentence before anyone under 18 is recorded; whether 10pm–6am suits every state and whether any 18+ rule should block; push credentials in the Expo project, then a new app build and PUSH_SEND=on; someone local to check the New Zealand, US and UK credential names; sending texts outside Australia; a sentence for the worker privacy notice before any business turns swaps on; whether swaps should be limited to the same role or area; tell the client when an unfilled shift on their order is cancelled?; the public apply form's questions; Apple's approval for iPhone builds.
+
+## 2026-11-04 afternoon (scheduled run)
+
+- Shipped: addresses on a person's record (David's answer 5, first part: "never overwrite"). The person's Details tab has an Addresses card: a person can have several addresses with one current, and "Make current" moves between them. Correcting an address adds a new version and keeps the old one; taking one off the list keeps it on file with an optional reason; "Earlier versions" shows both, and every step is in the audit log. Office only for now; checked per country like sites (state lists, postcodes).
+- Privacy policy and data processing agreement now mention home or postal addresses. The worker notice is unchanged (it says "work contact details"); David to decide whether to add addresses there (changing it asks everyone to confirm it again).
+- Checked: API tests (history kept, one current, another business sees nothing, the app can't edit or delete rows) and a rendering of the card at laptop and phone width; every test passes. Not checked signed in (no local sign-in in this run).
+- Next: the rest of answer 5: field-access settings (who can see and change each field and document kind; whether the person's change needs approval), kept history for name, email and mobile, and "My details" in the app.
+
