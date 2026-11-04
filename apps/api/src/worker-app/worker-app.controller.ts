@@ -1,3 +1,4 @@
+import { myDistances } from '../geo/distance-data.js';
 import {
   BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query,
 } from '@nestjs/common';
@@ -65,16 +66,16 @@ export async function requireLinked(db: PoolClient, auth: AuthContext): Promise<
   return w;
 }
 
-const MY_SHIFT_COLS = `s.id, s.role, f.name as site, a.name as area, f.timezone, s.starts_at as "startsAt", s.ends_at as "endsAt",
+const MY_SHIFT_COLS = `s.id, s.facility_id as "facilityId", s.role, f.name as site, a.name as area, f.timezone, s.starts_at as "startsAt", s.ends_at as "endsAt",
   to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as date,
   to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as start,
   to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "end", s.break_minutes as "breakMinutes",
   coalesce((select json_agg(d.name order by lower(d.name)) from shift_duty_links dl join shift_duties d on d.id = dl.duty_id
              where dl.shift_id = s.id), '[]'::json) as duties`;
 
-type ShiftRow = { id: string; role: string; site: string; area: string | null; timezone: string; startsAt: Date; endsAt: Date;
+type ShiftRow = { id: string; facilityId: string; role: string; site: string; area: string | null; timezone: string; startsAt: Date; endsAt: Date;
   date: string; start: string; end: string; breakMinutes: number; duties: string[] };
-const label = (r: ShiftRow) => shiftLabel({ role: r.role, localDate: r.date, localStart: r.start, localEnd: r.end, facilityName: r.site, areaName: r.area });
+const label = (r: Omit<ShiftRow, 'facilityId'>) => shiftLabel({ role: r.role, localDate: r.date, localStart: r.start, localEnd: r.end, facilityName: r.site, areaName: r.area });
 
 /**
  * Giving someone the worker app (office). Owners and admins invite the person's email as a worker of the business;
@@ -278,9 +279,11 @@ export class MyController {
                           and p.week_start = date_trunc('week', s.starts_at at time zone f.timezone)::date)
                  or exists (select 1 from shift_offers o where o.shift_id = s.id and o.worker_id = $1 and o.status = 'accepted'))
           order by s.starts_at`, [w.id, from, to])).rows;
+      // How far each is from their home (David, 4 Nov), when both postcodes are known.
+      const far = await myDistances(db, w.id, rows.map(r => r.facilityId));
       return {
         from, to,
-        shifts: rows.map(({ assignmentStatus, ...r }) => ({ ...r, label: label(r), state: myShiftState(assignmentStatus) })),
+        shifts: rows.map(({ assignmentStatus, facilityId, ...r }) => ({ ...r, label: label(r), state: myShiftState(assignmentStatus), distanceKm: far.get(facilityId) ?? null })),
       };
     });
   }
@@ -310,8 +313,9 @@ export class MyController {
           where o.worker_id = $1 and o.status = 'pending' and (o.expires_at is null or o.expires_at > now())
             and s.status = 'open' and s.starts_at > now()
           order by s.starts_at`, [w.id])).rows;
+      const far = await myDistances(db, w.id, rows.map(r => r.facilityId));
       return {
-        offers: rows.map(({ offerId, expiresAt, offeredAt, ...r }) => ({ id: offerId, expiresAt, offeredAt, shift: { ...r, label: label(r) } })),
+        offers: rows.map(({ offerId, expiresAt, offeredAt, facilityId, ...r }) => ({ id: offerId, expiresAt, offeredAt, shift: { ...r, label: label(r), distanceKm: far.get(facilityId) ?? null } })),
       };
     });
   }

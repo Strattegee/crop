@@ -17,7 +17,7 @@ import { actorOf } from './publishing.js';
 import { rosterChangeRefusal } from './offers-data.js';
 import { shiftById } from './roster.controller.js';
 import { withSiteHistory } from './site-history.js';
-import { withDistance } from '../geo/distance-data.js';
+import { homeDistances, withDistance } from '../geo/distance-data.js';
 import { withTeam } from '../projects/team-data.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -127,6 +127,7 @@ export class BankFillController {
         const who = await contacts(db, fresh);
         const words = await wordsFor(db);
         const appUrl = process.env.APP_URL ?? '';
+        const far = await homeDistances(db, (shift as unknown as { facilityId: string }).facilityId, fresh);
         for (const o of created) {
           const c = who.get(o.worker_id)!;
           // A one-off link to accept or decline without signing in (decided 26 Oct). Only its hash is kept.
@@ -136,7 +137,7 @@ export class BankFillController {
             await db.query('update shift_offers set link_hash = $2 where id = $1', [o.id, l.hash]);
             link = offerLinkUrl(appUrl, l.token);
           }
-          const m = offerMessage(c.first, t.tenantName, shift, expiresAt ? expiresLabel(expiresAt, shift.timezone) : null, link, words);
+          const m = offerMessage(c.first, t.tenantName, { ...shift, distanceKm: far.get(o.worker_id) ?? null }, expiresAt ? expiresLabel(expiresAt, shift.timezone) : null, link, words);
           if (c.email) {
             await queueNotification(db, t.tenantId, { channel: 'email', to: c.email, template: 'shift_offer', subject: m.subject, body: m.email,
               workerId: o.worker_id, dedupeKey: `offer:${o.id}:email`, createdBy: auth.userId });

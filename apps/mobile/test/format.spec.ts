@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fromHome, siteLine,
   needsNotice, noticeText, addDays, businessesOf, byDay, dateFromParts, hasStepsForMe, noShiftsLine, nothingNeededLine, STEP_MARK, expiryLine, filesLine, rtwDetail, RTW_BADGE, longDate, uploadName, chipOn, dayLabel, leaveAskedMessage, leaveDates, offerCloses, patternBody, periodsLabel, roleLine, timeRange, toggleDay,
 } from '../src/format';
 
@@ -121,5 +122,18 @@ describe('getting started', () => {
       body: 'CROP is provided by Strattegee Pty Ltd. Demo Cafe uses it for your shifts and work records. Please read how your information is handled.',
     });
     expect(noticeText({ ...n, state: 'changed' }, 'Demo Cafe').heading).toBe('Our privacy notice has changed');
+  });
+});
+
+describe('distance from home (David, 4 Nov)', () => {
+  it('shows how far the site is only when known', () => {
+    expect(fromHome(12.4)).toBe('12 km from home');
+    expect(fromHome(0.4)).toBe('under 1 km from home');
+    expect(fromHome(1250)).toBe('1,250 km from home');
+    expect(fromHome(null)).toBeNull();
+    expect(fromHome(undefined)).toBeNull();
+    expect(siteLine({ site: 'Harbour Kitchen', distanceKm: 8 })).toBe('Harbour Kitchen · 8 km from home');
+    expect(siteLine({ site: 'Harbour Kitchen', distanceKm: null })).toBe('Harbour Kitchen');
+    expect(siteLine({ site: 'Harbour Kitchen' })).toBe('Harbour Kitchen');
   });
 });

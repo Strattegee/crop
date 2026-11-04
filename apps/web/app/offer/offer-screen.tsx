@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { LegalFooter } from '../../lib/legal/legal-footer';
+import { homeWords } from '../../lib/distance';
 import { OFFER_PATHS, offerLink, type OfferKind, type OfferView } from '../../lib/offer-link';
 
 const DONE: Record<string, (shift: string, agency: boolean) => string> = {
@@ -64,6 +65,7 @@ export async function OfferScreen({ token, kind, done, error }: { token: string;
             <dt>Time</dt><dd>{r.view.shift.start}–{r.view.shift.end}</dd>
             <dt>Role</dt><dd>{r.view.shift.role}</dd>
             <dt>Where</dt><dd>{r.view.shift.site}{r.view.shift.area ? ` (${r.view.shift.area})` : ''}</dd>
+            {homeWords(r.view.shift.distanceKm) && <><dt>Distance</dt><dd title="Approximate straight line from your home postcode">{homeWords(r.view.shift.distanceKm)}</dd></>}
             {r.view.employer && <><dt>For</dt><dd>{r.view.employer}</dd></>}
           </dl>
           {done && DONE[done] && <p className="notice success" role="status">{DONE[done](word(r.view).lower, !!r.view.employer)}</p>}

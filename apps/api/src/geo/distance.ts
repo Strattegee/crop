@@ -93,3 +93,46 @@ export function distanceWords(km: number | null | undefined): string | null {
   if (km < 1) return '<1 km';
   return `${Math.round(km).toLocaleString('en-AU')} km`;
 }
+
+/** Distance doesn't count for anyone within this many km of the site (David, 4 Nov); `tenant_settings.distance_free_km`. */
+export const DEFAULT_DISTANCE_FREE_KM = 25;
+/** Beyond the free range, people are ranked in bands this wide, so small differences don't reshuffle the list. */
+export const DISTANCE_BAND_KM = 10;
+
+/**
+ * How much distance counts for one person (David, 4 Nov: "Yes if they are far away; if the distance is within a range
+ * it doesn't come into account"): 0 when it doesn't count (unknown distance, within `freeKm`, or `freeKm` 0 = off),
+ * otherwise 1 for up to 10 km beyond the free range, 2 for 10–20 km beyond, and so on.
+ */
+export function distanceBand(km: number | null | undefined, freeKm: number): number {
+  if (!freeKm || freeKm <= 0 || km === null || km === undefined || !Number.isFinite(km) || km <= freeKm) return 0;
+  return 1 + Math.floor((km - freeKm) / DISTANCE_BAND_KM);
+}
+
+/**
+ * Far away last (David, 4 Nov), never a block: within each eligibility group (ready, warnings, not available, can't)
+ * and after the site's team (`team` set = on the team, as `withTeam` already put them first), people beyond the free
+ * range go after everyone else, nearer bands first; otherwise the list keeps its order (fewest hours that week etc.).
+ * Unknown distances are never pushed down.
+ */
+export function farAwayLast<C extends { eligible: boolean; available?: boolean; warnings: unknown[]; team?: unknown; distanceKm: number | null }>(
+  list: C[], freeKm: number,
+): C[] {
+  if (!freeKm || freeKm <= 0) return list;
+  const group = (c: C) => (!c.eligible ? 3 : c.available === false ? 2 : c.warnings.length ? 1 : 0);
+  const team = (c: C) => (c.team === null || c.team === undefined ? 1 : 0);
+  return list.map((c, i) => ({ c, i, g: group(c), t: team(c), b: distanceBand(c.distanceKm, freeKm) }))
+    .sort((a, b) => a.g - b.g || a.t - b.t || a.b - b.b || a.i - b.i)
+    .map(x => x.c);
+}
+
+/**
+ * For the person themselves (David, 4 Nov: "it is good for them to see how far away the shift is before accepting"):
+ * "about 12 km from home", "under 1 km from home"; null when unknown. Plain characters, so it suits texts.
+ * Keep in step with `homeWords` in the web's `lib/distance.ts` and the app's `src/format.ts`.
+ */
+export function homeWords(km: number | null | undefined): string | null {
+  if (km === null || km === undefined || !Number.isFinite(km) || km < 0) return null;
+  if (km < 1) return 'under 1 km from home';
+  return `about ${Math.round(km).toLocaleString('en-AU')} km from home`;
+}

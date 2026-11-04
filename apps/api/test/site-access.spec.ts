@@ -214,6 +214,26 @@ describe('site access: API and database (migration 0086)', () => {
     const dist = (await http().post(`/facilities/${ids.A}/distances`).set(as('sup')).send({ workerIds: [ids.ana, ids.ben, 'nope'] }).expect(200)).body;
     expect(dist).toEqual({ distances: { [ids.ana]: anaKm, [ids.ben]: null } });
     for (const body of [cands, fill, dist]) expect(JSON.stringify(body)).not.toMatch(/Richmond|3121|Example Street/);
+    // Distance in ranking (David, 4 Nov): beyond the business's free range (25 km by default) people go after the others
+    // in their group; within it, or unknown, it makes no difference. Ana lives ~5 km away, Ben's distance is unknown.
+    expect((await http().get('/settings').set(as('admin')).expect(200)).body.distanceFreeKm).toBe(25);
+    await http().patch('/settings').set(as('sup')).send({ distanceFreeKm: 1 }).expect(403);
+    await http().patch('/settings').set(as('admin')).send({ distanceFreeKm: 1001 }).expect(400);
+    type Ranked = { name: string; eligible: boolean; available?: boolean; warnings: unknown[] };
+    const grp = (x: Ranked) => (!x.eligible ? 3 : x.available === false ? 2 : x.warnings.length ? 1 : 0);
+    const order = async () => (await http().get(`/shifts/${ids.a1}/candidates`).set(as('sup')).expect(200)).body.candidates as Ranked[];
+    expect((await http().patch('/settings').set(as('admin')).send({ distanceFreeKm: 1 }).expect(200)).body.distanceFreeKm).toBe(1);
+    const far = await order();
+    const [fa, fb] = [far.find(x => x.name === 'Ana Example')!, far.find(x => x.name === 'Ben Example')!];
+    expect(grp(fa)).toBe(grp(fb));
+    expect(far.indexOf(fa)).toBeGreaterThan(far.indexOf(fb));
+    expect(cands.map(x => x.name)).toEqual(['Ana Example', 'Ben Example']); // Ana first as usual
+    const fillFar = (await http().get(`/shifts/${ids.a1}/bank-fill?everyone=true`).set(as('sup')).expect(200)).body.candidates as Ranked[];
+    expect(fillFar.map(x => x.name)).toEqual(far.map(x => x.name));
+    await http().patch('/settings').set(as('admin')).send({ distanceFreeKm: 0 }).expect(200);
+    expect((await order()).map(x => x.name)).toEqual(cands.map(x => x.name)); // off = the usual order
+    await http().patch('/settings').set(as('admin')).send({ distanceFreeKm: 25 }).expect(200);
+    expect((await order()).map(x => x.name)).toEqual(cands.map(x => x.name)); // within range = the usual order
     // Not their site: nothing; another business: nothing.
     await http().post(`/facilities/${ids.B}/distances`).set(as('sup')).send({ workerIds: [ids.ana] }).expect(404);
     await http().post(`/facilities/${ids.A}/distances`).set(as('nosy')).send({ workerIds: [ids.ana] }).expect(404);
@@ -224,6 +244,12 @@ describe('site access: API and database (migration 0086)', () => {
     const offered = await http().post(`/shifts/${ids.a2}/offers`).set(as('sup')).send({ workerIds: [ids.ana] });
     expect(offered.status, JSON.stringify(offered.body)).toBeLessThan(300);
     expect((await owner.query(`select count(*)::int as n from notifications where tenant_id = $1 and template = 'shift_offer'`, [ids.acme])).rows[0].n).toBeGreaterThan(0);
+    // The offer tells Ana how far it is from her home (David, 4 Nov), never where she lives.
+    const sent = (await owner.query<{ body: string }>(`select body from notifications where tenant_id = $1 and template = 'shift_offer' and channel in ('email', 'sms')`, [ids.acme])).rows;
+    for (const n of sent) {
+      expect(n.body).toMatch(/\(about \d+ km from home\)/);
+      expect(n.body).not.toMatch(/Richmond|3121|Example Street/);
+    }
     await http().post(`/shifts/${ids.a2}/offers/withdraw`).set(as('sup')).send({}).expect(r => expect(r.status).toBeLessThan(300));
     // Not theirs to do: create, cancel, publish, templates, settings.
     await http().post('/shifts').set(as('sup')).send({ facilityId: ids.A, role: 'Carer', date: ahead(5), startTime: '07:00', endTime: '15:00' }).expect(403);

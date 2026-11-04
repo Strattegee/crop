@@ -20,7 +20,7 @@ import { roleOf, startMode, type Mode } from './src/manager';
 import { schemeOf, statusBarStyle } from './src/palette';
 import { colours, setScheme, styles } from './src/styles';
 import {
-  businessesOf, byDay, dayLabel, hasStepsForMe, needsNotice, noShiftsLine, noticeText, offerCloses, roleLine, STATE_LABEL, STEP_MARK, timeRange,
+  businessesOf, byDay, dayLabel, hasStepsForMe, needsNotice, noShiftsLine, noticeText, offerCloses, roleLine, siteLine, STATE_LABEL, STEP_MARK, timeRange,
   type MyNotice, type MyOffer, type MyOnboarding, type MyShift,
 } from './src/format';
 
@@ -316,7 +316,7 @@ function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onMa
                 <View key={s.id} style={styles.card}>
                   <Text style={styles.cardTitle}>{timeRange(s)}</Text>
                   <Text>{roleLine(s)}</Text>
-                  <Text style={styles.muted}>{s.site}</Text>
+                  <Text style={styles.muted}>{siteLine(s)}</Text>
                   {s.duties.length > 0 && <Text style={[styles.muted, styles.small]}>Duties: {s.duties.join(', ')}</Text>}
                   <Text style={[styles.badge, s.state === 'booked' ? styles.badgeBooked : styles.badgeWaiting]}>{STATE_LABEL[s.state]}</Text>
                   {swapping === s.id ? (
@@ -338,7 +338,7 @@ function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onMa
               <Text style={styles.day}>{dayLabel(o.shift.date, my?.today)}</Text>
               <Text style={styles.cardTitle}>{timeRange(o.shift)}</Text>
               <Text>{roleLine(o.shift)}</Text>
-              <Text style={styles.muted}>{o.shift.site}</Text>
+              <Text style={styles.muted}>{siteLine(o.shift)}</Text>
               {offerCloses(o.expiresAt) && <Text style={[styles.muted, styles.small]}>{offerCloses(o.expiresAt)} · first to accept gets it</Text>}
               <View style={styles.row}>
                 <Pressable style={[styles.button, styles.grow]} disabled={busy} onPress={() => reply(o, 'accept')}>

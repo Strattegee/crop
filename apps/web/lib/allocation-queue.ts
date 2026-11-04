@@ -280,7 +280,8 @@ export function bestPeople<C extends { name: string; eligible: boolean; offer?: 
 
 /**
  * "Nearest first" (David, 4 Nov; the panel's optional sort): people by distance from home, unknown distances last,
- * otherwise in the API's order. Only when the office asks for it: distance is never part of the usual ranking.
+ * otherwise in the API's order. The usual ranking counts distance only beyond the business's free range (the API's
+ * `farAwayLast`), so this is the stronger sort the office asks for.
  */
 export function nearestFirst<C extends { distanceKm?: number | null }>(cands: C[]): C[] {
   const far = (c: C) => (c.distanceKm === null || c.distanceKm === undefined ? Infinity : c.distanceKm);

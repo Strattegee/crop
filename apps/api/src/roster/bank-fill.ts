@@ -8,6 +8,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { DEFAULT_WORDS, T, type Words } from '../terms/words.js';
 import { fmtDate } from './eligibility.js';
+import { homeWords } from '../geo/distance.js';
 
 export const BANK_FILL_TYPES = ['bank', 'casual'] as const;
 
@@ -28,9 +29,11 @@ export function shiftLabel(s: OfferShift): string {
 /**
  * The offer message. With `link`, the person can accept or decline from it without signing in (decided 26 Oct);
  * without one (no APP_URL set), they contact the business and the office records the reply.
+ * `s.distanceKm` (David, 4 Nov) adds how far it is from their home ("about 12 km from home") when known.
  */
-export function offerMessage(firstName: string, business: string, s: OfferShift, expiresLabel: string | null, link: string | null = null, w: Words = DEFAULT_WORDS) {
-  const what = shiftLabel(s);
+export function offerMessage(firstName: string, business: string, s: OfferShift & { distanceKm?: number | null }, expiresLabel: string | null, link: string | null = null, w: Words = DEFAULT_WORDS) {
+  const home = homeWords(s.distanceKm);
+  const what = `${shiftLabel(s)}${home ? ` (${home})` : ''}`;
   const until = expiresLabel ? ` The offer is open until ${expiresLabel}.` : '';
   const subject = `${w.one(T.shift)} available: ${fmtDate(s.localDate)} ${s.localStart}–${s.localEnd}`;
   const aShift = w.a(T.shift);

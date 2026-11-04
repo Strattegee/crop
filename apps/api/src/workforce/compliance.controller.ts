@@ -61,6 +61,7 @@ export class ComplianceController {
     const windowDays = int(body, 'expiringWindowDays', 1, 365);
     const smsCap = int(body, 'smsMonthlyCap', 0, 1000000);
     const minRest = int(body, 'minRestHours', 0, 24);
+    const freeKm = int(body, 'distanceFreeKm', 0, 1000);
     const tz = text(body, 'timezone', { max: 60 });
     if (tz && !isTimeZone(tz)) throw new BadRequestException('Choose a valid time zone');
     const country = text(body, 'country', { max: 2 });
@@ -90,6 +91,7 @@ export class ComplianceController {
           published ?? cur.publishedChanges, country ?? cur.country,
           soon ?? cur.agencyTiming.soonMinutes, today ?? cur.agencyTiming.todayMinutes, later ?? cur.agencyTiming.laterMinutes, swaps ?? cur.shiftSwaps],
       );
+      if (freeKm !== null) await db.query('update tenant_settings set distance_free_km = $2 where tenant_id = $1', [t.tenantId, freeKm]);
       if (letters) await db.query('update tenant_settings set marker_letters = $2 where tenant_id = $1', [t.tenantId, JSON.stringify(letters.store)]);
       return loadSettings(db, t.tenantId);
     });
