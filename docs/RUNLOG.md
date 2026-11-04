@@ -745,3 +745,8 @@ Newest first. One entry per working session or scheduled run.
 - Checked: API tests (statuses and archiving, team overlap, team-first ranking, allocation overlap and both directions of double booking, moving, another business sees nothing, the app role can't delete or rewrite rows, the demo reset's table lists); every test passes.
 - Next: the screens (second pull request).
 
+## 2026-11-04 (4 Nov, David): projects, part 2 (screens)
+- Built: Projects under Clients & sites. The list has status, dates, manager, team, shifts this week, unfilled next 7 days and equipment, with filters for current, archived and all. A simple "New project" form takes the work areas as a list. A project's page has tabs for Overview, Team, Work areas, Equipment and Consumables, plus links to the roster, its template, Allocations (for its client) and Live numbers (for its office). Also: a Teams card on the person's page, "Allocated to" on the equipment page, projects marked in the sites list, and a Team badge on the allocation queue's best people. In the construction template both words are "Projects", so the sites link reads "All locations" to avoid two "Projects" in the menu. Dates now show years when they span years.
+- Checked: a preview builder business (invented, preview only, not staging), screenshots in light, dark and at phone width with no sideways scrolling. Adding a project with its areas, adding to the team, and an allocation refused because the equipment is on another project all work through the forms. Web tests for `lib/projects.ts`; every test passes.
+- Not done: a team filter on the roster strip (another session is working on the roster pages).
+

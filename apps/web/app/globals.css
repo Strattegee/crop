@@ -938,3 +938,20 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .states-more > summary { white-space: nowrap; }
 .states-more > ul { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; margin: 0; padding: 8px 12px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 60vh; overflow-y: auto; min-width: 280px; }
 .states-more > ul li { padding: 3px 0; white-space: nowrap; font-size: 13px; }
+
+/* Projects (4 Nov): the list and a project's page. */
+.project-table td.num, .project-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.proj-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.proj-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.proj-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.proj-tile h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.proj-tile .big { font-size: 22px; font-weight: 700; }
+.proj-tile .big.warn { color: var(--warn); }
+.proj-row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.proj-row-actions details > summary { cursor: pointer; }
+.proj-row-actions form { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; margin-top: 6px; }
+@media (max-width: 640px) {
+  .proj-stack thead { display: none; }
+  .proj-stack tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .proj-stack td { display: block; border: 0; padding: 2px 0; }
+}

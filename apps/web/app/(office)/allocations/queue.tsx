@@ -32,7 +32,9 @@ export type Queue = {
 };
 type Reason = { code: string; message: string };
 export type PanelCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; available: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null;
-  siteHistory?: { shiftsHere: number; lastHere: string | null } };
+  siteHistory?: { shiftsHere: number; lastHere: string | null };
+  /** On the site's team that day (projects, 4 Nov): the API lists the team first; shown as a mark only. */
+  team?: { teamRole: string; areaName: string | null } | null };
 export type PanelOffer = { id: string; workerId: string; workerName?: string; name?: string; status: string; respondedVia?: string | null };
 export type PanelShift = {
   id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; status: string; localDate: string; localStart: string; localEnd: string;
@@ -288,7 +290,7 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
               <div key={c.workerId} className="q-person">
                 <span className="q-av">{initials(c.name)}</span>
                 <div style={{ minWidth: 0 }}>
-                  <div className="q-name">{c.name}</div>
+                  <div className="q-name">{c.name}{c.team && <span className="badge neutral" style={{ marginLeft: 6 }} title="On this team">{c.team.teamRole === 'supervisor' ? 'Team supervisor' : 'Team'}</span>}</div>
                   <div className={`small cut ${c.warnings.length ? 'warnline' : 'muted'}`} title={c.warnings.map(w => w.message).join('. ')}>{personLine(c)}</div>
                   <div className={`small cut ${c.siteHistory?.shiftsHere ? 'q-here' : 'muted'}`}>{hereLine(c.siteHistory, s.localDate, tw.lower(T.site))}</div>
                 </div>

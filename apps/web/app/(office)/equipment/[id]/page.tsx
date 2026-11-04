@@ -19,7 +19,8 @@ const SUGGEST = ['Registration', 'Service', 'Inspection', 'Electrical test and t
 
 export default async function EquipmentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [e, agency] = await Promise.all([api<Detail>(`/equipment/${id}`), currentAgency()]);
+  const [e, agency, places] = await Promise.all([api<Detail>(`/equipment/${id}`), currentAgency(),
+    api<{ id: string; facilityId: string; siteName: string; siteKind: string; areaName: string | null; line: string; state: string }[]>(`/equipment/${id}/allocations`).catch(() => [])]);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   return (
     <>
@@ -63,6 +64,20 @@ export default async function EquipmentDetailPage({ params, searchParams }: { pa
             <ul>{e.history.map(h => <li key={h.id}>{h.name}: {d(h.dueOn)}</li>)}</ul>
           </details>
         )}
+      </div>
+      <div className="card">
+        <h2>Allocated to</h2>
+        {places.length === 0 ? <p className="muted" style={{ margin: 0 }}>Not allocated anywhere: it can be booked at any place. Allocate it from a project&apos;s page.</p> : (
+          <table className="compact"><tbody>
+            {places.map(a => (
+              <tr key={a.id} style={{ opacity: a.state === 'ended' ? 0.55 : 1 }}>
+                <td><Link href={a.siteKind === 'project' ? `/projects/${a.facilityId}?tab=equipment` : `/facilities/${a.facilityId}`}>{a.siteName}</Link>{a.areaName && <span className="muted"> · {a.areaName}</span>}</td>
+                <td>{a.line}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        )}
+        <p className="muted small" style={{ marginBottom: 0 }}>While it&apos;s allocated somewhere, booking it onto a shift anywhere else is refused for those dates.</p>
       </div>
       <div className="card">
         <h2>Booked on ({e.upcomingBookings.length})</h2>

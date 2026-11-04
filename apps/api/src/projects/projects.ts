@@ -100,9 +100,13 @@ export function teamFirst<C extends { eligible: boolean; available?: boolean; wa
 }
 
 /** One line about a project's dates, e.g. "Mon 9 Nov – Fri 30 Apr", "From Mon 9 Nov", "Due Fri 30 Apr". */
-export function projectDates(startsOn: string | null, endsOn: string | null): string | null {
-  if (startsOn && endsOn) return `${fmtDate(startsOn)} – ${fmtDate(endsOn)}`;
-  if (startsOn) return `From ${fmtDate(startsOn)}`;
-  if (endsOn) return `Due ${fmtDate(endsOn)}`;
+export function projectDates(startsOn: string | null, endsOn: string | null, thisYear?: string): string | null {
+  // Years show when the dates span years or aren't this year (projects run for months).
+  const years = new Set([startsOn, endsOn].filter((d): d is string => Boolean(d)).map(d => d.slice(0, 4)));
+  const withYear = years.size > 1 || (thisYear !== undefined && [...years].some(y => y !== thisYear));
+  const f = (d: string) => (withYear ? `${fmtDate(d)} ${d.slice(0, 4)}` : fmtDate(d));
+  if (startsOn && endsOn) return `${f(startsOn)} – ${f(endsOn)}`;
+  if (startsOn) return `From ${f(startsOn)}`;
+  if (endsOn) return `Due ${f(endsOn)}`;
   return null;
 }

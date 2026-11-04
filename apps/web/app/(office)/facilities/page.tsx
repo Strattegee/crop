@@ -4,7 +4,7 @@ import { T, words } from '../../../lib/terms';
 
 export const dynamic = 'force-dynamic';
 
-type Facility = { id: string; name: string; clientId: string | null; clientName: string | null; suburb: string | null; state: string | null; country?: string; active: boolean };
+type Facility = { id: string; name: string; clientId: string | null; clientName: string | null; suburb: string | null; state: string | null; country?: string; active: boolean; kind?: string };
 
 /** All facilities across clients. New facilities are added from a client's page. */
 export default async function FacilitiesPage() {
@@ -21,7 +21,7 @@ export default async function FacilitiesPage() {
             <tbody>
               {facilities.map(f => (
                 <tr key={f.id} style={{ opacity: f.active ? 1 : 0.5 }}>
-                  <td><Link href={`/facilities/${f.id}`}>{f.name}</Link></td>
+                  <td><Link href={f.kind === 'project' ? `/projects/${f.id}` : `/facilities/${f.id}`}>{f.name}</Link>{f.kind === 'project' && <span className="muted small"> · {tw.one(T.project)}</span>}</td>
                   <td>{f.clientId ? <Link href={`/clients/${f.clientId}`}>{f.clientName}</Link> : <span className="muted">Not linked to a client</span>}</td>
                   <td>{[f.suburb, f.state, f.country && f.country !== 'AU' ? f.country : null].filter(Boolean).join(', ') || '—'}</td>
                 </tr>
