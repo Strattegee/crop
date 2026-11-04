@@ -19,7 +19,7 @@ const COLS = `a.id, a.worker_id as "workerId", a.label, a.line1, a.line2, a.subu
   (select n.id from worker_addresses n where n.replaces_id = a.id) as "replacedById"`;
 
 /** The person's addresses: the current one, the others on the list (newest first), and earlier versions (history). */
-async function listFor(db: PoolClient, tenantId: string, workerId: string) {
+export async function listFor(db: PoolClient, tenantId: string, workerId: string) {
   const home = (await loadSettings(db, tenantId)).country;
   const rows = (await db.query<Row>(`select ${COLS} from worker_addresses a where a.worker_id = $1 order by a.created_at desc, a.id`, [workerId])).rows
     .map(r => ({ ...r, line: addressLine(r, home) }));

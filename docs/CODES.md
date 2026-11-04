@@ -58,6 +58,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 9140 | Agencies: links with agencies and the businesses we supply (under Settings, not in the menu) | the business's word for Agencies |
 | 9150 | Dashboards: who sees which dashboard, who sees costs, the business's targets (under Settings, not in the menu) | — |
 | 9170 | Offices: the business's branches, their sites and people (under Settings, not in the menu) | Offices |
+| 9180 | Personal details: who can see and change each piece of a person's details in the app (under Settings, not in the menu) | Personal details |
 
 ## Still to do
 - Use the words in more places: roster labels and panels, form labels, API error messages, notification text, the worker app.

@@ -757,3 +757,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: a preview builder business (invented, preview only, not staging), screenshots in light, dark and at phone width with no sideways scrolling. Adding a project with its areas, adding to the team, and an allocation refused because the equipment is on another project all work through the forms. Web tests for `lib/projects.ts`; every test passes.
 - Not done: a team filter on the roster strip (another session is working on the roster pages).
 
+
+## 2026-11-04 evening, 6:10pm Melbourne (scheduled run)
+- Shipped: who can see and change each personal detail (David's answer 5, second part). Settings › Personal details lists name, preferred name, email, mobile, addresses and gender; for each, owners and administrators choose what the person gets in the app: office only, see it, change it with the office's approval, or change it themselves. The office always sees and changes everything. Defaults are self-service first (preferred name, mobile and addresses theirs to change; name and email shown; gender office only); a name can't be hidden and an email change always needs approval. Date of birth, credentials and right to work keep their own rules, explained on the page. Changes are in the audit log; another business sees nothing.
+- The app side is ready in the API (`GET /my/details` shows the person only what they may see and whether they can change it), but the app screen and changing from the app come next.
+- Checked: API tests (defaults, refusals with reasons, owners/admins only, the person's view never carrying the date of birth, audit, another business, no deleting) and web tests for the page's rules; every test passes. Not checked in a browser (no local sign-in in this run).
+- Next: changing details from the app with approval where set (an approvals list for owners and admins), the app's My details screen, and the earlier values of name, email and mobile on the person's page.
