@@ -11,7 +11,7 @@ type Person = { status: 'active' | 'invited'; email: string; name: string | null
 type Detail = { id: string; slug: string; name: string; people: Person[] };
 const ROLES: [string, string][] = [
   ['owner', 'Owner: everything, including settings'], ['admin', 'Admin: everything, including settings'],
-  ['allocator', 'Allocator: rosters and staff'], ['worker', 'Worker: their own shifts (worker app)'], ['client', 'Client: client portal'],
+  ['allocator', 'Allocator: rosters and staff'], ['supervisor', 'Supervisor: rosters at the sites they are given (Settings › Team access)'], ['worker', 'Worker: their own shifts (worker app)'], ['client', 'Client: client portal'],
 ];
 const when = (d: string | null) => d ? new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).format(new Date(d)) : '—';
 

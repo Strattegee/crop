@@ -28,7 +28,25 @@ export interface Actor {
  * sign-in guard fills `actor`; withTenant then tells the database (`app.audit_*`) without changing the rules that
  * read `app.actor_*` (only an explicit `actor` sets those). Background jobs have no store: the log says "system".
  */
-export const auditStore = new AsyncLocalStorage<{ actor?: Actor }>();
+export const auditStore = new AsyncLocalStorage<{ actor?: Actor; scope?: SiteScope }>();
+
+/**
+ * The signed-in person's access in one business (migration 0086), set by the sign-in guard: `sites` null = every site;
+ * otherwise only those (maybe none). withTenant tells the database (`app.site_scope`, `app.member_role`) when it runs
+ * for that business, and the restrictive policies do the rest. Background jobs have no store: every site.
+ */
+export interface SiteScope {
+  tenantId: string;
+  role: string;
+  sites: string[] | null;
+}
+
+/** The setting's value for a list of sites ('' = every site). */
+export function siteScopeValue(sites: string[] | null): string {
+  if (sites === null) return '';
+  const ok = sites.filter(s => UUID.test(s));
+  return `{${ok.join(',')}}`;
+}
 
 /**
  * Runs fn inside a transaction scoped to one tenant. Row-level security
@@ -41,7 +59,13 @@ export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolC
   try {
     await client.query('begin');
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
-    const who = actor ?? auditStore.getStore()?.actor;
+    const store = auditStore.getStore();
+    const scope = store?.scope;
+    if (scope && scope.tenantId === tenantId) {
+      await client.query(`select set_config('app.site_scope', $1, true), set_config('app.member_role', $2, true)`,
+        [siteScopeValue(scope.sites), scope.role.slice(0, 20)]);
+    }
+    const who = actor ?? store?.actor;
     if (who) {
       await client.query(`select set_config('app.audit_id', $1, true), set_config('app.audit_name', $2, true), set_config('app.audit_via', $3, true)`,
         [who.id && UUID.test(who.id) ? who.id : '', (who.name ?? '').slice(0, 120), who.via ?? 'office']);
@@ -60,5 +84,26 @@ export async function withTenant<T>(pool: Pool, tenantId: string, fn: (db: PoolC
     throw err;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * Runs fn with every site in view and no supervisor limits (inside withTenant), then puts the person's limits back. Only for work that must
+ * see the whole business to be right and gives back verdicts or totals, never another site's rows: eligibility's
+ * clashes, rest and visa hours across sites, equipment bookings and allocations elsewhere, hours rostered, and the
+ * business-wide numbers (Dashboard, Live numbers; David, 4 Nov, answer 3).
+ */
+export async function acrossSites<T>(db: PoolClient, fn: () => Promise<T>): Promise<T> {
+  const prev = (await db.query<{ s: string | null; r: string | null }>(
+    `select current_setting('app.site_scope', true) as s, current_setting('app.member_role', true) as r`)).rows[0];
+  const sites = prev?.s ?? '';
+  const role = prev?.r ?? '';
+  if (!sites && !role) return fn();
+  await db.query(`select set_config('app.site_scope', '', true), set_config('app.member_role', '', true)`);
+  try {
+    return await fn();
+  } finally {
+    // After an error the transaction is aborted and rolls back anyway (a savepoint rollback restores the settings).
+    await db.query(`select set_config('app.site_scope', $1, true), set_config('app.member_role', $2, true)`, [sites, role]).catch(() => undefined);
   }
 }

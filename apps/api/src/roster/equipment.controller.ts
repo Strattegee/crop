@@ -4,7 +4,7 @@ import {
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -46,7 +46,7 @@ async function checkCredentialType(db: PoolClient, id: string | null | undefined
 export class EquipmentTypesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db =>
@@ -128,7 +128,7 @@ export class EquipmentController {
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query('status') status?: string) {
     const s = status ? oneOf({ status }, 'status', STATUSES) : null;
@@ -180,7 +180,7 @@ export class EquipmentController {
     return { ...withChecks, history, upcomingBookings: upcoming };
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, db => this.one(db, t.tenantId, id));
@@ -243,7 +243,7 @@ export class ShiftEquipmentController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
   /** Which equipment could go on this shift: everything active, ready first, with reasons. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('equipment-candidates')
   candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -256,7 +256,7 @@ export class ShiftEquipmentController {
    * Books equipment to a shift. Hard blocks: out of service or retired, a date overdue on the shift date,
    * already booked at an overlapping time, or the person on the shift can't operate it. Warnings are returned.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment')
   @HttpCode(200)
   book(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
@@ -283,7 +283,7 @@ export class ShiftEquipmentController {
     }, actorOf(auth));
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment/:equipmentId/remove')
   @HttpCode(200)
   remove(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('equipmentId', ParseUUIDPipe) equipmentId: string) {

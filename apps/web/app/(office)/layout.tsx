@@ -7,6 +7,7 @@ import { allocationsMenu } from '../../lib/client-orders';
 import { currentAgency, currentUser, OFFICE_ROLES } from '../../lib/current-user';
 import { TopNav, UserMenu, type NavItem, type NavLink } from './nav';
 import { FUNCTIONS } from '../../lib/functions';
+import { canUse } from '../../lib/access';
 import { T, words } from '../../lib/terms';
 import { BrandMark } from '../../lib/logo';
 import { parseTheme, THEME_COOKIE, THEME_LABEL, THEMES } from '../../lib/theme';
@@ -32,26 +33,31 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   if (!current) redirect('/');
   const memberships = user.me.memberships.filter(m => OFFICE_ROLES.includes(m.role));
   const w = await words();
+  // Supervisors (4 Nov) see only their screens; everyone else as before.
+  const role = current.role;
   const link = (code: number): NavLink | null => {
     const f = FUNCTIONS.find(x => x.code === code);
-    if (!f) return null;
+    if (!f || !canUse(role, code)) return null;
     return { href: f.path, code: f.code, label: 'term' in f ? ('one' in f ? w.one(f.term) : w.many(f.term)) : f.label };
   };
   const items: NavItem[] = GROUPS.map(g => {
     const links = g.codes.map(link).filter((l): l is NavLink => l !== null)
       // A business whose site word is its project word (the construction template) would see the same label twice.
       .map((l, _, all) => (l.code === 4100 && all.some(x => x.code === 4200 && x.label === l.label) ? { ...l, label: 'All locations' } : l));
-    return { label: g.label ? g.label(w) : links[0]?.label ?? '', links };
+    // A group left with one screen (a supervisor's) is named after that screen.
+    return { label: g.label && links.length > 1 ? g.label(w) : links[0]?.label ?? '', links };
   }).filter(i => i.links.length);
   // Allocations (function code 2200), after the Roster, only for businesses that supply an employer on CROP (agency
   // fill) or have clients with sites (client orders, 2 Nov); the count is what's still to fill.
-  const alloc = allocationsMenu(await api<{ agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number }>('/allocations/summary').catch(() => null));
+  const alloc = canUse(role, 2200)
+    ? allocationsMenu(await api<{ agencyLinks: number; open: number; hasClients?: boolean; clientShiftsOpen?: number }>('/allocations/summary').catch(() => null))
+    : { show: false, count: 0 };
   const allocLink = link(2200);
   if (alloc.show && allocLink) {
     const at = items.findIndex(i => i.links.some(l => l.code === 2000));
     items.splice(at + 1, 0, { label: alloc.count ? `${allocLink.label} (${alloc.count})` : allocLink.label, links: [allocLink] });
   }
-  const settings = link(9000)!;
+  const settings = link(9000);
   const platform = user.me.platformAdmin ? link(9900) : null;
   const name = user.me.name ?? user.me.email;
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
@@ -71,9 +77,11 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
               <button type="submit" className="btn small">Switch</button>
             </form>
           ) : <span className="business-name">{current.tenantName}</span>}
-          <Link href={settings.href} className="appbar-link" data-fn={settings.code} title="Settings">
-            <span aria-hidden="true">⚙</span> {settings.label}
-          </Link>
+          {settings && (
+            <Link href={settings.href} className="appbar-link" data-fn={settings.code} title="Settings">
+              <span aria-hidden="true">⚙</span> {settings.label}
+            </Link>
+          )}
           <UserMenu initials={initialsOf(name)}>
             <div className="menu-who"><strong>{name}</strong><span className="muted small">{user.me.email}</span><span className="muted small">{current.tenantName}</span></div>
             {platform && <Link href={platform.href} role="menuitem" data-fn={platform.code}>{platform.label}</Link>}

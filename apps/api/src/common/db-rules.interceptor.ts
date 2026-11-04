@@ -1,4 +1,4 @@
-import { CallHandler, ConflictException, ExecutionContext, Injectable, NestInterceptor, NotFoundException } from '@nestjs/common';
+import { CallHandler, ConflictException, ExecutionContext, ForbiddenException, Injectable, NestInterceptor, NotFoundException } from '@nestjs/common';
 import { catchError, Observable, throwError } from 'rxjs';
 
 /**
@@ -18,6 +18,10 @@ export class DbRulesInterceptor implements NestInterceptor {
     return next.handle().pipe(catchError((err: unknown) => {
       const e = err as { code?: string; message?: string };
       if (e && typeof e.code === 'string' && RULE_CODES.has(e.code)) return throwError(() => new ConflictException(e.message));
+      // A row another site's (migration 0086's site policies) or a supervisor's out-of-bounds change: plain 403.
+      if (e && e.code === '42501' && /row-level security/.test(e.message ?? '')) {
+        return throwError(() => new ForbiddenException("That {site} isn't one of yours, so you can't change it"));
+      }
       if (e && typeof e.code === 'string' && NOT_FOUND_CODES.has(e.code)) return throwError(() => new NotFoundException(e.message));
       return throwError(() => err);
     }));

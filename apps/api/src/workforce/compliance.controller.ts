@@ -3,7 +3,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { BadRequestException } from '@nestjs/common';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
-import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { int, isTimeZone, text } from '../common/validate.js';
 import { isCountry } from '../common/countries.js';
@@ -49,7 +49,7 @@ export class ComplianceController {
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('settings')
   settings(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, db => loadSettings(db, t.tenantId));

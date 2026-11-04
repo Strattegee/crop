@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundE
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -72,7 +72,7 @@ const duplicate = (err: unknown, name: string | null) => {
 export class ShiftDutiesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shift-duties')
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query<{ name: string }>(`select ${DUTY_COLS} from shift_duties d order by d.active desc, lower(d.name)`)).rows

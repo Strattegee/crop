@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Inject, NotFoundExc
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
-import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, oneOf, text } from '../common/validate.js';
 import { industriesOf } from '../industry/catalogue.js';
@@ -39,7 +39,7 @@ const STARTER_RULES: Array<{ type: string; scope: 'all_workers' | 'role'; role?:
 export class CredentialTypesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership) {
     // `industries`: the industry templates each type comes from ([] = the business's own), for grouping (David, 31 Oct).
@@ -124,7 +124,7 @@ export class CredentialTypesController {
 export class CredentialRequirementsController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(

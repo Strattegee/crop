@@ -2,7 +2,8 @@ import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { supervisorShift } from '../workforce/supervisor-view.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, int } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -49,7 +50,7 @@ export class BankFillController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
   /** Bank and casual staff (or `everyone=true`), ready first, fewest hours that week first, with any offer already made and their past work at the site (`siteHistory`). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id/bank-fill')
   list(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('everyone') everyone?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -62,14 +63,14 @@ export class BankFillController {
       const pool = await withSiteHistory(db, id, await withTeam(db, id,
         everyone === 'true' ? all : all.filter(c => (BANK_FILL_TYPES as readonly string[]).includes(c.employmentType ?? ''))));
       return {
-        shift,
+        shift: t.role === 'supervisor' ? supervisorShift(shift) : shift,
         candidates: pool.map(c => ({ ...c, offer: latest.get(c.workerId) ? { id: latest.get(c.workerId)!.id, status: latest.get(c.workerId)!.status } : null })),
         offers,
       };
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id/offers')
   offers(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -82,7 +83,7 @@ export class BankFillController {
    * Offers an open shift to several people at once. Everyone must be eligible on the shift date.
    * Each is sent an email and an SMS (where they have them) unless `notify` is false.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/offers')
   offer(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const raw = body?.workerIds;
@@ -159,7 +160,7 @@ export class BankFillController {
   }
 
   /** Records that the person accepted (see `acceptOffer`). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('offers/:offerId/accept')
   @HttpCode(200)
   accept(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('offerId', ParseUUIDPipe) offerId: string) {
@@ -170,7 +171,7 @@ export class BankFillController {
   }
 
   /** Records that the person said no. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('offers/:offerId/decline')
   @HttpCode(200)
   decline(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('offerId', ParseUUIDPipe) offerId: string) {
@@ -178,7 +179,7 @@ export class BankFillController {
   }
 
   /** Withdraws every open offer on the shift. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/offers/withdraw')
   @HttpCode(200)
   withdraw(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {

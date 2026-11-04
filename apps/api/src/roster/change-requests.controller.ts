@@ -2,7 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, ForbiddenExce
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -88,7 +88,7 @@ export class ChangeRequestsController {
    * Ask for a change to a shift on a live week: `change` = assign (with `workerId`), confirm, remove, pulled_out, cancel or
    * other (both with `reason`). Only when the after-publishing rule stops this person making it themselves.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/change-requests')
   create(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const kind = text(body, 'change', { required: true, max: 20 }) as ChangeRequestKind;
@@ -149,7 +149,7 @@ export class ChangeRequestsController {
    * Requests for a week (any date in it), newest first; `status` defaults to pending (`all` for every one).
    * Without a week, pending requests in every week (the Dashboard's count), earliest week first.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/change-requests')
   list(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query() q: Record<string, string>) {
     const status = (q.status ?? 'pending') as ChangeRequestStatus | 'all';
@@ -164,7 +164,7 @@ export class ChangeRequestsController {
   }
 
   /** Every request made for one shift, oldest first. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id/change-requests')
   forShift(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -214,7 +214,7 @@ export class ChangeRequestsController {
   }
 
   /** The person who asked (or an owner or admin) takes the request back. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('change-requests/:id/withdraw')
   @HttpCode(200)
   withdraw(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {

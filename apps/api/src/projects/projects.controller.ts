@@ -1,8 +1,8 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
-import { withTenant } from '@crop/db';
+import { acrossSites, withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -96,9 +96,10 @@ function bookingsMessage(name: string, list: { label: string; siteName: string }
 async function checkAllocation(db: PoolClient, equipment: { id: string; name: string }, facilityId: string, r: DateRange, exceptId?: string) {
   const p = rangeProblem(r);
   if (p) throw new BadRequestException(p);
-  const clash = clashingAllocation(r, await liveAllocations(db, equipment.id), exceptId);
+  // Every site (migration 0086): someone limited to some sites must still be stopped by another site's allocation or booking.
+  const clash = clashingAllocation(r, await acrossSites(db, () => liveAllocations(db, equipment.id)), exceptId);
   if (clash) throw new ConflictException(allocationClashMessage(equipment.name, clash));
-  const booked = await bookingsElsewhere(db, equipment.id, facilityId, r);
+  const booked = await acrossSites(db, () => bookingsElsewhere(db, equipment.id, facilityId, r));
   if (booked.length) throw new ConflictException(bookingsMessage(equipment.name, booked));
 }
 
@@ -116,7 +117,7 @@ export class ProjectsController {
    * Every project (archived ones only with `status=archived` or `status=all`), with its team size today, its
    * {shifts} this week (Monday to Sunday in the project's dates) and those still unfilled in the next 7 days.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query('status') statusQ?: string) {
     const status = statusQ === 'all' ? 'all' : (PROJECT_STATUSES as readonly string[]).includes(statusQ ?? '') ? statusQ! : null;
@@ -155,7 +156,7 @@ export class ProjectsController {
    * One project at a glance: the site's details, its work areas, the team today and coming, today's and tomorrow's
    * {shifts} (rostered, filled, unfilled), the equipment on it (with its state) and low stock there.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -224,7 +225,7 @@ export class SiteTeamController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
   /** Current and upcoming members (`all=true` adds those whose time on the team has ended). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('facilities/:id/team')
   list(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('all') all?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -236,7 +237,7 @@ export class SiteTeamController {
   }
 
   /** Puts someone on the team: `workerId`, `teamRole` (supervisor | worker), `areaId`, `startsOn` (default today), `endsOn`. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('facilities/:id/team')
   add(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const workerId = text(body, 'workerId', { required: true, max: 40 })!;
@@ -259,7 +260,7 @@ export class SiteTeamController {
   }
 
   /** Changes someone's role, area or last day on the team (`endsOn` null = no end). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Patch('site-members/:id')
   update(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const has = (k: string) => Boolean(body && k in body);
@@ -281,7 +282,7 @@ export class SiteTeamController {
   }
 
   /** Takes a mistaken entry off the team list (kept on file as removed). Someone who left gets an end date instead. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('site-members/:id/remove')
   remove(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { max: 200 });
@@ -293,7 +294,7 @@ export class SiteTeamController {
   }
 
   /** The teams a person is on (current and upcoming; `all=true` adds ended ones): one person record across projects. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('workers/:id/teams')
   teams(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('all') all?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -321,7 +322,7 @@ export class EquipmentAllocationsController {
   }
 
   /** Equipment allocated to a site (current and upcoming; `all=true` adds ended ones). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('facilities/:id/equipment')
   atSite(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Query('all') all?: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -333,7 +334,7 @@ export class EquipmentAllocationsController {
   }
 
   /** Where a piece of equipment has been and is going (every live allocation, latest first). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('equipment/:id/allocations')
   forEquipment(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -348,7 +349,7 @@ export class EquipmentAllocationsController {
    * further notice), `note`. Refused for retired equipment, an overlapping allocation, or bookings at other places in
    * those dates.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment/:id/allocations')
   add(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const facilityId = text(body, 'facilityId', { required: true, max: 40 })!;
@@ -371,7 +372,7 @@ export class EquipmentAllocationsController {
   }
 
   /** Sets the last day of an allocation (`lastDay`, or null = until further notice). Extending it is checked like a new one. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment-allocations/:id/end')
   end(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const lastDay = date(body, 'lastDay');
@@ -391,7 +392,7 @@ export class EquipmentAllocationsController {
    * Moves equipment to another site from `onDate` (default today at the new site): the current allocation ends the
    * day before, a new one starts that day and runs to the old end date.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment-allocations/:id/move')
   move(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const facilityId = text(body, 'facilityId', { required: true, max: 40 })!;
@@ -418,7 +419,7 @@ export class EquipmentAllocationsController {
   }
 
   /** Takes a mistaken allocation off (kept on file as removed). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('equipment-allocations/:id/remove')
   remove(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { max: 200 });

@@ -19,7 +19,7 @@ on:
         description: Role
         required: true
         type: choice
-        options: [owner, admin, allocator, worker, client, platform-admin]
+        options: [owner, admin, allocator, supervisor, worker, client, platform-admin]
 
 concurrency: deploy-staging
 

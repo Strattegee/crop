@@ -7,7 +7,8 @@ export interface Me {
   id: string;
   email: string;
   name: string | null;
-  memberships: { tenantSlug: string; tenantName: string; role: string }[];
+  /** `sites`: the sites they may use in that business (null = every site; migration 0086). */
+  memberships: { tenantSlug: string; tenantName: string; role: string; sites?: string[] | null }[];
   /** Strattegee staff who can see the Platform screen. */
   platformAdmin?: boolean;
 }
@@ -37,7 +38,8 @@ export const currentUser = cache(async (): Promise<CurrentUser> => {
   }
 });
 
-export const OFFICE_ROLES = ['owner', 'admin', 'allocator'];
+/** Roles that use the office app. Supervisors (4 Nov) see only some screens: `canUse` in lib/access.ts. */
+export const OFFICE_ROLES = ['owner', 'admin', 'allocator', 'supervisor'];
 export const AGENCY_COOKIE = 'crop_agency';
 
 /**

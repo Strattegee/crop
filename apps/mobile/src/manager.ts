@@ -1,12 +1,15 @@
 /** Pure helpers for manager mode in the app (backlog item 9a; tested in test/manager.spec.ts). */
 import { dayLabel, LEAVE_KIND_LABEL, leaveDates, type LeaveKind } from './format';
 
-export type Role = 'owner' | 'admin' | 'allocator' | 'worker' | 'client';
+export type Role = 'owner' | 'admin' | 'allocator' | 'supervisor' | 'worker' | 'client';
 export type Mode = 'manager' | 'worker';
 
-/** Owners, admins and allocators run the roster; everyone else sees their own shifts. */
+/**
+ * Owners, admins, allocators and supervisors (4 Nov: at their own sites only; the API enforces which) run the roster;
+ * everyone else sees their own shifts.
+ */
 export function isManager(role: string | null | undefined): boolean {
-  return role === 'owner' || role === 'admin' || role === 'allocator';
+  return role === 'owner' || role === 'admin' || role === 'allocator' || role === 'supervisor';
 }
 
 /** Only owners and admins approve or decline leave and change requests (as on the web). */

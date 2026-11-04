@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { moneyFor } from '../../../lib/money';
 import { cookies } from 'next/headers';
 import { api } from '../../../lib/api';
+import { currentAgency } from '../../../lib/current-user';
 import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
@@ -174,6 +175,9 @@ export default async function RosterPage({ searchParams }: {
   const switchTo = (s: Span) => url({ ...at(s, anchorForSwitch(range, s, today)), shift: s === 'month' ? undefined : sp.shift });
 
   const showLog = sp.log === '1' && span !== 'month';
+  // Supervisors (David, 4 Nov) roster their sites' shifts (put people on, offer, confirm, take off) but don't add,
+  // publish or copy weeks; the API refuses those anyway.
+  const supervisor = (await currentAgency())?.role === 'supervisor';
   // Needs attention starts closed with its counts showing (David, 29 Oct).
   const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
@@ -211,7 +215,7 @@ export default async function RosterPage({ searchParams }: {
     : weekRows.every(w => w.state === weekRows[0].state) ? weekRows[0].state : null;
   const drafts = weekRows.filter(w => w.state === 'draft');
   const pendingChanges = weekRows.filter(w => w.state === 'live').reduce((a, w) => a + w.changesSincePublish, 0);
-  const canPublish = !isHistory && (drafts.length > 0 || pendingChanges > 0);
+  const canPublish = !supervisor && !isHistory && (drafts.length > 0 || pendingChanges > 0);
   const activeFacilities = facilities.filter(f => f.active);
   const details = await Promise.all(activeFacilities.slice(0, 30).map(f => api<FacilityDetail>(`/facilities/${f.id}`)));
   const allShifts = roster.shifts;
@@ -575,7 +579,7 @@ export default async function RosterPage({ searchParams }: {
     ) : (
       <section className="card roster-requests quiet" aria-label="App requests"><h2>App requests</h2> <span className="muted">None waiting this week.</span></section>
     ))}
-    <details className="card roster-add" open={shifts.length === 0}>
+    {!supervisor && <details className="card roster-add" open={shifts.length === 0}>
       <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add {tw.lower(T.shift, true)}</summary>
       {activeFacilities.length === 0 ? (
         <p className="muted">Add a {tw.lower(T.site)} first, under <Link href="/facilities">{tw.many(T.site)}</Link>.</p>
@@ -637,8 +641,8 @@ export default async function RosterPage({ searchParams }: {
           <button type="submit" className="btn">Add</button>
         </form>
       )}
-    </details>
-    {span !== 'month' && !isHistory && activeFacilities.length > 0 && (
+    </details>}
+    {!supervisor && span !== 'month' && !isHistory && activeFacilities.length > 0 && (
       <details className="card roster-templates">
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Templates and copying</summary>
         <p className="muted small">Save a {tw.lower(T.site)}&apos;s usual week as a template, then fill any week from it, or copy last week. Each {tw.lower(T.shift)} gets its usual person where they can work it (waiting for them to confirm) and its usual {tw.lower(T.equipment)} where it can be booked; anything that can&apos;t is left off and you&apos;re told why.</p>
@@ -944,7 +948,7 @@ export default async function RosterPage({ searchParams }: {
         </section>
       )}
 
-      {span === 'month' && activeFacilities.length > 0 && (() => {
+      {!supervisor && span === 'month' && activeFacilities.length > 0 && (() => {
         const { mondays, nextWeek } = monthCopyWeeks(range.anchor);
         const last = mondays[mondays.length - 1];
         return (

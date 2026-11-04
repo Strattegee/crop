@@ -14,6 +14,7 @@ type Summary = {
   verificationQueue: { id: string; workerId: string; workerName: string; typeName: string; createdAt: string }[];
   expiringSoon: { id: string; workerId: string; workerName: string; typeName: string; expiryDate: string; verification: string }[];
 };
+const NO_SUMMARY: Summary = { activeWorkers: 0, counts: { compliant: 0, expiring: 0, non_compliant: 0 }, verificationQueue: [], expiringSoon: [] };
 type Kind = 'person_blocked' | 'equipment_blocked' | 'cover_gap' | 'open' | 'unconfirmed';
 type Attention = {
   days: number; total: number; urgent: number; truncated: boolean; byKind: Record<Kind, number>;
@@ -46,7 +47,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const wanted = sp.focus && (FOCUSES as string[]).includes(sp.focus) ? sp.focus : null;
   const [dash, facilities, s, types, attention, leave, requests, onboarding, allocations, swaps] = await Promise.all([
     api<Dash>(`/dashboard${wanted ? `?focus=${wanted}` : ''}`).catch(() => null),
-    api<unknown[]>('/facilities'), api<Summary>('/compliance/summary'), api<unknown[]>('/credential-types'),
+    api<unknown[]>('/facilities'), api<Summary>('/compliance/summary').catch(() => NO_SUMMARY) /* supervisors don't get the compliance lists */, api<unknown[]>('/credential-types'),
     api<Attention>('/roster/attention').catch(() => null),
     api<Leave[]>('/leave?status=requested').catch(() => [] as Leave[]),
     api<ChangeRequest[]>('/roster/change-requests').catch(() => [] as ChangeRequest[]),

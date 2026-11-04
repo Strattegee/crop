@@ -101,7 +101,11 @@ export async function queueDailyEmails(
   pool: import('pg').Pool, db: PoolClient, tenantId: string, business: string, today: string, words: Words,
   expiry: { people: string[]; equipment: string[] },
 ): Promise<{ queued: number; datesSent: boolean }> {
-  const team = (await db.query<Member>('select user_id, name, email, role, focus from app_office_team()')).rows;
+  // Supervisors and allocators limited to some sites (migration 0086) don't get it yet: it's worked out for the whole
+  // business, and its lists (Needs attention, expiry dates) would show them other sites' shifts and people.
+  const team = (await db.query<Member>(
+    `select t.user_id, t.name, t.email, t.role, t.focus from app_office_team() t
+      where t.role::text <> 'supervisor' and not exists (select 1 from member_sites s where s.user_id = t.user_id and t.role::text = 'allocator')`)).rows;
   if (!team.length) return { queued: 0, datesSent: false };
   // The run is hourly: once everyone has had today's email and today's numbers are kept, there is nothing left to do.
   const done = (await db.query<{ n: number; kept: boolean }>(

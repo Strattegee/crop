@@ -2,7 +2,7 @@ import { BadRequestException, Controller, Get, Inject, Query } from '@nestjs/com
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
-import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 import { attentionCounts, attentionItems, type AttentionShift } from './attention.js';
@@ -40,7 +40,7 @@ export class AttentionController {
    * work them (a credential or a date run out, leave approved, out of service…), and gaps in cover rules
    * (`cover_gap`: someone working but nobody holding the credential the site needs). Most pressing first.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/attention')
   attention(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const days = q.days === undefined || q.days === '' ? DEFAULT_DAYS : Number(q.days);

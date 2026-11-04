@@ -2,9 +2,11 @@ import {
   BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
-import { withTenant } from '@crop/db';
+import { acrossSites, withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { supervisorShift } from '../workforce/supervisor-view.js';
+import { ON_MY_SITES } from './day-requests.controller.js';
+import { isLimited, OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, gender, int, oneOf, text } from '../common/validate.js';
 import { genderReason } from './eligibility.js';
@@ -122,7 +124,7 @@ const CODE_COLS = `id, facility_id as "facilityId", code, name, letter, to_char(
 export class ShiftCodesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query('facilityId') facilityId?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
@@ -380,7 +382,7 @@ export class ShiftsController {
     return this.tx(t, auth, db => insertShifts(db, t.tenantId, auth.userId, req));
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts')
   list(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const { from, to } = range(q);
@@ -395,11 +397,11 @@ export class ShiftsController {
           and ($5::uuid is null or sa.worker_id = $5)
         order by s.starts_at, f.name, a.name nulls first, s.role, s.created_at`,
       [from, to, facilityId, status, workerId],
-    )).rows);
+    )).rows.map(r => (t.role === 'supervisor' ? supervisorShift(r) : r)));
   }
 
   /** The roster for a period: shifts plus each active worker's terms and hours rostered. `cancelled=true` includes cancelled shifts (the pink ribbon). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster')
   roster(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const { from, to } = range(q);
@@ -410,7 +412,9 @@ export class ShiftsController {
           where (s.starts_at at time zone f.timezone)::date between $1 and $2 and ($3::uuid is null or s.facility_id = $3)
             and ($4 or s.status <> 'cancelled')
           order by s.starts_at, f.name, a.name nulls first, s.role`, [from, to, facilityId, q.cancelled === 'true'])).rows;
-      const people = (await db.query(
+      // Hours rostered count every site (migration 0086), so someone limited to some sites still sees each person's real
+      // balance against their contract; only names and totals come back.
+      const people = (await acrossSites(db, () => db.query(
         `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.roles,
                 et.employment_type as "employmentType", et.contracted_hours::float8 as "contractedHours",
                 coalesce((select round(sum(extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::numeric, 2)
@@ -422,7 +426,7 @@ export class ShiftsController {
                                where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $1 and (e.ends_on is null or e.ends_on >= $1)
                                order by e.starts_on desc limit 1) et on true
           where w.status = 'active' and ${EMPLOYED_ON('$1')}
-          order by w.last_name, w.first_name`, [from, to])).rows;
+          order by w.last_name, w.first_name`, [from, to]))).rows;
       // People from agencies (migration 0042) on shifts in the period: a row each on the By person view, after the business's own.
       const agencyPeople = (await db.query(
         `select w.id, coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as name, w.agency_name as "agencyName", w.outside_agency_id is not null as unchecked,
@@ -457,15 +461,21 @@ export class ShiftsController {
                 r.note, r.status
            from day_requests r join workers w on w.id = r.worker_id
           where w.status = 'active' and r.status in ('open', 'done') and r.on_date between $1 and $2
-          order by r.on_date, r.created_at`, [from, to])).rows.map(r => ({ ...r, line: fillWords(requestLine(r), w) }));
+            and (not $3 or ${ON_MY_SITES})
+          order by r.on_date, r.created_at`, [from, to, isLimited(t)])).rows.map(r => ({ ...r, line: fillWords(requestLine(r), w) }));
+      if (t.role === 'supervisor') {
+        // Supervisors (migration 0086): leave shows only as on leave or asked for, never its kind.
+        return { from, to, shifts: shifts.map(supervisorShift), people, agencyPeople, equipment,
+          leave: leave.map(({ kind: _k, ...l }) => ({ ...l, kind: 'other' })), dayRequests };
+      }
       return { from, to, shifts, people, agencyPeople, equipment, leave, dayRequests };
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
-    return withTenant(this.pool, t.tenantId, db => shiftById(db, id));
+    return withTenant(this.pool, t.tenantId, async db => (t.role === 'supervisor' ? supervisorShift(await shiftById(db, id)) : shiftById(db, id)));
   }
 
   @Roles(...OFFICE_ROLES)
@@ -625,7 +635,7 @@ export class ShiftsController {
   }
 
   /** Who could work this shift: everyone active, ready first, with the reasons anyone can't (backlog item 3) and their past work at the site (`siteHistory`). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id/candidates')
   candidates(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -639,7 +649,7 @@ export class ShiftsController {
    * Puts a person on a shift. Hard blocks: wrong role, a hard credential rule or right to work not met on the
    * shift date, already rostered at an overlapping time, or over their visa's fortnightly hours. Warnings are returned.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/assign')
   @HttpCode(200)
   assign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
@@ -651,7 +661,7 @@ export class ShiftsController {
   }
 
   /** The person has confirmed (or the office books them directly). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/confirm')
   @HttpCode(200)
   confirm(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
@@ -661,7 +671,7 @@ export class ShiftsController {
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('shifts/:id/unassign')
   @HttpCode(200)
   unassign(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {

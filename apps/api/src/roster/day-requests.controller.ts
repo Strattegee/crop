@@ -2,7 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { isLimited, OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -27,6 +27,13 @@ const STATUSES = ['open', 'done', 'not_possible', 'withdrawn', 'all'] as const;
 const MAX_DAYS = 62;
 
 /**
+ * Someone limited to some sites (migration 0086) sees and answers the requests of people with a shift at one of their
+ * sites from 90 days before the request's date onwards (shifts only show their sites' rows).
+ */
+export const ON_MY_SITES = `exists (select 1 from shift_assignments sa2 join shifts s2 on s2.id = sa2.shift_id
+  where sa2.worker_id = r.worker_id and sa2.resource_kind = 'worker' and s2.starts_at >= r.on_date - 90)`;
+
+/**
  * Requests for a day from the app (David, 3 Nov, answer 3: Steve's "R"; migration 0080), for the office: the App
  * requests panel on the roster, and marking each done or not possible (the person is told once: push in the app,
  * else email).
@@ -43,7 +50,7 @@ export class DayRequestsController {
    * period or the 90 days before. Each row carries `line` and the person's shifts that day, with `breaks` when a
    * shift doesn't fit the request.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('day-requests')
   list(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const status = (STATUSES as readonly string[]).includes(q.status) ? q.status : 'open';
@@ -61,19 +68,20 @@ export class DayRequestsController {
               select 1 from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
                where sa.worker_id = r.worker_id and sa.resource_kind = 'worker' and s.facility_id = $4
                  and (s.starts_at at time zone f.timezone)::date between $1::date - 90 and $2))
-          order by r.on_date, r.created_at`, [from, to, status, facilityId])).rows;
+            and (not $5 or ${ON_MY_SITES})
+          order by r.on_date, r.created_at`, [from, to, status, facilityId, isLimited(t)])).rows;
       return { from, to, status, requests: await withShifts(db, rows) };
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('day-requests/:id/done')
   @HttpCode(200)
   done(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     return this.decide(t, auth, id, 'done', body ?? {});
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Post('day-requests/:id/not-possible')
   @HttpCode(200)
   notPossible(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
@@ -86,7 +94,8 @@ export class DayRequestsController {
     return withTenant(this.pool, t.tenantId, async db => {
       const r = (await db.query<DayRequestRow & { email: string | null; firstName: string }>(
         `select ${DAY_REQUEST_COLS}, w.email, coalesce(w.preferred_name, w.first_name) as "firstName"
-           from day_requests r join workers w on w.id = r.worker_id where r.id = $1 for update of r`, [id])).rows[0];
+           from day_requests r join workers w on w.id = r.worker_id where r.id = $1 and (not $2 or ${ON_MY_SITES})
+            for update of r`, [id, isLimited(t)])).rows[0];
       if (!r) throw new NotFoundException('Request not found');
       const refusal = decideRefusal(r.status);
       if (refusal) throw new ConflictException(refusal);

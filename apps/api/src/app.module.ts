@@ -16,6 +16,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { FacilitiesController } from './facilities/facilities.controller.js';
 import { OfficesController } from './facilities/offices.controller.js';
+import { SiteAccessController } from './facilities/site-access.controller.js';
 import { EquipmentAllocationsController, ProjectsController, SiteTeamController } from './projects/projects.controller.js';
 import { CallsController } from './clients/calls.controller.js';
 import { AddressesController } from './workforce/addresses.controller.js';
@@ -53,7 +54,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

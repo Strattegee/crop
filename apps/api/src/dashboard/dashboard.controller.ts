@@ -1,8 +1,8 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
-import { withTenant } from '@crop/db';
+import { acrossSites, withTenant } from '@crop/db';
 import type { Pool } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, oneOf } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -32,7 +32,7 @@ export class DashboardController {
    * The caller's dashboard: their focus (set by the owner, else the default for their role) and its numbers, each
    * with the business's target and whether it is on target. `?focus=` shows another focus's dashboard.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('dashboard')
   async dashboard(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query('focus') wanted?: string) {
     if (wanted && !(FOCUSES as readonly string[]).includes(wanted)) throw new BadRequestException('Choose a dashboard');
@@ -40,7 +40,8 @@ export class DashboardController {
       const a = await new AttentionController(this.pool).attention(t, { days: '7' }) as { byKind: Record<string, number> };
       return a.byKind?.person_blocked ?? 0;
     };
-    return withTenant(this.pool, t.tenantId, async db => {
+    // Business-wide for everyone, including people limited to some sites (David, 4 Nov, answer 3): only totals leave here.
+    return withTenant(this.pool, t.tenantId, db => acrossSites(db, async () => {
       const mine = (await db.query<{ focus: Focus | null; sees_costs: boolean }>(
         'select focus, sees_costs from member_focus where user_id = $1', [auth.userId])).rows[0];
       const supplier = await suppliesEmployers(db);
@@ -77,7 +78,7 @@ export class DashboardController {
         kpis: withHistory,
         funnel: focus === 'recruitment' ? await funnel(db) : null,
       };
-    });
+    }));
   }
 
   /**
@@ -86,7 +87,7 @@ export class DashboardController {
    * last7 | month | prev_month; default week, in the business's dates), the business or a `state` (a site's state) and/or an
    * `office` (an office id, or `none`). Definitions in `LIVE` (kpis.ts). No costs.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('dashboard/live')
   live(@Tenant() t: Membership, @Query('period') periodQ?: string, @Query('state') stateQ?: string, @Query('office') officeQ?: string) {
     const period: LivePeriod = periodQ === undefined || periodQ === '' ? 'week' : (LIVE_PERIODS as readonly string[]).includes(periodQ) ? periodQ as LivePeriod : (() => {
@@ -95,7 +96,8 @@ export class DashboardController {
     const state = stateQ?.trim() ? stateQ.trim().slice(0, 60) : null;
     const office = officeQ?.trim() ? officeQ.trim().toLowerCase() : null;
     if (office && office !== 'none' && !/^[0-9a-f-]{36}$/.test(office)) throw new BadRequestException('Choose an office');
-    return withTenant(this.pool, t.tenantId, async db => {
+    // Business-wide for everyone, including people limited to some sites (David, 4 Nov, answer 3).
+    return withTenant(this.pool, t.tenantId, db => acrossSites(db, async () => {
       const zone = (await loadSettings(db, t.tenantId)).timezone;
       const today = todayIn(zone);
       const { from, to } = livePeriod(period, today);
@@ -128,11 +130,11 @@ export class DashboardController {
           rows: people.slice(0, 100), more: Math.max(0, people.length - 100),
         },
       };
-    });
+    }));
   }
 
   /** The business's targets, with CROP's suggestion for each (owners and admins set them). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('dashboard/targets')
   targets(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => {
