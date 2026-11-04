@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, Post, Query } from 
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { isLimited, OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -23,7 +23,7 @@ export class NotificationsController {
 
   @Roles(...OFFICE_ROLES)
   @Get()
-  list(@Tenant() t: Membership, @Query('limit') limitParam?: string) {
+  list(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query('limit') limitParam?: string) {
     const limit = Math.min(Math.max(Number(limitParam) || 100, 1), 500);
     return withTenant(this.pool, t.tenantId, async db => {
       const rows = (await db.query<{ channel: string; body: string; [k: string]: unknown }>(
@@ -31,7 +31,10 @@ export class NotificationsController {
                 n.last_error as "error", n.created_at as "createdAt", n.sent_at as "sentAt",
                 w.first_name || ' ' || w.last_name as "workerName", n.worker_id as "workerId"
            from notifications n left join workers w on w.id = n.worker_id
-          order by n.created_at desc limit $1`, [limit],
+          -- Someone limited to some sites (migration 0086) sees only the messages they sent: the rest may be about
+          -- other sites' shifts.
+          where ($2::uuid is null or n.created_by = $2)
+          order by n.created_at desc limit $1`, [limit, isLimited(t) ? auth.userId : null],
       )).rows.map(r => {
         // A phone's push token is never shown: the log just says it went to the app.
         if (r.channel === 'push') return { ...r, to: 'CROP app' };

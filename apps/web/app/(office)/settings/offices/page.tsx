@@ -16,7 +16,7 @@ type Office = {
 type Person = { userId: string; name: string; role: string };
 type Site = { id: string; name: string; clientName: string | null; state: string | null; officeId: string | null; active: boolean };
 
-const ROLE: Record<string, string> = { owner: 'Owner', admin: 'Administrator', allocator: 'Allocator' };
+const ROLE: Record<string, string> = { owner: 'Owner', admin: 'Administrator', allocator: 'Allocator', supervisor: 'Supervisor' };
 
 /** The state field for the business's country: a list for Australia and the US, else a free text region. */
 function StateField({ country, value }: { country: string; value?: string | null }) {

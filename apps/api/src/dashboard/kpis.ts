@@ -12,7 +12,7 @@ export const FOCUS_LABEL: Record<Focus, string> = {
 
 /** The dashboard someone sees when the owner hasn't chosen one: allocators get the Allocator one, others Overview. */
 export function defaultFocus(role: string): Focus {
-  return role === 'allocator' ? 'allocator' : 'overview';
+  return role === 'allocator' || role === 'supervisor' ? 'allocator' : 'overview';
 }
 
 /** Owners always see costs; anyone else only when the owner has said so (David, 31 Oct). */

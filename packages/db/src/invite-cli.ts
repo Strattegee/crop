@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 
-const ROLES = ['owner', 'admin', 'allocator', 'worker', 'client'];
+const ROLES = ['owner', 'admin', 'allocator', 'supervisor', 'worker', 'client'];
 
 /**
  * Platform admin tool (runs as the database owner): creates the agency if needed and
@@ -21,7 +21,7 @@ async function main() {
   const role = args.get('role') ?? 'worker';
   if (role === 'platform-admin' && email) return grantPlatformAdmin(email);
   if (!slug || !email || !ROLES.includes(role)) {
-    throw new Error('usage: --tenant <slug> [--name "Agency name"] --email <address> --role <owner|admin|allocator|worker|client>');
+    throw new Error('usage: --tenant <slug> [--name "Agency name"] --email <address> --role <owner|admin|allocator|supervisor|worker|client>');
   }
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');

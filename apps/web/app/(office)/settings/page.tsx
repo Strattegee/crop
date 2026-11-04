@@ -84,6 +84,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card">
+        <h2>Team access</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Which {tw.lower(T.site, true)} and {tw.lower(T.project, true)} each allocator and supervisor works on. Supervisors see only theirs, and only what relates to the {tw.lower(T.shift, true)} there.</p>
+        <Link href="/settings/team-access" className="btn small secondary">Team access</Link>
+      </div>
+
+      <div className="card">
         <h2>Offices</h2>
         <p className="muted" style={{ marginTop: 0 }}>Your branches: which {tw.lower(T.site, true)} and which people in the office belong to each. Allocations and the dashboard can be narrowed to one office.</p>
         <Link href="/settings/offices" className="btn small secondary">Offices</Link>

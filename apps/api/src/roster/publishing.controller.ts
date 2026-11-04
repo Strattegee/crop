@@ -2,7 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, Get, Inject, 
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { date } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -133,7 +133,7 @@ export class PublishingController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
   /** Each site's state for the week starting `weekStart` (any date in the week works). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/weeks')
   list(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query() q: Record<string, string>) {
     const weekStart = weekStartOf(q);
@@ -176,7 +176,7 @@ export class PublishingController {
   }
 
   /** Everything that happened to the week's shifts, newest first. `sincePublish=true` for changes since it went live. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/changes')
   changes(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const weekStart = weekStartOf(q);
@@ -188,7 +188,7 @@ export class PublishingController {
   }
 
   /** One shift's history, oldest first. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('shifts/:id/history')
   history(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {

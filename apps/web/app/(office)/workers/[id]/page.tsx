@@ -32,6 +32,7 @@ import { callLine, type CallRow } from '../../../../lib/calls';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
 import type { Addresses } from '../../../../lib/addresses';
 import { AddressesCard } from './addresses-card';
+import { SupervisorPerson } from './supervisor-person';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,8 @@ export default async function WorkerPage({ params, searchParams }: {
 }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
+  // Supervisors (David, 4 Nov) get the shift-related view only.
+  if ((await currentAgency())?.role === 'supervisor') return <SupervisorPerson id={id} />;
   const [w, types, agency, rtw, avail, employment, settings, onboarding, checklists, appAccess] = await Promise.all([
     api<Worker>(`/workers/${id}`), api<CredentialType[]>('/credential-types'), currentAgency(), api<Rtw>(`/workers/${id}/right-to-work`),
     api<Parameters<typeof AvailabilityCard>[0]['a']>(`/workers/${id}/availability`).catch(() => null),

@@ -24,7 +24,7 @@ const button = {
 } as const;
 
 const ROLE_LABELS: Record<string, string> = {
-  owner: 'Owner', admin: 'Administrator', allocator: 'Allocator', worker: 'Worker', client: 'Client',
+  owner: 'Owner', admin: 'Administrator', allocator: 'Allocator', supervisor: 'Supervisor', worker: 'Worker', client: 'Client',
 };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string }> }) {

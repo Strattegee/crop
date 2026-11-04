@@ -50,14 +50,17 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
   };
   // Employment terms are set by owners and admins.
   const canSetEmployment = agency?.role === 'owner' || agency?.role === 'admin';
+  // Supervisors (4 Nov) see their people's shift-related facts only: no adding people, no contact details.
+  const supervisor = agency?.role === 'supervisor';
 
   return (
     <>
       <h1>{tw.many(T.worker)}</h1>
       <p className="muted">Everyone who works shifts for the business, how they are employed today, and whether they are compliant to work.</p>
+      {agency?.sites != null && <p className="muted small">You see the people on your {tw.lower(T.site, true)}’ teams or rostered there in the last 90 days or later.</p>}
       <Notices error={p.error} done={p.done} />
 
-      <details className="card" open={workers.length === 0 && !p.search && !p.compliance && !p.employment}>
+      {!supervisor && <details className="card" open={workers.length === 0 && !p.search && !p.compliance && !p.employment}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add a worker</summary>
         <form action={addWorker} className="form-row" style={{ marginTop: 12 }}>
           <label>First name<input name="firstName" required maxLength={100} /></label>
@@ -93,10 +96,10 @@ export default async function WorkersPage({ searchParams }: { searchParams: Prom
           )}
           <button type="submit" className="btn">Add worker</button>
         </form>
-      </details>
+      </details>}
 
       <form className="card form-row" method="get">
-        <label>Search<input name="search" defaultValue={p.search} placeholder="Name, email or phone" /></label>
+        <label>Search<input name="search" defaultValue={p.search} placeholder={supervisor ? 'Name' : 'Name, email or phone'} /></label>
         <label>Compliance
           <select name="compliance" defaultValue={p.compliance ?? ''}>
             <option value="">Any</option>

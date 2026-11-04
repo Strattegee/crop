@@ -9,7 +9,7 @@ import { queueNotification } from '../notifications/notify.js';
 
 const ROLE_WORDS: Record<MemberRole, string> = {
   owner: 'an owner (everything, including settings)', admin: 'an administrator (everything, including settings)',
-  allocator: 'a rostering and staff user', worker: 'a worker (your own shifts)', client: 'a client (the client portal)',
+  allocator: 'a rostering and staff user', supervisor: 'a supervisor (rostering at the sites you are given)', worker: 'a worker (your own shifts)', client: 'a client (the client portal)',
 };
 
 /** The welcome email when someone is given access (David, 26 Oct). Plain words; no secrets; a sign-in link. */
@@ -31,7 +31,7 @@ export function welcomeEmail(businessName: string, role: MemberRole, email: stri
   };
 }
 
-const ROLES: MemberRole[] = ['owner', 'admin', 'allocator', 'worker', 'client'];
+const ROLES: MemberRole[] = ['owner', 'admin', 'allocator', 'supervisor', 'worker', 'client'];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Short code for a business from its name: "The Grand Café" → "the-grand-cafe". */

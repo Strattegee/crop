@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, 
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, date } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -79,7 +79,7 @@ export class CoverRulesController {
    * Gaps in the cover rules for gaps starting on local dates `from` to `to` (up to 62 days), at one site or all:
    * times when someone is working but nobody working holds the credential.
    */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/cover-gaps')
   gaps(@Tenant() t: Membership, @Query() q: Record<string, string>) {
     const from = date(q, 'from', { required: true })!;

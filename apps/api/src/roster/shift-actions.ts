@@ -35,11 +35,19 @@ export async function assignWorker(db: PoolClient, tenantId: string, by: string 
   return check.warnings.map(w => w.message);
 }
 
+/** 404 for a shift that doesn't exist or isn't in view (another site's, migration 0086). */
+async function shiftMustExist(db: PoolClient, shiftId: string): Promise<void> {
+  if (!(await db.query('select 1 from shifts where id = $1', [shiftId])).rowCount) throw new NotFoundException('{Shift} not found');
+}
+
 /** The person has agreed (or the office books them directly): assigned → booked. */
 export async function confirmWorker(db: PoolClient, shiftId: string): Promise<void> {
   const r = await db.query(
     `update shift_assignments set status = 'confirmed' where shift_id = $1 and resource_kind = 'worker' and status = 'assigned'`, [shiftId]);
-  if (!r.rowCount) throw new ConflictException('There is nobody waiting to confirm on this {shift}');
+  if (!r.rowCount) {
+    await shiftMustExist(db, shiftId);
+    throw new ConflictException('There is nobody waiting to confirm on this {shift}');
+  }
   await db.query(`update shifts set status = 'booked', updated_at = now() where id = $1`, [shiftId]);
 }
 
@@ -48,7 +56,10 @@ export async function removeWorker(db: PoolClient, shiftId: string, pulledOut: b
   const r = await db.query(
     `update shift_assignments set status = 'removed', ended_at = now(), removed_reason = $2
       where shift_id = $1 and resource_kind = 'worker' and status in ('assigned', 'confirmed')`, [shiftId, pulledOut ? 'pulled_out' : 'office']);
-  if (!r.rowCount) throw new ConflictException('Nobody is on this {shift}');
+  if (!r.rowCount) {
+    await shiftMustExist(db, shiftId);
+    throw new ConflictException('Nobody is on this {shift}');
+  }
   await db.query(`update shifts set status = 'open', updated_at = now() where id = $1 and status <> 'cancelled'`, [shiftId]);
 }
 

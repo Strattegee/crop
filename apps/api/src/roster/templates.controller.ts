@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import { T, wordsFor } from '../terms/words.js';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, int, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -218,7 +218,7 @@ export class RosterTemplatesController {
     return withTenant(this.pool, t.tenantId, fn, actorOf(auth));
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/templates')
   list(@Tenant() t: Membership, @Query('facilityId') facilityId?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
@@ -227,7 +227,7 @@ export class RosterTemplatesController {
         order by f.name, lower(t.name)`, [facilityId && UUID.test(facilityId) ? facilityId : null])).rows);
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roster/templates/:id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, db => templateDetail(db, id));

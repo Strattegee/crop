@@ -9,6 +9,7 @@ describe('manager mode', () => {
     expect(['owner', 'admin', 'allocator'].map(isManager)).toEqual([true, true, true]);
     expect(['worker', 'client', null, undefined].map(isManager)).toEqual([false, false, false, false]);
     expect(startMode('allocator')).toBe('manager');
+    expect(startMode('supervisor')).toBe('manager');
     expect(startMode('worker')).toBe('worker');
     expect([canDecide('owner'), canDecide('admin'), canDecide('allocator'), canDecide('worker')]).toEqual([true, true, false, false]);
     const me = { memberships: [{ tenantSlug: 'cafe', role: 'owner' }, { tenantSlug: 'ward', role: 'worker' }] };

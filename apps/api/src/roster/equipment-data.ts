@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { acrossSites } from '@crop/db';
 import { fillReasons, wordsFor } from '../terms/words.js';
 import { credentialFactsByWorker } from '../workforce/compliance-data.js';
 import { agencyCredentialsForShifts } from './agency-credentials.js';
@@ -51,7 +52,8 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
   const checks = await currentChecks(db, ids);
 
   const others = new Map<string, OtherShift[]>();
-  for (const o of (await db.query<{ equipment_id: string; id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number; facility: string; label: string }>(
+  // Every site (migration 0086): bookings and allocations elsewhere still block, whoever is asking.
+  for (const o of (await acrossSites(db, () => db.query<{ equipment_id: string; id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number; facility: string; label: string }>(
     `select sa.equipment_id, s.id, s.role, s.starts_at, s.ends_at, f.name as facility,
             to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours,
@@ -59,7 +61,7 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
        from shift_assignments sa join shifts s on s.id = sa.shift_id join facilities f on f.id = s.facility_id
       where sa.equipment_id = any($1) and sa.resource_kind = 'equipment' and sa.status in ('assigned', 'confirmed') and s.status <> 'cancelled'
         and s.starts_at < $3 and s.ends_at > $2`,
-    [ids, shift.startsAt, shift.endsAt])).rows) {
+    [ids, shift.startsAt, shift.endsAt]))).rows) {
     const list = others.get(o.equipment_id) ?? [];
     list.push({ id: o.id, role: o.role, startsAt: o.starts_at, endsAt: o.ends_at, localDate: o.local_date, hours: o.hours, facilityName: o.facility, label: o.label });
     others.set(o.equipment_id, list);
@@ -90,12 +92,12 @@ export async function equipmentForShift(db: PoolClient, tenantId: string, shiftI
 /** Live allocations of each piece of equipment covering a date (migration 0084), within withTenant. */
 export async function allocationsOn(db: PoolClient, equipmentIds: string[], onDate: string): Promise<Map<string, AllocationFact[]>> {
   const out = new Map<string, AllocationFact[]>();
-  for (const r of (await db.query<AllocationFact & { equipmentId: string }>(
+  for (const r of (await acrossSites(db, () => db.query<AllocationFact & { equipmentId: string }>(
     `select a.id, a.equipment_id as "equipmentId", a.facility_id as "facilityId", f.name as "siteName",
             to_char(a.starts_on, 'YYYY-MM-DD') as "from", to_char(a.ends_on, 'YYYY-MM-DD') as "to"
        from equipment_site_allocations a join facilities f on f.id = a.facility_id
       where a.equipment_id = any($1) and a.removed_at is null and a.starts_on <= $2 and (a.ends_on is null or a.ends_on >= $2)`,
-    [equipmentIds, onDate])).rows) {
+    [equipmentIds, onDate]))).rows) {
     const { equipmentId, ...a } = r;
     out.set(equipmentId, [...(out.get(equipmentId) ?? []), a]);
   }

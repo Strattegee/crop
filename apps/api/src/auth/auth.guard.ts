@@ -74,7 +74,11 @@ export class AuthGuard implements CanActivate {
     req.auth = { userId: user!.id, email: user!.email, displayName: user!.display_name, memberships, tenant };
     // Who this request is for, for the audit log (the person in the worker app shows as "app").
     const store = auditStore.getStore();
-    if (store) store.actor = { id: user!.id, name: user!.display_name || user!.email, via: tenant?.role === 'worker' ? 'app' : 'office' };
+    if (store) {
+      store.actor = { id: user!.id, name: user!.display_name || user!.email, via: tenant?.role === 'worker' ? 'app' : 'office' };
+      // Which sites they may use in this business (migration 0086); withTenant passes it to the database.
+      if (tenant) store.scope = { tenantId: tenant.tenantId, role: tenant.role, sites: tenant.sites };
+    }
     return true;
   }
 
@@ -82,6 +86,12 @@ export class AuthGuard implements CanActivate {
     const { rows } = await this.pool.query<{ tenant_id: string; tenant_slug: string; tenant_name: string; role: MemberRole }>(
       'select * from app_user_memberships($1)', [userId],
     );
-    return rows.map(r => ({ tenantId: r.tenant_id, tenantSlug: r.tenant_slug, tenantName: r.tenant_name, role: r.role }));
+    // Site limits (migration 0086): supervisors always (maybe none), allocators when sites were chosen for them.
+    const limits = new Map((await this.pool.query<{ tenant_id: string; facility_ids: string[] }>(
+      'select * from app_user_site_limits($1)', [userId])).rows.map(r => [r.tenant_id, r.facility_ids]));
+    return rows.map(r => ({
+      tenantId: r.tenant_id, tenantSlug: r.tenant_slug, tenantName: r.tenant_name, role: r.role,
+      sites: r.role === 'supervisor' ? limits.get(r.tenant_id) ?? [] : r.role === 'allocator' ? limits.get(r.tenant_id) ?? null : null,
+    }));
   }
 }

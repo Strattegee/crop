@@ -1,8 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
+import { acrossSites } from '@crop/db';
 import type { PoolClient } from 'pg';
 import { fillReasons, wordsFor } from '../terms/words.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from '../workforce/compliance-data.js';
 import { addDays, type RequirementRule } from '../workforce/compliance.js';
+import { healthTypes, supervisorEligibility } from '../workforce/supervisor-view.js';
 import type { TermDates } from './employment.js';
 import type { DayRequestFacts } from './day-requests.js';
 import { PERIODS, type AvailabilityFacts, type LeaveFacts, type Period } from './availability.js';
@@ -136,7 +138,8 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   // Everything that could matter: overlaps, rest either side, and both fortnights containing the shift date.
   const windows = fortnightsContaining(shift.localDate);
   const others = new Map<string, OtherShift[]>();
-  for (const o of (await db.query<{ worker_id: string; id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number; facility: string; label: string }>(
+  // Every site (migration 0086): someone limited to some sites must still see clashes, rest and visa hours elsewhere.
+  for (const o of (await acrossSites(db, () => db.query<{ worker_id: string; id: string; role: string; starts_at: Date; ends_at: Date; local_date: string; hours: number; facility: string; label: string }>(
     `select sa.worker_id, s.id, s.role, s.starts_at, s.ends_at, f.name as facility,
             to_char(s.starts_at at time zone f.timezone, 'YYYY-MM-DD') as local_date,
             (extract(epoch from (s.ends_at - s.starts_at)) / 3600 - s.break_minutes / 60.0)::float8 as hours,
@@ -153,7 +156,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
        from agency_inbox i
       where i.placed_worker_id = any($1) and i.placement in ('waiting', 'booked')
         and (i.starts_at at time zone i.site_timezone)::date between $2::date - 1 and $3::date + 1`,
-    [ids, windows[0].from, windows[1].to])).rows) {
+    [ids, windows[0].from, windows[1].to]))).rows) {
     const list = others.get(o.worker_id) ?? [];
     list.push({ id: o.id, role: o.role, startsAt: o.starts_at, endsAt: o.ends_at, localDate: o.local_date, hours: o.hours, facilityName: o.facility, label: o.label });
     others.set(o.worker_id, list);
@@ -170,6 +173,9 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
   const age = { adultRole: opts.onlyRules ? false : await adultRole(db, shift.role), adultDuties: opts.adultDuties ?? [] };
 
   const words = await wordsFor(db);
+  // A supervisor (migration 0086) gets right to work and visa hours as "not met", never their details.
+  const supervisor = (await db.query<{ s: boolean }>('select app_is_supervisor() as s')).rows[0]?.s ?? false;
+  const health = supervisor ? await healthTypes(db) : undefined;
   const weekFrom = mondayOf(shift.localDate);
   const weekTo = addDays(weekFrom, 6);
   return workers.map(w => {
@@ -188,6 +194,7 @@ export async function eligibilityForFacts(db: PoolClient, tenantId: string, shif
       e.blocks.push({ code: 'credential', message });
       e.eligible = false;
     }
+    if (supervisor) Object.assign(e, supervisorEligibility(e, w.name, health));
     fillReasons(e, words);
     const weekHours = mine.filter(o => o.id !== shift.id && o.localDate >= weekFrom && o.localDate <= weekTo).reduce((n, o) => n + o.hours, 0);
     return { workerId: w.id, name: w.name, roles: w.roles, employmentType: w.employment_type, weekHours: Math.round(weekHours * 100) / 100,

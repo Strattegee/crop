@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundE
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -28,7 +28,7 @@ const summary = (p: IndustryPack) => ({
 export class IndustryController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('industry-packs')
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -61,7 +61,7 @@ export class IndustryController {
   }
 
   /** The business's roles: from templates and added by hand. */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get('roles')
   roles(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(

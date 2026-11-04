@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, 
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type Membership } from '../auth/auth.types.js';
+import { OFFICE_ROLES, SITE_ROLES, type Membership } from '../auth/auth.types.js';
 import { Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, isTimeZone, oneOf, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -103,7 +103,7 @@ async function clientExists(db: PoolClient, id: string | null) {
 export class FacilitiesController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query('clientId') clientId?: string, @Query('kind') kind?: string) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
@@ -139,7 +139,7 @@ export class FacilitiesController {
     });
   }
 
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {

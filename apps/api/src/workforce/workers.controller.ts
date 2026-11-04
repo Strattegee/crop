@@ -2,7 +2,8 @@ import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, 
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
-import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { isLimited, OFFICE_ROLES, SITE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
+import { healthTypes, supervisorWorker } from './supervisor-view.js';
 import { Auth, Roles, Tenant } from '../auth/decorators.js';
 import { bool, date, email, gender, oneOf, text, textList } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
@@ -63,7 +64,7 @@ export class WorkersController {
   constructor(@Inject(APP_POOL) private readonly pool: Pool) {}
 
   /** Workers with their compliance status and today's employment. Filters: search (name, email, phone), status, compliance, role, employment (a type, `none` or `left`; `leftOn` is the last day of someone who has left). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get()
   list(@Tenant() t: Membership, @Query() q: Record<string, string | undefined>) {
     const search = q.search?.trim().slice(0, 100) || null;
@@ -83,14 +84,22 @@ export class WorkersController {
                                where e.worker_id = w.id and e.withdrawn_at is null and e.starts_on <= $5 and (e.ends_on is null or e.ends_on >= $5)
                                order by e.starts_on desc limit 1) et on true
           where w.agency_connection_id is null and w.outside_agency_id is null
-            and ($1::text is null or (w.first_name || ' ' || w.last_name || ' ' || coalesce(w.preferred_name,'') || ' ' || coalesce(w.email,'') || ' ' || coalesce(w.phone,'')) ilike '%' || $1 || '%'
-                 or ($6::text is not null and regexp_replace(coalesce(w.phone,''), '\\D', '', 'g') like '%' || $6 || '%'))
+            and ($1::text is null or (w.first_name || ' ' || w.last_name || ' ' || coalesce(w.preferred_name,'')
+                                      || case when $8 then '' else ' ' || coalesce(w.email,'') || ' ' || coalesce(w.phone,'') end) ilike '%' || $1 || '%'
+                 or (not $8 and $6::text is not null and regexp_replace(coalesce(w.phone,''), '\\D', '', 'g') like '%' || $6 || '%'))
             and ($2::worker_status is null or w.status = $2)
             and ($3::text is null or $3 = any(w.roles))
             and ($4::text is null or ($4 = 'none' and et.employment_type is null and lt.ends_on is null) or ($4 = 'left' and lt.ends_on is not null)
                  or et.employment_type::text = $4)
+            -- Someone limited to some sites (migration 0086) sees their people: on a team there, or on a shift there
+            -- in the last 90 days or later (both tables only show their sites' rows).
+            and (not $7 or exists (select 1 from site_members m where m.worker_id = w.id and m.removed_at is null)
+                 or exists (select 1 from shift_assignments sa join shifts s on s.id = sa.shift_id
+                             where sa.worker_id = w.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed')
+                               and s.status <> 'cancelled' and s.ends_at > now() - interval '90 days'))
           order by w.last_name, w.first_name limit 500`,
-        [search, status, q.role?.trim() || null, employment, today, phoneSearchDigits(search)],
+        [search, status, q.role?.trim() || null, employment, today, phoneSearchDigits(search), isLimited(t),
+         t.role === 'supervisor' /* names only: a supervisor can't search by email or phone */],
       )).rows;
       const ctx = await complianceContext(db, t.tenantId);
       const facts = await credentialFactsByWorker(db, workers.map(w => w.id));
@@ -100,7 +109,10 @@ export class WorkersController {
         const c = ctx.evaluate(w.roles, facts.get(w.id) ?? [], rtw.get(w.id) ?? null);
         return { ...w, compliance: c.status, issueCount: c.issues.filter(i => i.severity === 'hard' && i.problem !== 'expiring').length, card: cards.get(w.id) };
       });
-      return q.compliance ? withCompliance.filter(w => w.compliance === q.compliance) : withCompliance;
+      const out = q.compliance ? withCompliance.filter(w => w.compliance === q.compliance) : withCompliance;
+      if (t.role !== 'supervisor') return out;
+      const health = await healthTypes(db);
+      return out.map(w => supervisorWorker(w, health));
     });
   }
 
@@ -145,7 +157,7 @@ export class WorkersController {
   }
 
   /** A worker with their credentials, compliance status and issues, and the optional requirements that apply to them (listed, never checked). */
-  @Roles(...OFFICE_ROLES)
+  @Roles(...SITE_ROLES)
   @Get(':id')
   get(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.pool, t.tenantId, async db => {
@@ -167,7 +179,8 @@ export class WorkersController {
       const compliance = ctx.evaluate(worker.roles, facts, (await rightToWorkByWorker(db, [id])).get(id) ?? null);
       const optional = optionalFor(worker.roles, ctx.rules, facts, ctx.today);
       const card = (await cardsFor(db, [id], ctx.today)).get(id);
-      return { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, optional, today: ctx.today, card };
+      const full = { ...worker, credentials, compliance: compliance.status, issues: compliance.issues, optional, today: ctx.today, card };
+      return t.role === 'supervisor' ? supervisorWorker(full, await healthTypes(db)) : full;
     });
   }
 

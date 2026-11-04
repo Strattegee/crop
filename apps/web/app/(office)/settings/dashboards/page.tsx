@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 type Member = { userId: string; name: string; email: string; role: string; focus: Focus | null; effectiveFocus: Focus; seesCosts: boolean; costsGranted: boolean };
 type Target = { key: string; focus: string; label: string; how: string; unit: Unit; better: 'higher' | 'lower'; suggested: number; target: number | null; setting: boolean };
 
-const ROLE: Record<string, string> = { owner: 'Owner', admin: 'Administrator', allocator: 'Allocator' };
+const ROLE: Record<string, string> = { owner: 'Owner', admin: 'Administrator', allocator: 'Allocator', supervisor: 'Supervisor' };
 const GROUP: Record<string, string> = { allocator: 'Allocator dashboard', compliance: 'Compliance dashboard', recruitment: 'Recruitment dashboard', agency: 'Agency dashboard' };
 const UNIT_WORD: Record<Unit, string> = { percent: '%', count: '', hours: 'hours', days: 'days' };
 
