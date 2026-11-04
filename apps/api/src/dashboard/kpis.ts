@@ -149,13 +149,17 @@ export function trendDays(today: string, weeks = 13): string[] {
 // ---- Live numbers (David, 3 Nov 2026, answer 1): shifts, allocation officers and personnel for a period, for the
 // business, a state or an office. Defined here once; worked out by `liveNumbers` in dashboard-data.ts.
 
-export const LIVE_PERIODS = ['today', 'week', 'last7', 'month'] as const;
+export const LIVE_PERIODS = ['today', 'week', 'last7', 'month', 'prev_month'] as const;
 export type LivePeriod = typeof LIVE_PERIODS[number];
-export const LIVE_PERIOD_LABEL: Record<LivePeriod, string> = { today: 'Today', week: 'This week', last7: 'Last 7 days', month: 'This month' };
+/** The same words as the Allocations period choice (David, 4 Nov: "Current week", "Current month", "Previous month"). */
+export const LIVE_PERIOD_LABEL: Record<LivePeriod, string> = {
+  today: 'Today', week: 'Current week', last7: 'Last 7 days', month: 'Current month', prev_month: 'Previous month',
+};
 
 /**
- * The period's first and last local dates (inclusive) for the business's `today`: today; this week (Monday to
- * Sunday); the last 7 days (today and the six before); this month (the 1st to its last day).
+ * The period's first and last local dates (inclusive) for the business's `today`: today; the current week (Monday to
+ * Sunday); the last 7 days (today and the six before); the current month (the 1st to its last day); the previous
+ * month (its 1st to its last day).
  */
 export function livePeriod(period: LivePeriod, today: string): { from: string; to: string } {
   const t = new Date(`${today}T00:00:00Z`);
@@ -165,6 +169,7 @@ export function livePeriod(period: LivePeriod, today: string): { from: string; t
     case 'today': return { from: today, to: today };
     case 'last7': return { from: iso(plus(t, -6)), to: today };
     case 'month': return { from: `${today.slice(0, 7)}-01`, to: iso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0))) };
+    case 'prev_month': return { from: iso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - 1, 1))), to: iso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 0))) };
     case 'week': {
       const monday = plus(t, -((t.getUTCDay() + 6) % 7));
       return { from: iso(monday), to: iso(plus(monday, 6)) };

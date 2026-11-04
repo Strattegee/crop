@@ -7,7 +7,10 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
-import { initialsOf, onTab, parseTab, progressLine, queueBand, queueOrder, queueStage, type ProgressFacts } from '../src/clients/allocation-queue.js';
+import {
+  defaultTab, doneDays, doneOrder, initialsOf, onTab, outcomeStage, parsePeriod, parseTab, progressLine, queueBand, queueOrder, queuePeriodDates, queueStage,
+  type ProgressFacts,
+} from '../src/clients/allocation-queue.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -73,6 +76,91 @@ describe('allocation queue: rules (David chose layout A, 2 Nov)', () => {
     expect(initialsOf('Jo Anne Manager')).toBe('JM');
     expect(initialsOf('alloc@x.com')).toBe('AL');
     expect(initialsOf('pat.example@x.com')).toBe('PE');
+  });
+});
+
+describe('allocation queue: calendar periods and outcomes (David, 4 Nov)', () => {
+  it('gives ended and cancelled shifts their outcome as the stage', () => {
+    const f = { offersPending: 0, pulledOut: false };
+    expect(queueStage({ ...f, status: 'booked', ended: true })).toBe('worked');
+    expect(queueStage({ ...f, status: 'booked', ended: true, clientConfirms: true })).toBe('worked');
+    expect(queueStage({ ...f, status: 'open', ended: true })).toBe('unfilled');
+    expect(queueStage({ ...f, status: 'open', ended: true, offersPending: 3 })).toBe('unfilled');
+    expect(queueStage({ ...f, status: 'open', ended: true, pulledOut: true })).toBe('not_refilled');
+    expect(queueStage({ ...f, status: 'assigned', ended: true })).toBe('unconfirmed');
+    expect(queueStage({ ...f, status: 'cancelled', ended: false })).toBe('cancelled');
+    expect(queueStage({ ...f, status: 'cancelled', ended: true })).toBe('cancelled');
+    // Started but not ended: still live.
+    expect(queueStage({ ...f, status: 'open', ended: false })).toBe('new');
+    expect(outcomeStage({ status: 'booked', pulledOut: false })).toBeNull();
+  });
+
+  it('keeps outcomes off the live tabs and live stages off the outcome tabs', () => {
+    expect(onTab('all', 'worked', false)).toBe(false);
+    expect(onTab('booked_today', 'worked', true)).toBe(false);
+    expect(onTab('pulled_out', 'not_refilled', false)).toBe(false);
+    expect(onTab('done', 'worked', false)).toBe(true);
+    expect(onTab('done', 'unconfirmed', false)).toBe(true);
+    expect(onTab('done', 'new', false)).toBe(false);
+    expect(onTab('done', 'booked', true)).toBe(false);
+    expect(onTab('worked', 'worked', false)).toBe(true);
+    expect(onTab('unfilled', 'unfilled', false)).toBe(true);
+    expect(onTab('unfilled', 'not_refilled', false)).toBe(true);
+    expect(onTab('unfilled', 'unconfirmed', false)).toBe(false);
+    expect(onTab('cancelled', 'cancelled', false)).toBe(true);
+    expect(onTab('cancelled', 'unfilled', false)).toBe(false);
+  });
+
+  it('reads periods and tabs: outcome tabs only with a calendar period, previous month opens on Done', () => {
+    expect(parsePeriod('week')).toBe('week');
+    expect(parsePeriod('prev_month')).toBe('prev_month');
+    expect(parsePeriod('year')).toBeNull();
+    expect(parsePeriod(undefined)).toBeNull();
+    expect(defaultTab(null)).toBe('all');
+    expect(defaultTab('month')).toBe('all');
+    expect(defaultTab('prev_month')).toBe('done');
+    expect(parseTab('done')).toBe('all');
+    expect(parseTab('done', 'week')).toBe('done');
+    expect(parseTab('cancelled', 'month')).toBe('cancelled');
+    expect(parseTab(undefined, 'prev_month')).toBe('done');
+    expect(parseTab('new', 'prev_month')).toBe('new');
+  });
+
+  it('works out calendar periods in the business’s dates, across month and year ends', () => {
+    expect(queuePeriodDates('week', '2026-11-04')).toEqual({ from: '2026-11-02', to: '2026-11-08' });
+    expect(queuePeriodDates('week', '2026-11-01')).toEqual({ from: '2026-10-26', to: '2026-11-01' }); // Sunday
+    expect(queuePeriodDates('week', '2026-12-31')).toEqual({ from: '2026-12-28', to: '2027-01-03' });
+    expect(queuePeriodDates('month', '2026-11-04')).toEqual({ from: '2026-11-01', to: '2026-11-30' });
+    expect(queuePeriodDates('prev_month', '2026-11-04')).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(queuePeriodDates('prev_month', '2026-11-30')).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(queuePeriodDates('prev_month', '2027-01-01')).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+    expect(queuePeriodDates('prev_month', '2028-03-31')).toEqual({ from: '2028-02-01', to: '2028-02-29' });
+    expect(queuePeriodDates('prev_month', '2026-03-15')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+  });
+
+  it('bands outcomes as done, worded and ordered by day, latest first', () => {
+    const now = new Date('2026-11-02T08:00:00Z');
+    expect(queueBand({ startsAt: '2026-11-05T00:00:00Z', localDate: '2026-11-05', stage: 'cancelled' }, now, '2026-11-02', '2026-11-03')).toBe('done');
+    expect(queueBand({ startsAt: '2026-11-01T00:00:00Z', localDate: '2026-11-01', stage: 'worked' }, now, '2026-11-02', '2026-11-03')).toBe('done');
+    const base: ProgressFacts = { stage: 'worked', workerName: 'Tom Example', offersTotal: 0, offersPending: 0, offersDeclined: 0, acceptedAt: null, viaOffer: false,
+      pulledOutName: null, pulledOutAt: null, withAgencies: false };
+    expect(progressLine(base)).toBe('Tom Example worked it');
+    expect(progressLine({ ...base, stage: 'unconfirmed' })).toBe('Tom Example was allocated but never confirmed');
+    expect(progressLine({ ...base, stage: 'unfilled', workerName: null })).toBe('Nobody went · never offered');
+    expect(progressLine({ ...base, stage: 'unfilled', workerName: null, offersTotal: 6, offersDeclined: 2 })).toBe('Nobody went · Offered 6 · 2 declined');
+    expect(progressLine({ ...base, stage: 'not_refilled', workerName: null, pulledOutName: 'Ana Example', pulledOutAt: '18:31' })).toBe('Ana Example pulled out 18:31 · not refilled');
+    expect(progressLine({ ...base, stage: 'cancelled', cancelWords: 'The client cancelled', cancelReason: 'Ward closed' })).toBe('Ward closed');
+    expect(progressLine({ ...base, stage: 'cancelled', cancelWords: 'The client cancelled', cancelReason: ' ' })).toBe('The client cancelled');
+    expect(progressLine({ ...base, stage: 'cancelled' })).toBe('Cancelled');
+    const r = (localDate: string, startsAt: string, stage: 'worked' | 'unfilled' | 'cancelled' | 'not_refilled' | 'new') =>
+      ({ localDate, startsAt, stage, clientRank: null, clientName: 'C', facilityName: 'S' });
+    const rows = [r('2026-10-30', '2026-10-30T01:00:00Z', 'worked'), r('2026-10-31', '2026-10-31T05:00:00Z', 'unfilled'), r('2026-10-31', '2026-10-30T21:00:00Z', 'cancelled'),
+      r('2026-10-31', '2026-10-31T02:00:00Z', 'not_refilled'), r('2026-11-03', '2026-11-03T02:00:00Z', 'new')];
+    expect([...rows].sort(doneOrder).map(x => `${x.localDate} ${x.stage}`)).toEqual(['2026-11-03 new', '2026-10-31 cancelled', '2026-10-31 not_refilled', '2026-10-31 unfilled', '2026-10-30 worked']);
+    expect(doneDays(rows)).toEqual([
+      { date: '2026-10-31', total: 3, worked: 0, unfilled: 2, cancelled: 1 },
+      { date: '2026-10-30', total: 1, worked: 1, unfilled: 0, cancelled: 0 },
+    ]);
   });
 });
 
@@ -176,7 +264,8 @@ describe('allocation queue: API', () => {
 
   it('lists what still needs someone, most urgent first, with stage counts', async () => {
     const q = await queue();
-    expect(q.counts).toEqual({ all: 7, new: 2, released: 1, accepted: 1, worker_to_confirm: 1, client_to_confirm: 1, pulled_out: 1, booked_today: 1 });
+    expect(q.counts).toEqual({ all: 7, new: 2, released: 1, accepted: 1, worker_to_confirm: 1, client_to_confirm: 1, pulled_out: 1, booked_today: 1,
+      done: 0, worked: 0, unfilled: 0, cancelled: 0 });
     expect(q.total).toBe(7);
     expect(q.shifts.map(s => s.id)).not.toContain(ids.booked);
     expect(q.shifts.map(s => s.id)).not.toContain(ids.far);
@@ -217,6 +306,8 @@ describe('allocation queue: API', () => {
     expect(day).not.toContain(ids.far);
     await http().get('/allocations/queue?days=0').set(as('alloc')).expect(400);
     await http().get('/allocations/queue?days=15').set(as('alloc')).expect(400);
+    // Outcome tabs need a calendar period: without one, Done is the ordinary queue.
+    expect((await queue('?stage=done')).counts.all).toBe(7);
   });
 
   it('shows who else has a shift open (never a lock), for two minutes', async () => {
@@ -235,6 +326,82 @@ describe('allocation queue: API', () => {
     await http().post(`/allocations/presence/${ids.soonBay}`).set(as('nosy')).expect(204);
     expect((await owner.query(`select count(*)::int as n from allocation_presence where tenant_id = $1`, [ids.nosy])).rows[0].n).toBe(0);
     await http().post(`/allocations/presence/${ids.soonBay}`).set(as('worker')).expect(403);
+  });
+
+  it('shows calendar periods with what happened to past shifts, in the business’s dates (David, 4 Nov)', async () => {
+    const today = melb(0).date;
+    const prev = queuePeriodDates('prev_month', today);
+    const month = queuePeriodDates('month', today);
+    const before = new Date(Date.parse(`${prev.from}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    /** Moves a shift to local (Melbourne) times, as if it had been ordered for then. */
+    const moveTo = (id: string, date: string, start: string, hours: number) => owner.query(
+      `update shifts set starts_at = ($2::date + $3::time) at time zone 'Australia/Melbourne', ends_at = ($2::date + $3::time) at time zone 'Australia/Melbourne' + make_interval(hours => $4) where id = $1`,
+      [id, date, start, hours]);
+    const made = async (setup?: (id: string) => Promise<unknown>) => {
+      const id = await order({ date: ahead(5), startTime: '07:00', endTime: '15:00' });
+      await setup?.(id);
+      return id;
+    };
+    // The last night of the previous month (local 23:30, still the 30th/31st in UTC too late in the day): worked.
+    const worked = await made(async id => {
+      await http().post(`/shifts/${id}/assign`).set(as('alloc')).send({ workerId: ids.sarah }).expect(200);
+      await http().post(`/shifts/${id}/confirm`).set(as('alloc')).expect(200);
+    });
+    await moveTo(worked, prev.to, '23:30', 8);
+    // First thing on the 1st of the previous month (local 00:15 = the day before in UTC): in it. The night before: not.
+    const firstMorning = await made();
+    await moveTo(firstMorning, prev.from, '00:15', 1);
+    const dayBefore = await made();
+    await moveTo(dayBefore, before, '23:45', 1);
+    const pulled = await made(async id => {
+      await http().post(`/shifts/${id}/assign`).set(as('alloc')).send({ workerId: ids.ana }).expect(200);
+      await http().post(`/shifts/${id}/unassign`).set(as('alloc')).send({ pulledOut: true }).expect(200);
+    });
+    await moveTo(pulled, prev.from, '09:00', 4);
+    const cancelled = await made(id => http().post(`/shifts/${id}/cancel`).set(as('alloc')).send({ reason: 'Ward closed', kind: 'client_withdrew' }).expect(200));
+    await moveTo(cancelled, prev.to, '07:00', 8);
+    const unconfirmed = await made(id => http().post(`/shifts/${id}/assign`).set(as('alloc')).send({ workerId: ids.tom }).expect(200));
+    await moveTo(unconfirmed, prev.to, '07:00', 8);
+    // The first hour of the current month: never in the previous month.
+    const thisMonth = await made();
+    await moveTo(thisMonth, month.from, '00:30', 1);
+
+    type PQ = Awaited<ReturnType<typeof queue>> & { period: string; from: string; to: string; more: number; doneDays: { date: string; total: number }[];
+      shifts: (Row & { cancelKind: string | null; cancelWords: string | null; ended: boolean })[] };
+    const p = await queue('?period=prev_month') as PQ;
+    expect(p).toMatchObject({ period: 'prev_month', from: prev.from, to: prev.to, more: 0 });
+    expect(p.counts).toMatchObject({ all: 0, new: 0, done: 5, worked: 1, unfilled: 2, cancelled: 1 });
+    expect(p.total).toBe(5); // opens on Done
+    const got = p.shifts.map(s => s.id);
+    expect(got).not.toContain(dayBefore);
+    expect(got).not.toContain(thisMonth);
+    // Latest day first: the last day's three (by start), then the 1st's two.
+    expect(got.slice(3).sort()).toEqual([firstMorning, pulled].sort());
+    expect(got.slice(0, 3)).toContain(worked);
+    const by = Object.fromEntries(p.shifts.map(s => [s.id, s]));
+    expect(by[worked]).toMatchObject({ stage: 'worked', band: 'done', progress: 'Sarah Example worked it', ended: true, waitingSince: null });
+    expect(by[firstMorning]).toMatchObject({ stage: 'unfilled', progress: 'Nobody went · never offered' });
+    expect(by[pulled]).toMatchObject({ stage: 'not_refilled', pulledOutName: 'Ana Example' });
+    expect(by[cancelled]).toMatchObject({ stage: 'cancelled', cancelKind: 'client_withdrew', progress: 'Ward closed', cancelWords: 'The client withdrew the request' });
+    expect(by[unconfirmed]).toMatchObject({ stage: 'unconfirmed' });
+    expect(p.doneDays.map(d => d.date)).toEqual([prev.to, prev.from]);
+    expect((await queue('?period=prev_month&stage=unfilled')).shifts.map(s => s.id).sort()).toEqual([firstMorning, pulled].sort());
+    expect((await queue('?period=prev_month&stage=cancelled')).shifts.map(s => s.id)).toEqual([cancelled]);
+    // Paging: counts cover everything, rows come a page at a time.
+    const one = await queue('?period=prev_month&limit=2') as PQ;
+    expect([one.shifts.length, one.total, one.more]).toEqual([2, 5, 3]);
+
+    const m = await queue('?period=month') as PQ;
+    expect(m.from).toBe(month.from);
+    expect(m.shifts.map(s => s.id)).not.toContain(worked); // opens on what still needs someone
+    expect((await queue('?period=month&stage=done')).shifts.map(s => s.id)).toContain(thisMonth);
+    expect((await queue('?period=month&stage=done')).shifts.map(s => s.id)).not.toContain(worked);
+    const wk = await queue('?period=week') as PQ;
+    expect(new Date(`${wk.from}T00:00:00Z`).getUTCDay()).toBe(1);
+    expect(new Date(`${wk.to}T00:00:00Z`).getUTCDay()).toBe(0);
+    // The forward-looking default never shows them.
+    expect((await queue()).shifts.map(s => s.id)).not.toContain(cancelled);
+    await http().get('/allocations/queue?period=year').set(as('alloc')).expect(400);
   });
 
   it('is office-only and scoped to the business', async () => {

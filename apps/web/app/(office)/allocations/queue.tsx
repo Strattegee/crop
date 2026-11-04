@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { T, type Words } from '../../../lib/terms';
 import {
-  DAY_CHOICES, QUEUE_BANDS, officeChipList, QUEUE_TABS, bandTitle, bestPeople, releasableRows, hereLine, initials, personLine, queueHref, stagePill, startsIn, tabLabel, waitingFor,
-  type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
+  OUTCOME_TABS, QUEUE_BANDS, officeChipList, bandTitle, bestPeople, dayGroups, dayHeading, isOutcomeStage, periodChoices, releasableRows, hereLine, initials, personLine, queueHref,
+  showMore, stagePill, startsIn, tabLabel, tabsFor, waitingFor,
+  type DayTotals, type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
 } from '../../../lib/allocation-queue';
+import { cancelKindChoices } from '../../../lib/cancel-kinds';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
 import { assign, cancelShift, clientConfirmed, confirm, offer, recordReply, unassign, undoClientConfirmed } from '../roster/actions';
 import { AgencyFillSection, type AgencyFillState } from '../roster/agency-fill-section';
@@ -21,9 +23,11 @@ export type QueueRow = {
   workerId: string | null; workerName: string | null; clientConfirmedAt: string | null;
   offersTotal: number; offersPending: number; offersDeclined: number; pulledOutName: string | null; withAgencies: boolean;
   waitingSince: string | null; stage: QueueStage; band: QueueBand; progress: string; presence: { name: string; initials: string }[]; youAreOn: boolean;
+  ended?: boolean; cancelKind?: string | null; cancelWords?: string | null;
 };
 export type Queue = {
   counts: Record<QueueTab, number>; regions: { name: string; count: number }[];
+  period?: string | null; from?: string | null; to?: string | null; doneDays?: DayTotals[]; more?: number;
   office?: string | null; myOffices?: string[]; offices?: { id: string; name: string; count: number; mine: boolean }[]; noOffice?: number; bands: Record<QueueBand, number>; total: number; shifts: QueueRow[];
 };
 type Reason = { code: string; message: string };
@@ -34,8 +38,14 @@ export type PanelShift = {
   id: string; facilityId: string; facilityName: string; areaName: string | null; role: string; status: string; localDate: string; localStart: string; localEnd: string;
   startsAt: string; hours: number; workerId?: string | null; workerName: string | null; assignmentStatus: string | null; agencyName: string | null; notes: string | null; genderRequested: 'F' | 'M' | null;
   clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null; offersPending: number; pulledOutName: string | null;
+  endsAt?: string; cancelKind?: string | null; cancelledReason?: string | null;
 };
-export type Panel = { shift: PanelShift; row: QueueRow | null; candidates: PanelCandidate[]; offers: PanelOffer[]; agency: AgencyFillState | null; calls?: CallRow[]; today?: string };
+export type HistoryRow = { id: string; summary: string; actorName: string | null; at: string };
+/** `done`: the shift has ended or was cancelled, so the panel shows what happened instead of ways to fill it. */
+export type Panel = {
+  shift: PanelShift; row: QueueRow | null; candidates: PanelCandidate[]; offers: PanelOffer[]; agency: AgencyFillState | null; calls?: CallRow[]; today?: string;
+  done?: boolean; history?: HistoryRow[];
+};
 
 const GENDER = { F: 'Female requested', M: 'Male requested' } as const;
 
@@ -52,6 +62,34 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
   const here = href({});
   const officeChips = q ? officeChipList({ office: q.office ?? null, myOffices: q.myOffices ?? [], offices: q.offices ?? [], noOffice: q.noOffice ?? 0 }) : [];
   const bands = QUEUE_BANDS.map(b => ({ band: b, rows: (q?.shifts ?? []).filter(r => r.band === b) })).filter(b => b.rows.length);
+  // Ended and cancelled shifts (calendar periods): by day, latest first, each day headed with its totals on this tab.
+  const days = dayGroups((q?.shifts ?? []).filter(r => r.band === 'done'));
+  const dayTotals = new Map((q?.doneDays ?? []).map(d => [d.date, d]));
+  const more = q ? showMore(p, q.shifts.length, q.more ?? 0) : null;
+  const tabs = tabsFor(p.period ?? null);
+  const doneTab = (OUTCOME_TABS as readonly string[]).includes(p.stage);
+  const row = (r: QueueRow) => {
+    const done = isOutcomeStage(r.stage);
+    const st = startsIn(r.startsAt, now, r);
+    const pill = stagePill(r.stage, qw, r.cancelKind ?? null);
+    const rank = rankChip(r.clientRank);
+    const sel = p.shift === r.id;
+    return (
+      <Link key={r.id} href={href({ shift: sel ? null : r.id })} scroll={false} data-qrow role="row"
+        className={`q-row${sel ? ' sel' : ''}${r.stage === 'pulled_out' ? ' q-pulled' : ''}${done ? ' q-done' : ''}`} aria-current={sel ? 'true' : undefined}>
+        {done ? <span className="q-starts muted">{r.ended ? 'Ended' : st.text}</span> : <span className={`q-starts ${st.tone}`}>{st.text}</span>}
+        <span className="muted">{done ? '–' : waitingFor(r.waitingSince, now)}</span>
+        <span><span className={`q-pill ${pill.cls}`}>{pill.label}</span></span>
+        <span>{rank ? <span className={`q-rank${(r.clientRank ?? 9) <= 2 ? ' top' : ''}`} title={`${tw.one(T.client)} rank`}>{r.clientRank}</span> : <span className="muted">–</span>}</span>
+        <span className="cut">{r.clientName} · {r.facilityName}{r.areaName ? ` · ${r.areaName}` : ''}</span>
+        <span className="cut">{r.role}{r.genderRequested ? <span className="muted"> ({r.genderRequested})</span> : null}</span>
+        <span className="cut muted">{r.dayLabel} {r.localStart}–{r.localEnd}</span>
+        <span className="muted">{r.hours}</span>
+        <span className="cut muted" title={r.progress}>{r.progress}</span>
+        <span className="q-on">{r.presence.slice(0, 2).map(x => <span key={x.name} className="q-av" title={`${x.name} has this open`}>{x.initials}</span>)}</span>
+      </Link>
+    );
+  };
   return (
     <div className="q-screen">
       <div className="q-filters">
@@ -64,9 +102,9 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
             <option value="">Every {tw.lower(T.client)}</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <label className="sr-only" htmlFor="q-days">Days ahead</label>
-          <select id="q-days" name="days" defaultValue={String(p.days)} className="q-select">
-            {DAY_CHOICES.map(d => <option key={d} value={d}>{d === 1 ? 'Next 24 hours' : `Next ${d} days`}</option>)}
+          <label className="sr-only" htmlFor="q-days">Period</label>
+          <select id="q-days" name="period" defaultValue={p.period ?? String(p.days)} className="q-select">
+            {periodChoices().map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
           <button className="btn small secondary">Show</button>
         </form>
@@ -91,10 +129,13 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         <QueueLive closeHref={href({ shift: null })} shiftId={p.shift} />
       </div>
       <nav className="q-tabs" aria-label="Stage">
-        {QUEUE_TABS.map(t => (
-          <Link key={t} className={`q-tab${p.stage === t ? ' on' : ''}`} href={href({ stage: t, shift: null })} scroll={false} aria-current={p.stage === t ? 'page' : undefined}>
-            <span className={`q-dot qd-${t}`} aria-hidden="true" />{tabLabel(t, qw)} <b>{q?.counts[t] ?? 0}</b>
-          </Link>
+        {tabs.map(t => (
+          <span key={t} style={{ display: 'contents' }}>
+            {t === 'done' && <span className="q-tabs-sep" aria-hidden="true">Ended or cancelled</span>}
+            <Link className={`q-tab${p.stage === t ? ' on' : ''}`} href={href({ stage: t, shift: null, limit: null })} scroll={false} aria-current={p.stage === t ? 'page' : undefined}>
+              <span className={`q-dot qd-${t}`} aria-hidden="true" />{tabLabel(t, qw)} <b>{q?.counts[t] ?? 0}</b>
+            </Link>
+          </span>
         ))}
       </nav>
 
@@ -108,7 +149,9 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
               </div>
               {!q && <p className="q-empty">Couldn&apos;t load the {qw.shifts}. It tries again in a moment.</p>}
               {q && q.shifts.length === 0 && (
-                <p className="q-empty">{p.stage === 'booked_today' ? `Nothing booked today yet${p.region ? ` in ${p.region}` : ''}.` : `Nothing needs anyone here. New orders show up as soon as they're saved.`}</p>
+                <p className="q-empty">{p.stage === 'booked_today' ? `Nothing booked today yet${p.region ? ` in ${p.region}` : ''}.`
+                  : doneTab ? `No ${qw.shifts} here have ended or been cancelled in this period.`
+                    : `Nothing needs anyone here. New orders show up as soon as they're saved.`}</p>
               )}
               {bands.map(b => (
                 <div key={b.band} role="rowgroup">
@@ -117,38 +160,30 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
                     {(b.band === 'soon' || b.band === 'started') && <span className="q-band-hint">soonest first; higher-ranked {tw.lower(T.client, true)} first at the same time</span>}
                     <BulkRelease tw={tw} qw={qw} rows={releasableRows(b.rows)} here={here} title={bandTitle(b.band).toLowerCase()} />
                   </div>
-                  {b.rows.map(r => {
-                    const st = startsIn(r.startsAt, now, r);
-                    const pill = stagePill(r.stage, qw);
-                    const rank = rankChip(r.clientRank);
-                    const sel = p.shift === r.id;
-                    return (
-                      <Link key={r.id} href={href({ shift: sel ? null : r.id })} scroll={false} data-qrow role="row"
-                        className={`q-row${sel ? ' sel' : ''}${r.stage === 'pulled_out' ? ' q-pulled' : ''}`} aria-current={sel ? 'true' : undefined}>
-                        <span className={`q-starts ${st.tone}`}>{st.text}</span>
-                        <span className="muted">{waitingFor(r.waitingSince, now)}</span>
-                        <span><span className={`q-pill ${pill.cls}`}>{pill.label}</span></span>
-                        <span>{rank ? <span className={`q-rank${(r.clientRank ?? 9) <= 2 ? ' top' : ''}`} title={`${tw.one(T.client)} rank`}>{r.clientRank}</span> : <span className="muted">–</span>}</span>
-                        <span className="cut">{r.clientName} · {r.facilityName}{r.areaName ? ` · ${r.areaName}` : ''}</span>
-                        <span className="cut">{r.role}{r.genderRequested ? <span className="muted"> ({r.genderRequested})</span> : null}</span>
-                        <span className="cut muted">{r.dayLabel} {r.localStart}–{r.localEnd}</span>
-                        <span className="muted">{r.hours}</span>
-                        <span className="cut muted" title={r.progress}>{r.progress}</span>
-                        <span className="q-on">{r.presence.slice(0, 2).map(x => <span key={x.name} className="q-av" title={`${x.name} has this open`}>{x.initials}</span>)}</span>
-                      </Link>
-                    );
-                  })}
+                  {b.rows.map(row)}
                 </div>
               ))}
+              {days.map(d => (
+                <div key={d.date} role="rowgroup">
+                  <div className="q-band qb-done" role="row">
+                    <span>{dayHeading(dayTotals.get(d.date) ?? { date: d.date, total: d.rows.length, worked: 0, unfilled: 0, cancelled: 0 })}</span>
+                  </div>
+                  {d.rows.map(row)}
+                </div>
+              ))}
+              {more && <div className="q-more"><Link href={more.href} scroll={false}>{more.label}</Link></div>}
             </div>
           </div>
           <div className="q-foot">
-            <span><kbd>J</kbd> <kbd>K</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>A</kbd> assign top person</span>
-            <span><kbd>O</kbd> offer to top 5</span><span><kbd>R</kbd> release to {qw.bank}</span><span><kbd>Esc</kbd> close</span>
-            <span className="q-foot-count">{q ? `${q.total} ${q.total === 1 ? tw.lower(T.shift) : qw.shifts}` : ''} · nothing is locked: if two people act, the first wins and the other is told</span>
+            <span><kbd>J</kbd> <kbd>K</kbd> move</span><span><kbd>Enter</kbd> open</span>
+            {!doneTab && <><span><kbd>A</kbd> assign top person</span><span><kbd>O</kbd> offer to top 5</span><span><kbd>R</kbd> release to {qw.bank}</span></>}
+            <span><kbd>Esc</kbd> close</span>
+            <span className="q-foot-count">{q ? `${q.total} ${q.total === 1 ? tw.lower(T.shift) : qw.shifts}${q.more ? ` (${q.shifts.length} shown)` : ''}` : ''} · nothing is locked: if two people act, the first wins and the other is told</span>
           </div>
         </section>
-        {panel && <FillPanel tw={tw} qw={qw} panel={panel} here={here} closeHref={href({ shift: null })} now={now} when={when} />}
+        {panel && (panel.done
+          ? <OutcomePanel tw={tw} qw={qw} panel={panel} closeHref={href({ shift: null })} when={when} />
+          : <FillPanel tw={tw} qw={qw} panel={panel} here={here} closeHref={href({ shift: null })} now={now} when={when} />)}
       </div>
     </div>
   );
@@ -312,6 +347,78 @@ function FillPanel({ tw, qw, panel, here, closeHref, now, when }: {
       <div className="q-panel-foot">
         <Link href={findStaffHref(s)}>Open in the {tw.lower(T.roster)}</Link>
         <span className="muted small">for duties, times, history and everything else</span>
+      </div>
+    </aside>
+  );
+}
+
+const OFFER_WORDS: Record<string, string> = { pending: 'no reply', accepted: 'accepted', declined: 'said no', withdrawn: 'withdrawn', filled: 'filled by someone else', expired: 'expired' };
+
+/**
+ * The panel for a shift that has ended or was cancelled (calendar periods, David 4 Nov): what happened (who worked it,
+ * who pulled out, why it was cancelled), who was offered it, calls logged and its history. Nothing to fill any more.
+ */
+function OutcomePanel({ tw, qw, panel, closeHref, when }: { tw: Words; qw: QueueWords; panel: Panel; closeHref: string; when: (iso: string) => string }) {
+  const { shift: s, row: r } = panel;
+  const shift = tw.lower(T.shift);
+  const stage = r?.stage ?? (s.status === 'cancelled' ? 'cancelled' : s.status === 'booked' ? 'worked' : s.status === 'assigned' ? 'unconfirmed' : s.pulledOutName ? 'not_refilled' : 'unfilled');
+  const pill = stagePill(stage, qw, s.cancelKind ?? r?.cancelKind ?? null);
+  const kind = cancelKindChoices(tw.one(T.client), true).find(k => k.value === (s.cancelKind ?? 'other'))?.label ?? 'Other';
+  const pulledName = s.pulledOutName ?? r?.pulledOutName ?? null;
+  const what = (() => {
+    switch (stage) {
+      case 'worked': return <><strong>{s.workerName ?? 'Someone'}</strong>{s.agencyName ? ` (${s.agencyName})` : ''} worked it.</>;
+      case 'unconfirmed': return <><strong>{s.workerName ?? 'Someone'}</strong> was allocated but never confirmed it.</>;
+      case 'not_refilled': return <><strong>{pulledName ?? 'Someone'}</strong> pulled out and nobody replaced them.</>;
+      case 'cancelled': return <>Cancelled. <strong>Why:</strong> {kind}{s.cancelledReason ? <> · {s.cancelledReason}</> : null}</>;
+      default: return <>Nobody went.</>;
+    }
+  })();
+  return (
+    <aside className="q-panel" id="fill-panel" aria-label={`Selected ${shift}`}>
+      <div className="q-panel-head">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {r?.clientReference && <div className="muted small">ref {r.clientReference}</div>}
+          <h2>{s.role}</h2>
+          <div>{r?.clientName ? `${r.clientName} – ` : ''}{s.facilityName}{s.areaName ? `, ${s.areaName}` : ''}</div>
+          <div className="muted small">{dayLabel(s.localDate)} · {s.localStart}–{s.localEnd} · {s.hours}&nbsp;h</div>
+        </div>
+        <span className={`q-pill ${pill.cls}`}>{pill.label}</span>
+        <Link href={closeHref} scroll={false} className="q-close" aria-label="Close">×</Link>
+      </div>
+      <div className="q-section">
+        <h3>What happened</h3>
+        <p style={{ margin: '4px 0 0' }}>{what}</p>
+        {stage === 'worked' && pulledName && pulledName !== s.workerName && <p className="muted small" style={{ margin: '4px 0 0' }}>{pulledName} pulled out before them.</p>}
+      </div>
+      {r?.orderNotes && <div className="q-note"><strong>{tw.one(T.client)} note:</strong> {r.orderNotes}</div>}
+      {panel.offers.length > 0 && (
+        <div className="q-section">
+          <h3>Offered to {panel.offers.length}</h3>
+          <p className="small" style={{ margin: '4px 0 0' }}>
+            {panel.offers.map((o, i) => <span key={o.id}>{i > 0 && ' · '}{o.workerName ?? o.name} <span className="muted">({OFFER_WORDS[o.status] ?? o.status})</span></span>)}
+          </p>
+        </div>
+      )}
+      <div className="q-section">
+        <h3>Calls about this {shift}</h3>
+        {(panel.calls ?? []).length === 0 ? <p className="muted small" style={{ margin: '4px 0 0' }}>None logged.</p> : (
+          <ul className="call-list">
+            {panel.calls!.map(c => <li key={c.id}><strong>{callWith(c)}</strong> <span className="muted">{callLine(c, panel.today ?? '')}</span></li>)}
+          </ul>
+        )}
+      </div>
+      {(panel.history ?? []).length > 0 && (
+        <div className="q-section">
+          <h3>History</h3>
+          <ul className="call-list">
+            {[...panel.history!].reverse().slice(0, 12).map(h => <li key={h.id}>{h.summary} <span className="muted">· {when(h.at)}{h.actorName ? ` · ${h.actorName}` : ''}</span></li>)}
+          </ul>
+        </div>
+      )}
+      <div className="q-panel-foot">
+        <Link href={findStaffHref(s)}>Open in the {tw.lower(T.roster)}</Link>
+        <span className="muted small">for its full history and everything else</span>
       </div>
     </aside>
   );

@@ -2,7 +2,7 @@
  * The Dashboard's live numbers (David, 3 Nov 2026, answer 1): pure helpers for the URL (period, state, office), the
  * percentages and the drill-down line. Tested in test/live-numbers.test.ts.
  */
-export const LIVE_PERIODS = ['today', 'week', 'last7', 'month'] as const;
+export const LIVE_PERIODS = ['today', 'week', 'last7', 'month', 'prev_month'] as const;
 export type LivePeriod = typeof LIVE_PERIODS[number];
 export type LiveParams = { period: LivePeriod; state: string | null; office: string | null };
 
@@ -16,7 +16,7 @@ export type LiveNumbers = {
   personnel: { measures: LiveMeasure[]; rows: { workerId: string; name: string; accepted: number; worked: number; pulledOut: number }[]; more: number };
 };
 
-/** Reads the page's state from the URL (anything odd falls back to this week, the whole business). */
+/** Reads the page's state from the URL (anything odd falls back to the current week, the whole business). */
 export function parseLiveParams(sp: Record<string, string | string[] | undefined>): LiveParams {
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]) as string | undefined;
   const p = one('period');
@@ -28,7 +28,7 @@ export function parseLiveParams(sp: Record<string, string | string[] | undefined
   };
 }
 
-/** The page's URL with some of it changed (this week and the whole business left out, so URLs stay short). */
+/** The page's URL with some of it changed (the current week and the whole business left out, so URLs stay short). */
 export function liveHref(p: LiveParams, change: Partial<LiveParams> = {}): string {
   const n = { ...p, ...change };
   const q = new URLSearchParams();

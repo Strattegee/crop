@@ -2,6 +2,13 @@
 
 Newest first. One entry per working session or scheduled run.
 
+## 2026-11-04 (David): Allocations by week and month, with what happened
+
+- Shipped: the Allocations period choice now has Current week, Current month and Previous month after Next 24 hours / 3 / 7 / 14 days (David: "I think we need to add to these: Current month, Current week, Previous month"). Calendar periods cover the whole week or month in the business's dates, so they include shifts that have ended or were cancelled, shown with their outcome (worked, unfilled, pulled out and not refilled, never confirmed, cancelled with its kind) under new tabs All done / Worked / Unfilled / Cancelled; shifts still to come keep the live tabs and urgency bands; ended ones are listed by day, latest first, with each day's totals. A month for C4U is about 7,000 shifts: counts cover everything and rows come 250 at a time ("Show 250 more"). An ended shift's panel shows what happened, offers, calls and history instead of fill buttons. The default (Next 3 days) is unchanged.
+- Dashboard › Live numbers: Previous month added; "This week"/"This month" are now "Current week"/"Current month" on both screens.
+- Speed: a new index on removed assignments (migration 0081). Measured on the demo-day seed with October grown to 7,395 client shifts: the queue API took 4.2 s for Previous month and 0.6 s for Next 3 days without it; 0.27 s and 0.06 s with it. The whole page (Previous month, first 250 rows) loads in about 0.7 s in the preview.
+- Unsure: ended shifts with someone allocated who never confirmed show as "Never confirmed" and only under All done (Live numbers counts them as "waiting to confirm"); ask David whether they should count as worked or unfilled.
+
 ## 2026-11-03 (David): demo day for C4U on staging
 
 - Shipped: a demo-day seed for the staging business Caring For You (`cfy`) and the "Reset C4U demo day on staging" workflow, so David and Steve can work the Allocations screen like a normal day in an online meeting. It resets the business and fills it with invented offices, clients, sites, wards, contacts, about 450 people with records, 14 days of history and today plus 3 days ahead (about 240 client shifts a day, every queue stage and band, Live numbers for seven invented officers, usual people, day requests). David's screenshots of C4U's current system were used only for the shape of a day (roles, shift times, mix of stages, how often people return to a site); no name, place, number or note was copied.

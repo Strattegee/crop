@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { businessZone, todayIn, whenIn } from '../../../lib/business';
 import { orderPlaces, type ClientContact } from '../../../lib/client-orders';
-import { parseQueueParams, queueHref, type QueueParams } from '../../../lib/allocation-queue';
+import { parseQueueParams, queueHref, queueQuery, type QueueParams } from '../../../lib/allocation-queue';
 import { NewOrderForm, RecentOrders, type ClientOrder } from './client-shifts';
-import { QueueScreen, type Panel, type PanelCandidate, type PanelOffer, type PanelShift, type Queue, type QueueRow } from './queue';
+import { QueueScreen, type HistoryRow, type Panel, type PanelCandidate, type PanelOffer, type PanelShift, type Queue, type QueueRow } from './queue';
 import type { AgencyFillState } from '../roster/agency-fill-section';
 import { T, words, type Words } from '../../../lib/terms';
 import { Notices } from '../notices';
@@ -86,9 +86,41 @@ export default async function AllocationsPage({ searchParams }: { searchParams: 
   );
 }
 
-/** The allocation queue and the open shift's fill panel. */
+/**
+ * The allocation queue and the open shift's panel. Forward-looking periods fetch everything at once, as before; calendar
+ * periods (which include ended and cancelled shifts) look at the shift first, so an ended one shows what happened and
+ * isn't checked against everyone for filling.
+ */
 async function ClientQueue({ tw, p, when, today }: { tw: Words; p: QueueParams; when: (iso: string) => string; today: string }) {
-  const qs = new URLSearchParams({ days: String(p.days), ...(p.stage !== 'all' ? { stage: p.stage } : {}), ...(p.office ? { office: p.office } : {}), ...(p.region ? { region: p.region } : {}), ...(p.clientId ? { clientId: p.clientId } : {}) });
+  const qs = queueQuery(p);
+  if (p.period) {
+    const [q, clients, facts, calls] = await Promise.all([
+      api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
+      api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),
+      p.shift ? api<PanelShift>(`/shifts/${p.shift}`).catch(() => null) : Promise.resolve(null),
+      p.shift ? api<CallRow[]>(`/calls?shiftId=${p.shift}&days=90`).catch(() => [] as CallRow[]) : Promise.resolve([] as CallRow[]),
+    ]);
+    const row: QueueRow | null = q?.shifts.find(r => r.id === p.shift) ?? null;
+    const done = facts ? facts.status === 'cancelled' || (facts.endsAt ? new Date(facts.endsAt).getTime() <= Date.now() : false) : false;
+    let panel: Panel | null = null;
+    if (facts && done) {
+      const [offers, history] = await Promise.all([
+        api<PanelOffer[]>(`/shifts/${p.shift}/offers`).catch(() => [] as PanelOffer[]),
+        api<HistoryRow[]>(`/shifts/${p.shift}/history`).catch(() => [] as HistoryRow[]),
+      ]);
+      panel = { shift: facts, row, candidates: [], offers, agency: null, calls, today, done: true, history };
+    } else if (facts) {
+      const [fill, agency] = await Promise.all([
+        api<{ shift: PanelShift; candidates: PanelCandidate[]; offers: PanelOffer[] }>(`/shifts/${p.shift}/bank-fill?everyone=true`).catch(() => null),
+        api<AgencyFillState>(`/shifts/${p.shift}/agency-fill`).catch(() => null),
+      ]);
+      panel = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today } : null;
+    }
+    return (
+      <QueueScreen tw={tw} p={p} q={q} clients={clients.filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name))}
+        panel={panel} now={Date.now()} when={when} />
+    );
+  }
   const [q, clients, fill, agency, calls] = await Promise.all([
     api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
     api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),

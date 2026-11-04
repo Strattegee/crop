@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BULK_MAX, QUEUE_TABS, bandTitle, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
+  BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
 } from '../lib/allocation-queue';
 
 const NOW = Date.parse('2026-11-02T08:00:00Z');
@@ -8,7 +8,7 @@ const MIN = 60_000;
 
 describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('labels tabs and stages in the business’s words', () => {
-    expect(QUEUE_TABS.map(t => tabLabel(t))).toEqual(['All needing someone', 'New', 'Released to bank', 'Accepted · confirm', 'Worker to confirm',
+    expect(LIVE_TABS.map(t => tabLabel(t))).toEqual(['All needing someone', 'New', 'Released to bank', 'Accepted · confirm', 'Worker to confirm',
       'Client to confirm', 'Pulled out', 'Booked today']);
     const w = { client: 'Customer', worker: 'Team member', bank: 'casual pool', shifts: 'jobs' };
     expect(tabLabel('released', w)).toBe('Released to casual pool');
@@ -45,8 +45,8 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('keeps the screen’s state in the URL, short', () => {
     const id = '6f1c1f8e-0b6a-4a51-9a51-1b2c3d4e5f60';
     const p = parseQueueParams({ stage: 'released', region: 'VIC', days: '7', shift: id, clientId: 'nope', view: 'odd' });
-    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue' });
-    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue' });
+    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null });
+    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null });
     expect(parseQueueParams({ office: 'ALL' }).office).toBe('all');
     expect(parseQueueParams({ office: id }).office).toBe(id);
     expect(parseQueueParams({ office: 'Melbourne' }).office).toBeNull();
@@ -56,6 +56,52 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
     expect(queueHref(p, { shift: null, stage: 'all' })).toBe('/allocations?region=VIC&days=7');
     expect(queueHref(parseQueueParams({}))).toBe('/allocations');
     expect(queueHref(parseQueueParams({}), { view: 'new' })).toBe('/allocations?view=new');
+  });
+
+  it('offers calendar periods after the forward-looking ones, in the URL (David, 4 Nov)', () => {
+    expect(periodChoices().map(c => c.label)).toEqual(['Next 24 hours', 'Next 3 days', 'Next 7 days', 'Next 14 days', 'Current week', 'Current month', 'Previous month']);
+    expect(periodChoices().map(c => c.value)).toEqual(['1', '3', '7', '14', 'week', 'month', 'prev_month']);
+    // The select sends `period`: a number of days, or a calendar period; `days=` still works.
+    expect(parseQueueParams({ period: '7' })).toMatchObject({ days: 7, period: null });
+    expect(parseQueueParams({ days: '14' })).toMatchObject({ days: 14, period: null });
+    expect(parseQueueParams({ period: 'month' })).toMatchObject({ period: 'month', stage: 'all', days: 3 });
+    expect(parseQueueParams({ period: 'prev_month' })).toMatchObject({ period: 'prev_month', stage: 'done' });
+    expect(parseQueueParams({ period: 'year' })).toMatchObject({ period: null, days: 3 });
+    // Outcome tabs only with a calendar period.
+    expect(parseQueueParams({ stage: 'worked' }).stage).toBe('all');
+    expect(parseQueueParams({ stage: 'worked', period: 'week' }).stage).toBe('worked');
+    expect(defaultTab('prev_month')).toBe('done');
+    expect(tabsFor(null)).toEqual(LIVE_TABS);
+    expect(tabsFor('week')).toEqual([...LIVE_TABS, ...OUTCOME_TABS]);
+    // Short URLs: the period's own default tab left out; limit only with a calendar period.
+    expect(queueHref(parseQueueParams({ period: 'prev_month' }))).toBe('/allocations?period=prev_month');
+    expect(queueHref(parseQueueParams({ period: 'prev_month', stage: 'all' }))).toBe('/allocations?stage=all&period=prev_month');
+    expect(queueHref(parseQueueParams({ period: 'month', stage: 'cancelled', limit: '500' }))).toBe('/allocations?stage=cancelled&period=month&limit=500');
+    expect(parseQueueParams({ period: 'month', limit: '100' }).limit).toBeNull();
+    expect(parseQueueParams({ days: '7', limit: '500' }).limit).toBeNull();
+    expect(queueHref(parseQueueParams({ period: '7' }))).toBe('/allocations?days=7');
+    expect(queueQuery(parseQueueParams({}))).toBe('days=3');
+    expect(queueQuery(parseQueueParams({ period: 'prev_month', region: 'VIC' }))).toBe('period=prev_month&region=VIC');
+    expect(queueQuery(parseQueueParams({ period: 'week', stage: 'worked', limit: '750' }))).toBe('period=week&stage=worked&limit=750');
+  });
+
+  it('pages a long period, and words what happened to past shifts by day', () => {
+    const p = parseQueueParams({ period: 'prev_month' });
+    expect(showMore(p, 250, 7145)).toEqual({ href: '/allocations?period=prev_month&limit=500', label: 'Show 250 more (7145 not shown yet)' });
+    expect(showMore(p, 500, 40)?.label).toBe('Show 40 more (40 not shown yet)');
+    expect(showMore(p, 250, 0)).toBeNull();
+    expect(showMore(parseQueueParams({}), 250, 10)).toBeNull();
+    expect(OUTCOME_TABS.map(t => tabLabel(t))).toEqual(['All done', 'Worked', 'Unfilled', 'Cancelled']);
+    expect(stagePill('worked')).toEqual({ label: 'Worked', cls: 'qst-worked' });
+    expect(stagePill('not_refilled')).toEqual({ label: 'Pulled out · unfilled', cls: 'qst-unfilled' });
+    expect(stagePill('unconfirmed').label).toBe('Never confirmed');
+    const w = { client: 'Customer', worker: 'Worker', bank: 'bank', shifts: 'shifts' };
+    expect(stagePill('cancelled', w, 'client_withdrew')).toEqual({ label: 'Customer withdrew', cls: 'qst-cancelled' });
+    expect(['client_cancelled', 'not_filled', 'our_mistake', 'other', null].map(k => cancelPillLabel(k))).toEqual(['Client cancelled', 'Couldn’t fill', 'Our mistake', 'Cancelled', 'Cancelled']);
+    expect(dayHeading({ date: '2026-11-03', total: 248, worked: 231, unfilled: 9, cancelled: 8 })).toBe('Tue 3 Nov · 248 · 231 worked · 9 unfilled · 8 cancelled');
+    expect(dayHeading({ date: '2026-10-31', total: 5, worked: 5, unfilled: 0, cancelled: 0 })).toBe('Sat 31 Oct · 5 · 5 worked');
+    expect(dayGroups([{ localDate: '2026-10-31', id: 1 }, { localDate: '2026-10-31', id: 2 }, { localDate: '2026-10-30', id: 3 }]).map(g => [g.date, g.rows.length]))
+      .toEqual([['2026-10-31', 2], ['2026-10-30', 1]]);
   });
 
   it('lists office chips: the person’s own first, All, each office, then No office', () => {

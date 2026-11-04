@@ -83,14 +83,14 @@ export class DashboardController {
   /**
    * Live numbers (David, 3 Nov 2026, answer 1): {client} requests and how they ended up, each allocation officer's
    * {shifts} handled, messages and calls, and each person's accepted, worked and pull-outs, for `period` (today | week |
-   * last7 | month; default week, in the business's dates), the business or a `state` (a site's state) and/or an
+   * last7 | month | prev_month; default week, in the business's dates), the business or a `state` (a site's state) and/or an
    * `office` (an office id, or `none`). Definitions in `LIVE` (kpis.ts). No costs.
    */
   @Roles(...OFFICE_ROLES)
   @Get('dashboard/live')
   live(@Tenant() t: Membership, @Query('period') periodQ?: string, @Query('state') stateQ?: string, @Query('office') officeQ?: string) {
     const period: LivePeriod = periodQ === undefined || periodQ === '' ? 'week' : (LIVE_PERIODS as readonly string[]).includes(periodQ) ? periodQ as LivePeriod : (() => {
-      throw new BadRequestException('Choose today, this week, the last 7 days or this month');
+      throw new BadRequestException('Choose today, the current week, the last 7 days, the current month or the previous month');
     })();
     const state = stateQ?.trim() ? stateQ.trim().slice(0, 60) : null;
     const office = officeQ?.trim() ? officeQ.trim().toLowerCase() : null;

@@ -21,6 +21,10 @@ describe('live numbers: rules (David, 3 Nov)', () => {
     expect(livePeriod('month', '2026-02-14')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
     expect(livePeriod('month', '2028-02-29')).toEqual({ from: '2028-02-01', to: '2028-02-29' });
     expect(livePeriod('month', '2026-12-31')).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+    // Previous month (David, 4 Nov), across the year end and a leap February.
+    expect(livePeriod('prev_month', '2026-11-03')).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(livePeriod('prev_month', '2027-01-01')).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+    expect(livePeriod('prev_month', '2028-03-31')).toEqual({ from: '2028-02-01', to: '2028-02-29' });
   });
 
   it('defines each number once, with the business’s words', () => {
@@ -190,9 +194,16 @@ describe('live numbers: API', () => {
     expect(none.officers.rows.map(r => r.name)).toEqual(['Ada Admin']);
   });
 
-  it('defaults to this week and refuses odd choices', async () => {
+  it('defaults to the current week and refuses odd choices', async () => {
     const l = await live('', 'alloc');
     expect(l.period).toBe('week');
+    expect((l as unknown as { periodLabel: string }).periodLabel).toBe('Current week');
+    const prev = await live('?period=prev_month', 'alloc') as unknown as { from: string; to: string; periodLabel: string; periods: { label: string }[] };
+    expect(prev.periodLabel).toBe('Previous month');
+    expect(prev.from.slice(8)).toBe('01');
+    const today = (l as unknown as { today: string }).today;
+    expect(Date.parse(`${prev.to}T00:00:00Z`) + 86_400_000).toBe(Date.parse(`${today.slice(0, 7)}-01T00:00:00Z`)); // ends the day before the 1st
+    expect(prev.periods.map(x => x.label)).toEqual(['Today', 'Current week', 'Last 7 days', 'Current month', 'Previous month']);
     expect(Date.parse(`${l.to}T00:00:00Z`) - Date.parse(`${l.from}T00:00:00Z`)).toBe(6 * 86_400_000);
     await http().get('/dashboard/live?period=year').set(as('admin')).expect(400);
     await http().get('/dashboard/live?office=Metro').set(as('admin')).expect(400);
