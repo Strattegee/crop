@@ -277,6 +277,10 @@ describe('applying online: API', () => {
     expect(apps[0].files.map((f: { label: string }) => f.label).sort()).toEqual(['CV', 'RSA']);
     const link = (await http().get(`/job-application-files/${apps[0].files[0].id}/link`).set(as('alloc')).expect(200)).body;
     expect(link.url).toMatch(/^https:\/\/storage.test\//);
+    // The CV is kept on their record too (Documents tab), under the same stored file.
+    const docs = (await http().get(`/workers/${ids.sam}/documents`).set(as('alloc')).expect(200)).body.documents;
+    expect(docs).toMatchObject([{ kind: 'cv', label: 'CV', filename: 'cv.pdf', source: 'application' }]);
+    expect(store.objects.size).toBe(2);
     // Another business sees nothing; content can't be edited.
     expect((await withTenant(appPool, ids.nosy, d => d.query('select * from job_applications'))).rows).toEqual([]);
     await http().get(`/workers/${ids.sam}/applications`).set(as('nosy')).expect(200).expect([]);
@@ -295,6 +299,8 @@ describe('applying online: API', () => {
     expect(mail.subject).toBe('Sam Example applied online again');
     expect(mail.body).toContain('already on file (an applicant)');
     expect((await owner.query(`select roles from workers where id = $1`, [ids.sam])).rows[0].roles).toEqual(['Barista']);
+    // Nothing is added to an existing person's documents either.
+    expect((await http().get(`/workers/${ids.sam}/documents`).set(as('alloc')).expect(200)).body.documents).toHaveLength(1);
   });
 
   it('limits applications per connection and per email, and runs links out', async () => {

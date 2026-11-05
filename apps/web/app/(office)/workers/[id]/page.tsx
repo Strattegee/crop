@@ -28,6 +28,8 @@ import { mobileExample, showMobile } from '../../../../lib/phone';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 import { RecruitmentCard } from './recruitment-card';
 import { ApplicationCard } from './application-card';
+import { DocumentsCard } from './documents-card';
+import type { WorkerDocument } from '../../../../lib/worker-documents';
 import type { JobApplication } from '../../../../lib/apply';
 import { LogCall } from '../../allocations/log-call';
 import { callLine, type CallRow } from '../../../../lib/calls';
@@ -118,6 +120,8 @@ export default async function WorkerPage({ params, searchParams }: {
   // Standing teams (5 Nov): business-wide, so not for people limited to some sites (the API refuses them).
   const standingTeams = tab === 'overview' && w.status !== 'agency' && agency?.sites == null
     ? await api<{ id: string; teamId: string; teamName: string; teamActive: boolean; role: string; startsOn: string; state: string }[]>(`/workers/${id}/standing-teams`).catch(() => []) : [];
+  const documents = tab === 'documents' && w.status !== 'agency'
+    ? (await api<{ documents: WorkerDocument[] }>(`/workers/${id}/documents`).catch(() => ({ documents: [] as WorkerDocument[] }))).documents : [];
   const addresses = tab === 'details' && w.status !== 'agency'
     ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
   const earlier = tab === 'details' && w.status !== 'agency'
@@ -389,6 +393,9 @@ export default async function WorkerPage({ params, searchParams }: {
         )}
       </div>
       </>)}
+      {tab === 'documents' && (w.status === 'agency'
+        ? <div className="card"><p className="muted" style={{ margin: 0 }}>An agency&apos;s people are the agency&apos;s to keep documents for.</p></div>
+        : <DocumentsCard workerId={id} first={w.preferredName || w.firstName} docs={documents} when={whenIn(zone)} />)}
       {tab === 'employment' && (<>
       {employment && <EmploymentCard workerId={id} terms={employment} today={today} canEdit={canVerify} />}
 
