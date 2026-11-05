@@ -40,7 +40,7 @@ export const DELETE_TABLES = [
   'member_offices', 'member_sites', 'notifications', 'offices', 'onboarding_ticks', 'project_stage_items', 'project_stage_people', 'project_stage_roles', 'project_stages', 'outside_agency_emails', 'recruitment_events', 'reminder_marks',
   'right_to_work_events', 'right_to_work_records', 'roster_change_requests', 'roster_publications', 'roster_template_duties',
   'roster_template_equipment', 'roster_template_shifts', 'roster_templates', 'shift_assignments', 'shift_changes', 'shift_duty_links',
-  'shift_offers', 'shift_swaps', 'shifts', 'site_members', 'stock_movements', 'team_members', 'team_roles', 'teams', 'upload_links', 'worker_addresses', 'worker_credentials', 'worker_notice_acknowledgements',
+  'shift_offers', 'shift_swaps', 'shifts', 'site_members', 'stock_movements', 'team_members', 'team_roles', 'teams', 'upload_links', 'worker_addresses', 'worker_credentials', 'worker_documents', 'worker_notice_acknowledgements',
   'worker_onboardings', 'workers',
 ];
 /** Kept, apart from the rows matched here ($1 = the business, $2 = the demo officers' user ids). */

@@ -43,6 +43,6 @@ describe("the person's tabs", () => {
       ], rtwIssue: 'missing', onboarding: false, words,
     });
     expect(tabs.map(t => `${t.label}${t.flag ? `(${t.flag})` : ''}`)).toEqual([
-      'Overview', 'Credentials(1)', 'Right to work(!)', 'Employment', 'Availability & leave', 'Shifts', 'Details']);
+      'Overview', 'Credentials(1)', 'Right to work(!)', 'Documents', 'Employment', 'Availability & leave', 'Shifts', 'Details']);
   });
 });

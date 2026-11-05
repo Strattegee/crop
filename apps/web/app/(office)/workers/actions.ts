@@ -141,3 +141,20 @@ export async function uploadRightToWorkDocument(workerId: string, f: FormData) {
 export async function removeRightToWorkDocument(workerId: string, documentId: string) {
   await attempt(`/workers/${workerId}`, () => api(`/workers/${workerId}/right-to-work/documents/${documentId}`, { method: 'DELETE' }), 'Document removed.');
 }
+
+/** A CV, contract or other document kept on the person's record (Documents tab). */
+export async function uploadWorkerDocument(workerId: string, f: FormData) {
+  const back = `/workers/${workerId}?tab=documents`;
+  const file = f.get('file');
+  if (!(file instanceof File) || file.size === 0) redirect(`${back}&error=${encodeURIComponent('Choose a file to upload')}`);
+  if (file.size > 10 * 1024 * 1024) redirect(`${back}&error=${encodeURIComponent('That file is too large. The limit is 10 MB.')}`);
+  const form = new FormData();
+  form.set('file', file, file.name);
+  form.set('kind', str(f, 'kind') ?? 'other');
+  form.set('title', str(f, 'title') ?? '');
+  await attempt(back, () => api(`/workers/${workerId}/documents`, { method: 'POST', form }), `Kept ${file.name} on their record.`);
+}
+
+export async function removeWorkerDocument(workerId: string, documentId: string) {
+  await attempt(`/workers/${workerId}?tab=documents`, () => api(`/worker-documents/${documentId}/remove`, { method: 'POST' }), 'Document removed from their record.');
+}

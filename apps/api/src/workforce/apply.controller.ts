@@ -381,6 +381,11 @@ async function confirmApplication(db: PoolClient, tenantId: string, a: Applicati
           [tenantId, credId, JSON.stringify({ documentId: doc.id, filename: f.filename, via: 'apply' })]);
       }
     }
+    // Their CV is kept on their record too (Documents tab), under the same stored file.
+    await db.query(
+      `insert into worker_documents(tenant_id, worker_id, kind, storage_key, filename, content_type, size_bytes, sha256, source, job_application_file_id)
+       select tenant_id, $2, 'cv', storage_key, filename, content_type, size_bytes, sha256, 'application', id
+         from job_application_files where application_id = $1 and kind = 'cv'`, [a.id, workerId]);
   }
   await db.query(`update job_applications set status = 'confirmed', confirmed_at = now(), worker_id = $2, outcome = $3 where id = $1`,
     [a.id, workerId, existing ? 'existing_person' : 'new_applicant']);
