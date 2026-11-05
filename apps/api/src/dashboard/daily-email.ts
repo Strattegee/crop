@@ -1,3 +1,4 @@
+import { auditStore } from '@crop/db';
 import type { PoolClient } from 'pg';
 import type { Membership } from '../auth/auth.types.js';
 import { queueNotification } from '../notifications/notify.js';
@@ -5,6 +6,7 @@ import { AttentionController } from '../roster/attention.controller.js';
 import { T, type Words } from '../terms/words.js';
 import { history, MEASURES, saveSnapshot, targetsOf } from './dashboard-data.js';
 import { addDays } from '../workforce/compliance.js';
+import { sitesFor } from '../facilities/site-access.js';
 import { defaultFocus, FOCUS_LABEL, KPIS, kpisFor, SETTING_KPIS, standing, tidy, worded, type Focus, type KpiDef, type Standing } from './kpis.js';
 
 /**
@@ -24,7 +26,15 @@ export interface DailyEmailInput {
   attention: { total: number; urgent: number; items: EmailAttention[] } | null;
   decisions: { leave: number; changes: number } | null;
   expiry: { people: string[]; equipment: string[] } | null;
+  /** For someone limited to some sites (migration 0086): their sites' names, so they know the list is only theirs. */
+  sites?: string[] | null;
   words: Words;
+}
+
+/** "Smith St", "Smith St and Jones Rd", "A, B and C". */
+export function namesLine(names: string[]): string {
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  return sorted.length <= 1 ? (sorted[0] ?? '') : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
 }
 
 const SHOWN = 5;
@@ -60,7 +70,8 @@ export function dailyEmail(i: DailyEmailInput): { subject: string; body: string 
       `- ${n.label}: ${n.value}${n.standing === 'off_target' ? ` (off target: ${n.target})` : n.standing === 'on_target' ? ' (on target)' : ''}${n.weekAgo ? `; a week ago ${n.weekAgo}` : ''}`)].join('\n'));
   }
   if (i.attention && i.attention.total > 0) {
-    const head = `Needs attention in the next 7 days: ${i.attention.total}${i.attention.urgent ? `, ${i.attention.urgent} within a day` : ''}`;
+    const at = i.sites?.length ? ` at ${namesLine(i.sites)}` : '';
+    const head = `Needs attention in the next 7 days${at}: ${i.attention.total}${i.attention.urgent ? `, ${i.attention.urgent} within a day` : ''}`;
     const lines = i.attention.items.slice(0, SHOWN).map(a => `- ${a.urgent ? 'Soon: ' : ''}${a.title}, ${a.when}, ${a.where}`);
     const more = i.attention.total > SHOWN ? [`And ${i.attention.total - SHOWN} more on the ${w.lower(T.roster)}.`] : [];
     parts.push([head, ...lines, ...more].join('\n'));
@@ -90,7 +101,7 @@ export function dailyEmail(i: DailyEmailInput): { subject: string; body: string 
   return { subject: `${FOCUS_LABEL[i.focus]} dashboard: ${bits.join(', ') || 'today'}`, body: parts.join('\n\n') };
 }
 
-type Member = { user_id: string; name: string; email: string; role: string; focus: Focus | null };
+type Member = { user_id: string; name: string; email: string; role: string; focus: Focus | null; sites: string[] | null };
 
 /**
  * Queues today's email for every office person in the business (inside withTenant). `expiry` is the follow-up list
@@ -101,11 +112,15 @@ export async function queueDailyEmails(
   pool: import('pg').Pool, db: PoolClient, tenantId: string, business: string, today: string, words: Words,
   expiry: { people: string[]; equipment: string[] },
 ): Promise<{ queued: number; datesSent: boolean }> {
-  // Supervisors and allocators limited to some sites (migration 0086) don't get it yet: it's worked out for the whole
-  // business, and its lists (Needs attention, expiry dates) would show them other sites' shifts and people.
-  const team = (await db.query<Member>(
-    `select t.user_id, t.name, t.email, t.role, t.focus from app_office_team() t
-      where t.role::text <> 'supervisor' and not exists (select 1 from member_sites s where s.user_id = t.user_id and t.role::text = 'allocator')`)).rows;
+  // Supervisors and allocators limited to some sites (migration 0086) get it too (5 Nov): the numbers are business-wide
+  // for everyone (David, 4 Nov, answer 3), Needs attention is worked out with their own limits (only their sites, and
+  // a supervisor's wording), they never get the expiry dates (a list of people across the business) or decisions, and
+  // someone limited to no sites gets nothing.
+  const chosen = new Map((await db.query<{ user_id: string; ids: string[] }>(
+    `select user_id, array_agg(facility_id::text order by facility_id) as ids from member_sites group by user_id`)).rows.map(r => [r.user_id, r.ids]));
+  const team = (await db.query<Omit<Member, 'sites'>>(`select t.user_id, t.name, t.email, t.role::text as role, t.focus from app_office_team() t`)).rows
+    .map(m => ({ ...m, sites: sitesFor(m.role, chosen.get(m.user_id) ?? []) }))
+    .filter(m => m.sites === null || m.sites.length > 0);
   if (!team.length) return { queued: 0, datesSent: false };
   // The run is hourly: once everyone has had today's email and today's numbers are kept, there is nothing left to do.
   const done = (await db.query<{ n: number; kept: boolean }>(
@@ -115,20 +130,26 @@ export async function queueDailyEmails(
   if (done.n >= team.length && done.kept) return { queued: 0, datesSent: false };
   const focusOf = (m: Member) => m.focus ?? defaultFocus(m.role);
   // The dates go to the Compliance and Overview people; when nobody has those, to owners and admins as before.
-  const dateTakers = new Set(team.filter(m => ['compliance', 'overview'].includes(focusOf(m))).map(m => m.user_id));
+  const dateTakers = new Set(team.filter(m => m.sites === null && ['compliance', 'overview'].includes(focusOf(m))).map(m => m.user_id));
   if (!dateTakers.size) for (const m of team) if (m.role === 'owner' || m.role === 'admin') dateTakers.add(m.user_id);
 
   const targets = await targetsOf(db);
   const say = (x: string) => worded(x, words, T);
-  let attentionCache: { total: number; urgent: number; items: EmailAttention[]; blocked: number } | null = null;
-  const attention = async () => {
-    if (attentionCache) return attentionCache;
-    const a = await new AttentionController(pool).attention({ tenantId } as Membership, { days: '7' }) as {
+  type Attention = { total: number; urgent: number; items: EmailAttention[]; blocked: number };
+  const attentionCache = new Map<string, Attention>();
+  /** Needs attention for the whole business, or (with `m`) as that limited person sees it: the same scope a request of theirs gets. */
+  const attention = async (m?: Member): Promise<Attention> => {
+    const scoped = m && m.sites !== null ? { tenantId, role: m.role, sites: m.sites } : null;
+    const key = scoped ? `${scoped.role}:${scoped.sites.join(',')}` : '';
+    const hit = attentionCache.get(key);
+    if (hit) return hit;
+    const run = () => new AttentionController(pool).attention({ tenantId } as Membership, { days: '7' });
+    const a = await (scoped ? auditStore.run({ scope: scoped }, run) : run()) as {
       total: number; urgent: number; byKind: Record<string, number>;
       items: { kind: string; urgent: boolean; title: string; startsIn: string; shift: { facilityName: string; role: string; localDate: string; localStart: string } }[];
     };
     const shiftWord = words.lower(T.shift);
-    attentionCache = {
+    const result: Attention = {
       total: a.total, urgent: a.urgent, blocked: a.byKind?.person_blocked ?? 0,
       items: a.items.map(x => ({
         urgent: x.urgent,
@@ -138,7 +159,8 @@ export async function queueDailyEmails(
         where: `${x.shift.facilityName} (${x.startsIn})`,
       })),
     };
-    return attentionCache;
+    attentionCache.set(key, result);
+    return result;
   };
   const measured = new Map<string, number | null>();
   const measure = async (def: KpiDef) => {
@@ -158,6 +180,7 @@ export async function queueDailyEmails(
   };
   const dateWords = new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${today}T00:00:00Z`));
   const appUrl = (process.env.APP_URL ?? '').replace(/\/$/, '');
+  const siteNames = new Map((await db.query<{ id: string; name: string }>(`select id::text, name from facilities`)).rows.map(r => [r.id, r.name]));
 
   let queued = 0; let datesSent = false;
   for (const m of team) {
@@ -175,9 +198,10 @@ export async function queueDailyEmails(
     const gets = dateTakers.has(m.user_id);
     const mail = dailyEmail({
       business, firstName: m.name.split(/[\s@]/)[0], focus, dateWords, appUrl, words, numbers,
-      attention: wantsAttention ? await attention() : null,
+      attention: wantsAttention ? await attention(m) : null,
       decisions: m.role === 'owner' || m.role === 'admin' ? decisions : null,
       expiry: gets ? expiry : null,
+      sites: m.sites === null ? null : m.sites.map(id => siteNames.get(id)).filter((n): n is string => !!n),
     });
     if (!mail) continue;
     const r = await queueNotification(db, tenantId, { channel: 'email', to: m.email, template: 'daily_dashboard',
