@@ -69,6 +69,8 @@ h2 { font-size: 17px; margin: 0 0 12px; }
 .topnav-menu a, .topnav-menu .menu-button { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font: inherit; font-size: 14px; text-align: left; background: none; border: 0; width: 100%; cursor: pointer; }
 .topnav-menu a:hover, .topnav-menu .menu-button:hover { background: var(--hover); }
 .topnav-menu a[aria-current='page'] { font-weight: 600; background: var(--hover); }
+.topnav-menu a.sub { padding-left: 26px; position: relative; }
+.topnav-menu a.sub::before { content: '↳'; position: absolute; left: 10px; color: var(--muted); }
 .topnav-menu form { margin: 0; }
 .menu-who { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .appbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }

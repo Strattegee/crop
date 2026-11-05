@@ -21,6 +21,8 @@ import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerso
 import { lettersOf } from '../../../lib/marker-letters';
 import { listQuery, parseListParams, stageClass } from '../../../lib/roster-list';
 import { ListView } from './list-view';
+import { NEW_PROJECT, siteChoices } from '../../../lib/projects';
+import { NewProjectForm } from '../projects/new-project-form';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers, teamDuring, type TeamEntry,
@@ -64,7 +66,7 @@ type Equip = { id: string; name: string; typeName: string; status: string; booke
 type Leave = { id: string; workerId: string; status: 'requested' | 'approved'; startsOn: string; endsOn: string };
 type AgencyPerson = { id: string; name: string; agencyName: string; unchecked?: boolean; rosteredHours: number };
 type Roster = { from: string; to: string; shifts: Shift[]; people: Person[]; agencyPeople?: AgencyPerson[]; equipment?: Equip[]; leave?: Leave[]; dayRequests?: DayRequest[] };
-type Facility = { id: string; name: string; active: boolean };
+type Facility = { id: string; name: string; active: boolean; kind?: string; clientName?: string | null };
 /** A request for a day from the app, waiting for the office (GET /day-requests, migration 0080). */
 type AppRequest = { id: string; workerId: string; workerName: string; date: string; line: string; createdAt: string;
   shifts: { id: string; facilityName: string; role: string; localStart: string; localEnd: string; breaks: boolean }[] };
@@ -177,7 +179,12 @@ export default async function RosterPage({ searchParams }: {
   const showLog = sp.log === '1' && span !== 'month';
   // Supervisors (David, 4 Nov) roster their sites' shifts (put people on, offer, confirm, take off) but don't add,
   // publish or copy weeks; the API refuses those anyway.
-  const supervisor = (await currentAgency())?.role === 'supervisor';
+  const myRole = (await currentAgency())?.role;
+  const supervisor = myRole === 'supervisor';
+  // Projects under clients (David, 5 Nov): owners and admins add a project from the site picker ("+ New project"
+  // posts site=__new), then come back with it shown on its own in a Draft week.
+  const canAddProject = myRole === 'owner' || myRole === 'admin';
+  const newProjectOpen = canAddProject && sp.site === NEW_PROJECT;
   // Needs attention starts closed with its counts showing (David, 29 Oct).
   const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
@@ -849,7 +856,8 @@ export default async function RosterPage({ searchParams }: {
             {look !== 'cards' && <input type="hidden" name="look" value={look} />}
             {Object.entries(listQuery(listP)).map(([k, v]) => v && k !== 'limit' ? <input key={k} type="hidden" name={k} value={v} /> : null)}
             <span className="tool-icon" aria-hidden="true">⌖</span>
-            <SiteSelect name="site" value={site} allLabel={`All ${tw.lower(T.site, true)}`} options={activeFacilities.map(f => ({ id: f.id, name: f.name }))} />
+            <SiteSelect name="site" value={newProjectOpen ? NEW_PROJECT : site} allLabel={`All ${tw.lower(T.site, true)}`} {...siteChoices(activeFacilities)}
+              sitesLabel={tw.many(T.site)} projectsLabel={tw.many(T.project)} newValue={canAddProject ? NEW_PROJECT : undefined} newLabel={`+ New ${tw.lower(T.project)}`} />
             <noscript><button type="submit" className="btn small secondary">Show</button></noscript>
           </form>
           <div className="tool-period" role="group" aria-label={`Choose the ${periodWord}`}>
@@ -897,6 +905,17 @@ export default async function RosterPage({ searchParams }: {
       </div>
 
       <Notices error={sp.error} done={sp.done} />
+      {newProjectOpen && (
+        <div className="card" id="new-project">
+          <h2 style={{ marginTop: 0 }}>New {tw.lower(T.project)}</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            The essentials to start rostering. Afterwards the roster shows this {tw.lower(T.project)} on its own, so you can set up its week in Draft
+            without the other {tw.lower(T.site, true)} around it. Address, manager and team go on its page. <Link href={url({})}>Cancel</Link>
+          </p>
+          <NewProjectForm compact from="roster" week={week} clients={await api<{ id: string; name: string; status: string }[]>('/clients').catch(() => [])}
+            country={rosterSettings.country ?? 'AU'} timezone={zone} />
+        </div>
+      )}
 
 
       {full ? (
