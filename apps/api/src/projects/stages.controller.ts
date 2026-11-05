@@ -8,6 +8,7 @@ import { bool, date, int, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift } from '../roster/eligibility-data.js';
 import { actorOf } from '../roster/publishing.js';
+import { cancelShift } from '../roster/shift-actions.js';
 import { time } from '../roster/shift-create.js';
 import { firstReason } from '../roster/templates.js';
 import { T, wordsFor } from '../terms/words.js';
@@ -17,9 +18,10 @@ import { todayIn } from '../workforce/compliance.js';
 import { checkAllocation } from './projects.controller.js';
 import { rangeLine } from './projects.js';
 import {
-  DEFAULT_WEEKDAYS, emptyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, parseWeekdays, planSlots, rosterSummary, stageLine,
-  stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole, toCreate, weekdaysLine, workingDays,
-  type Existing, type MakeUp, type RosterResult, type StagePerson,
+  DEFAULT_WEEKDAYS, emptyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, moveSummary, parseWeekdays, planSlots, rosterSummary,
+  shiftsOutside, STAGE_MOVED_REASON, STAGE_REMOVED_REASON, stageLine, stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole,
+  toCreate, weekdaysLine, workingDays,
+  type Existing, type MakeUp, type MoveResult, type PlacedShift, type RosterResult, type StagePerson,
 } from './stages.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,12 +104,49 @@ async function stageShifts(db: PoolClient, stageIds: string[]) {
       where s.project_stage_id = any($1) and s.status <> 'cancelled'`, [stageIds])).rows;
 }
 
+/**
+ * The project's {shifts} made by its stages and its supervisor's (not cancelled), with whether each has started, has
+ * an agency's person on it, or is in a published week.
+ */
+async function placedShifts(db: PoolClient, facilityId: string): Promise<PlacedShift[]> {
+  return (await db.query<PlacedShift>(
+    `select s.id, s.project_stage_id as "stageId", s.project_supervisor as supervisor,
+            to_char((s.starts_at at time zone f.timezone)::date, 'YYYY-MM-DD') as date, s.starts_at <= now() as started,
+            exists (select 1 from roster_publications rp where rp.facility_id = s.facility_id
+                     and rp.week_start = date_trunc('week', s.starts_at at time zone f.timezone)::date) as published,
+            exists (select 1 from shift_assignments sa join workers w on w.id = sa.worker_id
+                     where sa.shift_id = s.id and sa.resource_kind = 'worker' and sa.status in ('assigned', 'confirmed') and w.status = 'agency') as agency
+       from shifts s join facilities f on f.id = s.facility_id
+      where s.facility_id = $1 and s.status <> 'cancelled' and (s.project_stage_id is not null or s.project_supervisor)`, [facilityId])).rows;
+}
+
+/**
+ * Brings the {shifts} of some stages (`stageIds`) in line with their dates: {shifts} off their working days come off
+ * the Draft roster (cancelled with a reason; started ones, an agency's and published weeks' stay and are counted),
+ * as do supervisor {shifts} on no live stage's working day; then stages that had {shifts} are rostered again, which
+ * adds only what is missing on the new days. `removed`: the stages are being taken off, so all their {shifts} go and
+ * nothing is rostered.
+ */
+async function matchShifts(db: PoolClient, tenantId: string, userId: string, p: ProjectRow, stageIds: string[], removed = false): Promise<MoveResult> {
+  const all = await liveStages(db, p.id);
+  const days = new Map<string, Set<string>>(stageIds.map(id => {
+    const s = removed ? undefined : all.find(x => x.id === id);
+    return [id, new Set(s ? workingDays(s.startsOn, s.endsOn, s.weekdays) : [])];
+  }));
+  const placed = await placedShifts(db, p.id);
+  const sort = shiftsOutside(placed, days, new Set(supervisorDays(all).keys()));
+  for (const id of sort.cancel) await cancelShift(db, userId, id, removed ? STAGE_REMOVED_REASON : STAGE_MOVED_REASON, 'other');
+  const had = removed ? [] : stageIds.filter(id => all.some(s => s.id === id) && placed.some(x => x.stageId === id));
+  const roster = had.length ? await rosterStages(db, tenantId, userId, p, had) : null;
+  return { cancelled: sort.cancel.length, kept: sort.kept, roster };
+}
+
 /** Everything the Stages tab shows: the project's supervisor and each stage with its team copy, gaps, shifts and equipment. */
 async function stagesView(db: PoolClient, p: ProjectRow) {
   const today = todayIn(p.timezone);
   const stages = await liveStages(db, p.id);
   const ids = stages.map(s => s.id);
-  const [makeUp, people, shifts] = await Promise.all([makeUpOf(db, ids), peopleOf(db, ids), stageShifts(db, ids)]);
+  const [makeUp, people, shifts, placed] = await Promise.all([makeUpOf(db, ids), peopleOf(db, ids), stageShifts(db, ids), placedShifts(db, p.id)]);
   const equipment = ids.length ? (await db.query<{ id: string; stageId: string; equipmentId: string; equipmentName: string; typeName: string; from: string; to: string | null }>(
     `select x.id, x.project_stage_id as "stageId", x.equipment_id as "equipmentId", e.name as "equipmentName", et.name as "typeName",
             to_char(x.starts_on, 'YYYY-MM-DD') as "from", to_char(x.ends_on, 'YYYY-MM-DD') as "to"
@@ -148,6 +187,8 @@ async function stagesView(db: PoolClient, p: ProjectRow) {
           shifts: mine.length, open: mine.filter(x => x.status === 'open').length,
           days: new Set(mine.map(x => x.date)).size,
           outside: mine.filter(x => !days.includes(x.date)).length,
+          // Of those, how many "Move to the stage's dates" would take off (Draft weeks, not started, no agency's person).
+          outsideMovable: shiftsOutside(placed.filter(x => x.stageId === s.id), new Map([[s.id, new Set(days)]]), new Set()).cancel.length,
         },
         equipment: equipment.filter(e => e.stageId === s.id).map(({ stageId: _, ...e }) => ({ ...e, line: rangeLine(e, today) })),
       };
@@ -332,12 +373,14 @@ export class ProjectStagesController {
 
   /**
    * Changes a stage. `moveLater: true` with a new last day moves every stage that started after the old last day by
-   * the same number of days (never automatic). {Shifts} already made stay where they are (`rostered.outside` counts them).
+   * the same number of days (never automatic). `moveShifts: true` then brings the {shifts} of this stage (and any moved)
+   * to the new dates (`matchShifts`: Draft weeks only); otherwise they stay where they are (`rostered.outside` counts them).
    */
   @Roles(...OFFICE_ROLES)
   @Patch('project-stages/:id')
   update(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const moveLater = bool(body, 'moveLater') ?? false;
+    const moveShifts = bool(body, 'moveShifts') ?? false;
     return this.tx(t, auth, async db => {
       const cur = await liveStage(db, id);
       const p = await projectOf(db, cur.facilityId, true);
@@ -350,19 +393,41 @@ export class ProjectStagesController {
         [id, f.name!.trim(), f.areaId, f.startsOn, f.endsOn, f.weekdays, f.startTime, f.endTime, f.breakMinutes, f.shiftCodeId, f.notes]);
       const moved = moveLater ? moveLaterStages(await liveStages(db, cur.facilityId).then(r => r.map(s => (s.id === id ? { ...s, endsOn: cur.endsOn } : s))), id, cur.endsOn, f.endsOn!) : [];
       for (const m of moved) await db.query('update project_stages set starts_on = $2, ends_on = $3, updated_at = now() where id = $1', [m.id, m.startsOn, m.endsOn]);
-      return { moved: moved.map(m => ({ id: m.id, name: m.name, startsOn: m.startsOn, endsOn: m.endsOn })), ...(await stagesView(db, p)) };
+      const shifts = moveShifts ? await matchShifts(db, t.tenantId, auth.userId, p, [id, ...moved.map(m => m.id)]) : null;
+      return {
+        moved: moved.map(m => ({ id: m.id, name: m.name, startsOn: m.startsOn, endsOn: m.endsOn })),
+        shifts, shiftsSummary: shifts ? moveSummary(shifts, await wordsFor(db)) : null,
+        ...(await stagesView(db, p)),
+      };
     });
   }
 
-  /** Takes a stage off (kept on file). {Shifts} already made for it stay on the roster. */
+  /**
+   * Takes a stage off (kept on file). `cancelShifts: true` also takes its {shifts} off the Draft roster (and the
+   * supervisor's on days no other stage works); otherwise they stay on the roster.
+   */
   @Roles(...OFFICE_ROLES)
   @Post('project-stages/:id/remove')
   remove(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const reason = text(body, 'reason', { max: 200 });
+    const cancelShifts = bool(body, 'cancelShifts') ?? false;
     return this.tx(t, auth, async db => {
       const cur = await liveStage(db, id);
       await db.query('update project_stages set removed_at = now(), removed_reason = $2 where id = $1', [id, reason]);
-      return { removed: true, facilityId: cur.facilityId };
+      const shifts = cancelShifts ? await matchShifts(db, t.tenantId, auth.userId, await projectOf(db, cur.facilityId, true), [id], true) : null;
+      return { removed: true, facilityId: cur.facilityId, shifts, shiftsSummary: shifts ? moveSummary(shifts, await wordsFor(db), true) : null };
+    });
+  }
+
+  /** Brings a stage's {shifts} to its dates after they changed (Draft weeks only; see `matchShifts`). */
+  @Roles(...OFFICE_ROLES)
+  @Post('project-stages/:id/move-shifts')
+  moveShifts(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.tx(t, auth, async db => {
+      const cur = await liveStage(db, id);
+      const p = await projectOf(db, cur.facilityId, true);
+      const r = await matchShifts(db, t.tenantId, auth.userId, p, [id]);
+      return { ...r, summary: moveSummary(r, await wordsFor(db)) };
     });
   }
 

@@ -14,7 +14,7 @@ export type Stage = {
   teamId: string | null; teamName: string | null; notes: string | null; line: string; weekdaysLine: string; workingDays: number;
   state: 'current' | 'upcoming' | 'ended'; roles: StageRole[]; makeUpLine: string | null; needed: number; people: StagePerson[];
   shortLine: string | null; placesPerDay: number; overlaps: string[];
-  rostered: { shifts: number; open: number; days: number; outside: number };
+  rostered: { shifts: number; open: number; days: number; outside: number; outsideMovable: number };
   equipment: { id: string; equipmentId: string; equipmentName: string; typeName: string; line: string }[];
 };
 export type StagesView = {
@@ -104,6 +104,28 @@ export function rosterMessage(r: RosterResult, shown = 6): string {
   const lines = r.leftOpen.slice(0, shown).map(x => `${dayLabel(x.date)} ${x.startTime} ${x.role}${x.workerName ? ` (${x.workerName})` : ''}: ${x.reason}`);
   const more = r.leftOpen.length > shown ? ` … and ${r.leftOpen.length - shown} more.` : '';
   return `${r.summary} Left open: ${lines.join('; ')}${more}`;
+}
+
+/** What moving a stage's shifts did (`POST /project-stages/:id/move-shifts`, or `shifts` from a change or taking it off). */
+export type MoveResult = { cancelled: number; kept: { started: number; agency: number; published: number }; roster: Omit<RosterResult, 'summary'> | null };
+
+/** The message after moving a stage's shifts: the API's summary, then any places left open (as after "Roster"). */
+export function moveMessage(r: MoveResult | null, summary: string | null): string | null {
+  if (!r || !summary) return null;
+  return r.roster ? rosterMessage({ ...r.roster, summary }) : summary;
+}
+
+/**
+ * The note under a stage whose shifts are off its dates: how many the button would move, and why the rest stay
+ * (published weeks, started, an agency's person: changed on the roster). Null when every shift is on its dates.
+ */
+export function outsideNote(r: Pick<Stage['rostered'], 'outside' | 'outsideMovable'>): { movable: number; stay: number; stayLine: string | null } | null {
+  if (r.outside <= 0) return null;
+  const stay = Math.max(0, r.outside - r.outsideMovable);
+  return {
+    movable: r.outsideMovable, stay,
+    stayLine: stay ? `${stay} ${stay === 1 ? 'is' : 'are'} in a published week, started or with an agency's person: change ${stay === 1 ? 'it' : 'them'} on the roster.` : null,
+  };
 }
 
 /** "3 of 4 named" for a stage, or "No one named yet". */

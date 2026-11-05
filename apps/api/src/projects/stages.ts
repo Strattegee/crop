@@ -201,3 +201,49 @@ export function stageLine(s: { startsOn: string; endsOn: string; weekdays: reado
   const dates = s.startsOn === s.endsOn ? fmtDate(s.startsOn) : `${fmtDate(s.startsOn)} – ${fmtDate(s.endsOn)}`;
   return `${dates} · ${weekdaysLine(s.weekdays)} · ${n === 1 ? '1 working day' : `${n} working days`}`;
 }
+
+/** A {shift} a stage's "Roster" made (or the supervisor's), with what decides whether it can be moved. */
+export interface PlacedShift { id: string; stageId: string | null; supervisor: boolean; date: string; started: boolean; published: boolean; agency: boolean }
+/** Why a {shift} off the stage's days is left where it is. */
+export type KeptReason = 'started' | 'agency' | 'published';
+export interface OutsideSort { cancel: string[]; kept: Record<KeptReason, number> }
+
+/**
+ * {Shifts} no longer on a working day of their stage (`stageDays`: stage id → its working dates; a stage taken off
+ * has none), and supervisor {shifts} on no stage's working day (`supervisorDates`). Each is taken off (cancelled)
+ * unless it has started, has an agency's person on it (another business is involved), or its week is published
+ * (people have been told: the office changes those on the roster). {Shifts} of stages not in `stageDays` are ignored.
+ */
+export function shiftsOutside(shifts: PlacedShift[], stageDays: Map<string, Set<string>>, supervisorDates: Set<string>): OutsideSort {
+  const out: OutsideSort = { cancel: [], kept: { started: 0, agency: 0, published: 0 } };
+  for (const s of shifts) {
+    const outside = s.supervisor ? !supervisorDates.has(s.date)
+      : s.stageId !== null && stageDays.has(s.stageId) && !stageDays.get(s.stageId)!.has(s.date);
+    if (!outside) continue;
+    if (s.started) out.kept.started++;
+    else if (s.agency) out.kept.agency++;
+    else if (s.published) out.kept.published++;
+    else out.cancel.push(s.id);
+  }
+  return out;
+}
+
+/** The reasons given when {shifts} come off with their stage. */
+export const STAGE_MOVED_REASON = 'Stage dates changed';
+export const STAGE_REMOVED_REASON = 'Stage taken off';
+
+export interface MoveResult { cancelled: number; kept: Record<KeptReason, number>; roster: RosterResult | null }
+
+/** One plain line about moving a stage's {shifts} to its dates (or taking them off with the stage). */
+export function moveSummary(r: MoveResult, w: Words = DEFAULT_WORDS, removed = false): string {
+  const parts: string[] = [];
+  if (r.cancelled) parts.push(`Took ${w.count(r.cancelled, T.shift)} off the Draft roster${removed ? '' : ' (no longer on the stage’s working days)'}.`);
+  if (r.roster && (r.roster.created || r.roster.supervisorCreated)) parts.push(rosterSummary(r.roster, w));
+  const kept: string[] = [];
+  if (r.kept.published) kept.push(`${r.kept.published} in published weeks (change ${r.kept.published === 1 ? 'it' : 'them'} on the roster, so people are told)`);
+  if (r.kept.agency) kept.push(`${r.kept.agency} with ${w.a(T.agency)}’s person on ${r.kept.agency === 1 ? 'it' : 'them'}`);
+  if (r.kept.started) kept.push(`${r.kept.started} already started`);
+  if (kept.length) parts.push(`Left where they are: ${kept.join('; ')}.`);
+  if (!parts.length) parts.push(`Every ${w.lower(T.shift)} is already on the stage’s dates.`);
+  return parts.join(' ');
+}

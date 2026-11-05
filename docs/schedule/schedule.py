@@ -45,6 +45,7 @@ done=[
 ("CLI","c6","Sites, areas, equipment, items, cover rules","2026-10-26","2026-10-29","Claude"),
 ("AGY","c6","Agency links and agency fill","2026-10-29","2026-11-02","Claude"),
 ("DASH","c5","Dashboards and daily email","2026-10-31","2026-10-31","Claude"),
+("APPLY","c2","Public apply form","2026-11-05","2026-11-05","Claude"),
 ]
 todo=[
 # id lane name dur deps who notBefore
@@ -52,7 +53,6 @@ todo=[
 ("STORE","you","Apple and Google developer accounts; Expo account",5,[],"You","2026-11-02"),
 ("LOGO","ext","Logo and colour palette",9,[],"Graphic designer","2026-11-02"),
 ("UIDES","ext","Overall look: key screens",14,[],"UI designer","2026-11-09"),
-("APPLY","c2","Public apply form",4,["INFO"],"Claude",None),
 ("MIG","c1","Import C4U's staff, clients and templates",6,["INFO"],"Claude + you",None),
 ("CPORT","c6","Ordering for clients not on CROP (public request page and one-step order from it done 5 Nov; client sign-in portal next)",5,["INFO"],"Claude",None),
 ("PUSH","c4","Push alerts in the app: built 3 Nov, tap opens the right screen 4 Nov; switch on and try on phones",1,["STORE"],"Claude",None),
