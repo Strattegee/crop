@@ -10,7 +10,7 @@ export const TABLE_LABEL: Record<string, string> = {
   shift_duties: 'Shift duty', shift_duty_requirements: 'Shift duty rule', shift_duty_links: 'Duty on a shift',
   site_cover_rules: 'Cover rule', roster_publications: 'Roster published', roster_change_requests: 'Roster change request',
   roster_templates: 'Roster template', roster_template_shifts: 'Template shift', roster_template_equipment: 'Template equipment',
-  roster_template_duties: 'Template duty', facilities: 'Site', areas: 'Area', site_members: 'Team member', equipment_site_allocations: 'Equipment allocation', clients: 'Client', equipment: 'Equipment',
+  roster_template_duties: 'Template duty', facilities: 'Site', areas: 'Area', site_members: 'Project team member', teams: 'Team', team_roles: 'Team make-up', team_members: 'Team member', equipment_site_allocations: 'Equipment allocation', clients: 'Client', equipment: 'Equipment',
   equipment_types: 'Equipment type', equipment_checks: 'Equipment date', items: 'Item', business_roles: 'Role',
   business_terms: 'Words', tenant_settings: 'Settings', memberships: 'Access', invitations: 'Invitation',
   onboarding_checklists: 'Onboarding checklist', onboarding_steps: 'Onboarding step', worker_onboardings: 'Onboarding',

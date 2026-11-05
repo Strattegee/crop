@@ -825,3 +825,11 @@ Newest first. One entry per working session or scheduled run.
 - Checked: web tests for the dates rule (someone who left the day before or starts next week isn't counted; supervisor wins) and the address; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this run).
 - Next: the next backlog item not waiting on David (a daily email for limited people, or the names-only picker for project teams).
 - Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-05 afternoon (David's session, parallel branch): standing teams
+- Shipped: David's standing teams. Workers › Teams lists the business's own teams as cards: name, make-up ("2 Carpenter · 2 Plasterer · 1 Painter"), the named people with the role each fills, "Short: 1 Painter" when a place is empty, "Short today" and "Away today" when someone is on approved leave (never the kind), and "No longer active" for someone who left the business. Create a team with its make-up, rename it, change the make-up, add people (the picker only offers active people who have the role, make-up roles first with how many are short), take people off (kept on file with their last day and a reason), put a team away and bring it back. A person can be in several teams; their Overview lists them (the project teams card is now headed "<Project> teams"). "Team" is a renamable word (code 1035).
+- Not for supervisors or allocators limited to some sites: teams hold people from every site.
+- Built so the next step (project stages that take a team and adjust it per project) can copy a team's make-up and people without changing the standing team.
+- Checked: API tests (make-up rules, gaps and away today, only people with the role, several teams, leaving keeps history, put away and the name rule, audit, the database refusing edits and deletes, another business sees nothing, supervisors and workers refused) and web tests for the form and picker helpers; every test passes; typecheck and build clean. Not checked in a browser (no local sign-in).
+- Next: project stages using teams.
+

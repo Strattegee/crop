@@ -1,7 +1,7 @@
 // Pure part of the business's words (no server imports), so it can be tested.
 /** CROP's numbered concepts; the business chooses the words (Settings → Words we use). Codes: docs/CODES.md. */
 export const T = {
-  worker: 1010, client: 1015, site: 1020, project: 1025, area: 1030, shift: 1040, roster: 1045,
+  worker: 1010, client: 1015, site: 1020, project: 1025, area: 1030, team: 1035, shift: 1040, roster: 1045,
   credential: 1050, role: 1055, equipment: 1060, item: 1070, bank: 1080, agency: 1090,
 } as const;
 
@@ -14,7 +14,7 @@ export type Words = {
 };
 
 const FALLBACK: Record<number, [string, string]> = {
-  1010: ['Worker', 'Workers'], 1015: ['Client', 'Clients'], 1020: ['Site', 'Sites'], 1025: ['Project', 'Projects'], 1030: ['Area', 'Areas'], 1040: ['Shift', 'Shifts'],
+  1010: ['Worker', 'Workers'], 1015: ['Client', 'Clients'], 1020: ['Site', 'Sites'], 1025: ['Project', 'Projects'], 1030: ['Area', 'Areas'], 1035: ['Team', 'Teams'], 1040: ['Shift', 'Shifts'],
   1045: ['Roster', 'Rosters'], 1050: ['Credential', 'Credentials'], 1055: ['Role', 'Roles'], 1060: ['Equipment', 'Equipment'],
   1070: ['Item', 'Items'], 1080: ['Bank', 'Bank'], 1090: ['Agency', 'Agencies'],
 };

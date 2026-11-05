@@ -111,6 +111,9 @@ export default async function WorkerPage({ params, searchParams }: {
     ? await api<CallRow[]>(`/calls?workerId=${id}&days=90&limit=8`).catch(() => [] as CallRow[]) : [];
   const teams = tab === 'overview' && w.status !== 'agency'
     ? await api<{ id: string; facilityId: string; siteName: string; siteKind: string; teamRole: string; areaName: string | null; line: string; state: string }[]>(`/workers/${id}/teams`).catch(() => []) : [];
+  // Standing teams (5 Nov): business-wide, so not for people limited to some sites (the API refuses them).
+  const standingTeams = tab === 'overview' && w.status !== 'agency' && agency?.sites == null
+    ? await api<{ id: string; teamId: string; teamName: string; teamActive: boolean; role: string; startsOn: string; state: string }[]>(`/workers/${id}/standing-teams`).catch(() => []) : [];
   const addresses = tab === 'details' && w.status !== 'agency'
     ? await api<Addresses>(`/workers/${id}/addresses`).catch(() => null) : null;
   const earlier = tab === 'details' && w.status !== 'agency'
@@ -181,9 +184,22 @@ export default async function WorkerPage({ params, searchParams }: {
           {shiftTable(upcoming.slice(0, 8))}
           {upcoming.length > 8 && <p className="small" style={{ marginBottom: 0 }}><Link href={`/workers/${id}?tab=shifts`}>All {upcoming.length} {tw.lower(T.shift, true)}</Link></p>}
         </div>
+      {standingTeams.length > 0 && (
+        <div className="card">
+          <h2>{tw.many(T.team)}</h2>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {standingTeams.map(m => (
+              <li key={m.id}>
+                <Link href={`/teams?team=${m.teamId}${m.teamActive ? '' : '&show=all'}`}>{m.teamName}</Link>
+                <span className="muted small"> · {m.role}{m.state === 'upcoming' && ` · from ${formatDate(m.startsOn)}`}{!m.teamActive && ' · put away'}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {teams.length > 0 && (
         <div className="card">
-          <h2>Teams</h2>
+          <h2>{tw.one(T.project)} teams</h2>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             {teams.map(m => (
               <li key={m.id}>

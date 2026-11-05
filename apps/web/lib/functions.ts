@@ -11,6 +11,7 @@ export const FUNCTIONS = [
   { code: 3000, path: '/workers', term: 1010 },
   { code: 3100, path: '/recruitment', label: 'Recruitment' },
   { code: 3200, path: '/leave', label: 'Leave' },
+  { code: 3300, path: '/teams', term: 1035 },
   { code: 3500, path: '/compliance', label: 'Compliance' },
   { code: 4000, path: '/clients', term: 1015 },
   { code: 4100, path: '/facilities', term: 1020 },

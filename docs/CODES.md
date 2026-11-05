@@ -18,6 +18,7 @@ The first industry template applied suggests words (`PACK_TERMS`); it never over
 | 1020 | A place where work happens | Site / Sites |
 | 1025 | A piece of work with its own team, dates and resources: a site of kind project (4 Nov) | Project / Projects |
 | 1030 | A part of a site, or a team | Area / Areas |
+| 1035 | A standing group of people the business keeps together, with a make-up of roles (5 Nov) | Team / Teams |
 | 1040 | A unit of work at a time and place | Shift / Shifts |
 | 1045 | The plan of who works when | Roster / Rosters |
 | 1050 | Proof someone is qualified or cleared | Credential / Credentials |
@@ -43,6 +44,7 @@ Source of truth: `apps/web/lib/functions.ts` (`FUNCTIONS`). The menu carries the
 | 2200 | Allocations: requests from employers this business supplies (agency fill; in the menu only for businesses with an agency-side link) | "Allocations" |
 | 3000 | Workers | term 1010 |
 | 3100 | Recruitment board (applicants by stage, onboarding, started) | Recruitment |
+| 3300 | Teams: the business's standing teams, their make-up of roles and their people (5 Nov) | term 1035 |
 | 3500 | Compliance | Compliance |
 | 4000 | Clients | term 1015 |
 | 4100 | Sites | term 1020 |
