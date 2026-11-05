@@ -19,6 +19,7 @@ import { FacilitiesController } from './facilities/facilities.controller.js';
 import { OfficesController } from './facilities/offices.controller.js';
 import { SiteAccessController } from './facilities/site-access.controller.js';
 import { EquipmentAllocationsController, ProjectsController, SiteTeamController } from './projects/projects.controller.js';
+import { TeamsController } from './teams/teams.controller.js';
 import { CallsController } from './clients/calls.controller.js';
 import { AddressesController } from './workforce/addresses.controller.js';
 import { FieldAccessController } from './workforce/field-access.controller.js';
@@ -56,7 +57,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
 @Module({
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
-    HealthController, IndustryController, TermsController, PlatformController, ClientsController, CustomerRequestsController, PublicRequestPageController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
+    HealthController, IndustryController, TermsController, PlatformController, ClientsController, CustomerRequestsController, PublicRequestPageController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, TeamsController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
     CredentialTypesController, CredentialRequirementsController, ComplianceController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,

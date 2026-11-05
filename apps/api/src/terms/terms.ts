@@ -11,6 +11,7 @@ export const TERMS: TermDef[] = [
   { code: 1020, key: 'site', concept: 'A place where work happens', singular: 'Site', plural: 'Sites' },
   { code: 1025, key: 'project', concept: 'A piece of work with its own team, dates and resources (a site of kind project)', singular: 'Project', plural: 'Projects' },
   { code: 1030, key: 'area', concept: 'A part of a site, or a team', singular: 'Area', plural: 'Areas' },
+  { code: 1035, key: 'team', concept: 'A standing group of people the business keeps together, with set roles', singular: 'Team', plural: 'Teams' },
   { code: 1040, key: 'shift', concept: 'A unit of work at a time and place', singular: 'Shift', plural: 'Shifts' },
   { code: 1045, key: 'roster', concept: 'The plan of who works when', singular: 'Roster', plural: 'Rosters' },
   { code: 1050, key: 'credential', concept: 'Proof someone is qualified or cleared', singular: 'Credential', plural: 'Credentials' },
@@ -30,7 +31,7 @@ export const PACK_TERMS: Record<string, TermWords> = {
     1050: { singular: 'Credential', plural: 'Credentials' }, 1070: { singular: 'Consumable', plural: 'Consumables' }, 1080: { singular: 'Bank', plural: 'Bank' },
   },
   hospitality: {
-    1010: { singular: 'Team member', plural: 'Team' }, 1020: { singular: 'Venue', plural: 'Venues' }, 1030: { singular: 'Section', plural: 'Sections' },
+    1010: { singular: 'Team member', plural: 'Team' }, 1020: { singular: 'Venue', plural: 'Venues' }, 1030: { singular: 'Section', plural: 'Sections' }, 1035: { singular: 'Crew', plural: 'Crews' },
     1050: { singular: 'Certificate', plural: 'Certificates' }, 1070: { singular: 'Stock item', plural: 'Stock' }, 1080: { singular: 'On-call pool', plural: 'On-call pool' },
   },
   construction: {

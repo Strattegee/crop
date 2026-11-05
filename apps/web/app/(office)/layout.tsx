@@ -17,7 +17,7 @@ import { setTheme } from '../../lib/theme-actions';
 const GROUPS: { codes: number[]; label?: (w: Awaited<ReturnType<typeof words>>) => string }[] = [
   { codes: [1000] },
   { codes: [2000] },
-  { codes: [3000, 3100, 3200, 3500], label: w => w.many(T.worker) },
+  { codes: [3000, 3100, 3200, 3300, 3500], label: w => w.many(T.worker) },
   // Projects sit under clients (David, 5 Nov): shown as a sub-item of Clients, before the sites list.
   { codes: [4000, 4200, 4100], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
   { codes: [5000, 5500], label: w => `${w.one(T.equipment)} & ${w.lower(T.item, true)}` },
