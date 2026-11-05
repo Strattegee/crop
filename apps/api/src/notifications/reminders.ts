@@ -1,3 +1,4 @@
+import { purgeExpiredApplications } from '../workforce/apply-data.js';
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -77,6 +78,8 @@ export class ExpiryReminders implements OnApplicationBootstrap, OnApplicationShu
   }
 
   private async forAgency(db: PoolClient, tenantId: string, agency: string, now: Date): Promise<number> {
+    // Unconfirmed job applications whose link ran out leave nothing behind (applying online, 5 Nov).
+    await purgeExpiredApplications(db);
     const settings = await loadSettings(db, tenantId);
     const hour = Number(new Intl.DateTimeFormat('en-AU', { hour: 'numeric', hourCycle: 'h23', timeZone: settings.timezone }).format(now));
     if (hour < SEND_FROM_HOUR) return 0;

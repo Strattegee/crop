@@ -23,7 +23,8 @@ export async function recruitmentEvent(
 }
 
 const PERSON_COLS = `w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName", w.email, w.phone,
-  w.status, w.roles, w.gender, w.recruitment_stage as "stage", w.stage_changed_at as "stageChangedAt"`;
+  w.status, w.roles, w.gender, w.recruitment_stage as "stage", w.stage_changed_at as "stageChangedAt",
+  exists (select 1 from job_applications j where j.worker_id = w.id and j.status = 'confirmed') as "appliedOnline"`;
 
 /** The recruitment board: applicants by stage, people being onboarded, and people who started recently. */
 @ApiBearerAuth()

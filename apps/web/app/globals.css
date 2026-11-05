@@ -1103,3 +1103,18 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .stage-tools details > summary, .stage-edit > summary, .stage-newteam > summary { cursor: pointer; }
 .stage-newteam { flex-basis: 100%; }
 .stage-edit { margin-top: 12px; }
+
+/* Applying online (5 Nov): the public application form. */
+.apply-form .apply-ticks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.apply-form .apply-cred { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.apply-form .apply-cred:last-child { border-bottom: 0; }
+.apply-form .apply-cred .inline { flex: 1 1 200px; }
+.apply-form table.apply-week { border-collapse: collapse; min-width: 280px; }
+.apply-form table.apply-week th, .apply-form table.apply-week td { padding: 4px 8px; text-align: center; border-bottom: 1px solid var(--border); }
+.apply-form table.apply-week th[scope='row'] { text-align: left; font-weight: 500; }
+.apply-answers { display: grid; grid-template-columns: minmax(120px, 220px) 1fr; gap: 4px 12px; margin: 0; }
+.apply-answers dt { color: var(--muted); }
+.apply-answers dd { margin: 0; white-space: pre-line; }
+@media (max-width: 560px) { .apply-answers { grid-template-columns: 1fr; } .apply-answers dd { margin-bottom: 6px; } }
+.apply-q { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 0 0 8px; }
+.apply-q summary { cursor: pointer; }

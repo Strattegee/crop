@@ -16,7 +16,7 @@ import { STAGES, nextStage, previousStage, daysLine } from '../../../lib/recruit
 export const dynamic = 'force-dynamic';
 
 type BoardPerson = CardPerson & {
-  stage: string | null; days: number | null; mustHavesToDo: number;
+  stage: string | null; days: number | null; mustHavesToDo: number; appliedOnline?: boolean;
   onboardingId?: string; progress?: { done: number; total: number; ready: boolean };
 };
 type Board = { columns: { stage: string; label: string; people: BoardPerson[] }[]; notProceeding: number };
@@ -42,7 +42,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
   return (
     <>
       <h1>Recruitment</h1>
-      <p className="muted">Everyone from the day they apply to their first weeks at work, each shown on their employee card. Applicants and people being onboarded are kept off the {tw.lower(T.roster)} until they start.</p>
+      <p className="muted">Everyone from the day they apply to their first weeks at work, each shown on their employee card. Applicants and people being onboarded are kept off the {tw.lower(T.roster)} until they start. People can also apply through your <Link href="/settings/application-form">application form</Link>.</p>
       <Notices error={sp.error} done={sp.done} />
 
       <details className="card" open={total === 0}>
@@ -73,6 +73,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
                   <PersonCard p={p} today={today} />
                   <div className="rmeta">
                     <span>{daysLine(col.stage, p.days)}</span>
+                    {p.appliedOnline && col.stage === 'applied' && <span className="badge neutral" title="They applied through your online form">Applied online</span>}
                     {col.stage === 'onboarding' && p.progress && (
                       <span className={p.progress.ready ? 'ok' : ''}>{p.progress.done} of {p.progress.total} steps done{p.progress.ready ? ' · ready to finish' : ''}</span>
                     )}

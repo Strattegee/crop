@@ -84,6 +84,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="card">
+        <h2>Application form</h2>
+        <p className="muted" style={{ marginTop: 0 }}>A page where people apply to work with you. Applications land on the recruitment board once the applicant confirms their email. Closed until you open it.</p>
+        <Link href="/settings/application-form" className="btn small secondary">Application form</Link>
+      </div>
+
+      <div className="card">
         <h2>Team access</h2>
         <p className="muted" style={{ marginTop: 0 }}>Which {tw.lower(T.site, true)} and {tw.lower(T.project, true)} each allocator and supervisor works on. Supervisors see only theirs, and only what relates to the {tw.lower(T.shift, true)} there.</p>
         <Link href="/settings/team-access" className="btn small secondary">Team access</Link>
