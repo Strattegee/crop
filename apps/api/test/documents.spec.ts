@@ -25,6 +25,10 @@ describe('file type and name checks', () => {
   it('keeps only a safe file name', () => {
     expect(cleanFilename('C:\\Users\\jo\\police check.pdf')).toBe('police check.pdf');
     expect(cleanFilename('../../etc/passwd')).toBe('passwd');
+    // A Mac screenshot name read as Latin-1 by the upload library comes back as UTF-8, with an ordinary space.
+    const mac = Buffer.from('Screenshot 2026-11-04 at 4.19.40\u202fpm.png', 'utf8').toString('latin1');
+    expect(cleanFilename(mac)).toBe('Screenshot 2026-11-04 at 4.19.40 pm.png');
+    expect(cleanFilename('café.pdf')).toBe('café.pdf');
     expect(cleanFilename('a\u0000b.pdf')).toBe('ab.pdf');
     expect(cleanFilename(undefined)).toBe('document');
   });
