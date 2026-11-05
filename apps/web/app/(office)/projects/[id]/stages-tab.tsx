@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import type { industryGroups } from '../../../../lib/industry-groups';
 import {
-  DAY_SHORT, DEFAULT_WEEKDAYS, hoursLine, hoursNote, namedWords, outsideNote, rosteredLine, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
-  type Stage, type StagesView,
+  copyFirstDay, DAY_SHORT, DEFAULT_WEEKDAYS, sourceLabel, hoursLine, hoursNote, namedWords, outsideNote, rosteredLine, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
+  type Stage, type StageSource, type StagesView,
 } from '../../../../lib/project-stages';
 import { T, type Words } from '../../../../lib/terms';
 import { MakeUpLines, type RoleRow } from '../../teams/make-up-lines';
 import {
-  addStage, addStagePerson, bookStageEquipment, moveStageShifts, planStageItem, removeStage, removeStageEquipment, removeStageItem, removeStagePerson, rosterProject, rosterStage,
+  addStage, addStagePerson, copyStages, bookStageEquipment, moveStageShifts, planStageItem, removeStage, removeStageEquipment, removeStageItem, removeStagePerson, rosterProject, rosterStage,
   setProjectSupervisor, setStageRoles, setStageTeam, updateStage,
 } from '../actions';
 
@@ -258,9 +258,10 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
 }
 
 /** The project's stages (David, 5 Nov): a timeline across its dates, then each stage with its team copy, rostering and equipment. */
-export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment, items, dateLabel }: {
+export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment, items, sources = [], dateLabel }: {
   id: string; v: StagesView; canEdit: boolean; tw: Words; areas: Area[]; codes: ShiftCode[]; teams: TeamChoice[];
-  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[]; items: ItemChoice[]; dateLabel: (d: string) => string;
+  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[]; items: ItemChoice[];
+  sources?: StageSource[]; dateLabel: (d: string) => string;
 }) {
   const span = timelineSpan(v);
   const lay = span ? timelineBars(v.stages, span) : null;
@@ -339,6 +340,28 @@ export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups,
             <button className="btn" type="submit">Add stage</button>
           </form>
           <p className="muted small" style={{ marginBottom: 0 }}>Saturday and Sunday are off unless ticked. Choosing a {tw.lower(T.team)} copies its make-up and people into the stage; change them here for this {tw.lower(T.project)} only.</p>
+        </details>
+      )}
+      {canEdit && sources.length > 0 && (
+        <details className="card" open={v.stages.length === 0 || undefined}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Copy stages from another {tw.lower(T.project)}</summary>
+          <form action={copyStages.bind(null, id)} className="form-row" style={{ marginTop: 12 }}>
+            <label style={{ flexBasis: '100%' }}>Copy from
+              <select name="fromProjectId" required defaultValue="">
+                <option value="" disabled>Choose a {tw.lower(T.project)}</option>
+                {sources.map(s => <option key={s.id} value={s.id}>{sourceLabel(s)}</option>)}
+              </select>
+            </label>
+            <label>First stage starts<input type="date" name="startsOn" required defaultValue={copyFirstDay(v)} /></label>
+            <label className="inline"><input type="checkbox" name="people" defaultChecked /> Named people</label>
+            <label className="inline"><input type="checkbox" name="items" defaultChecked /> Planned {tw.lower(T.item, true)}</label>
+            <button className="btn" type="submit">Copy stages</button>
+          </form>
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            Each stage keeps its working days, hours, make-up and notes, and starts as many days after the first as it did there.{' '}
+            {tw.many(T.area)} are matched by name. {tw.one(T.equipment)}, the supervisor and {tw.lower(T.shift, true)} aren&apos;t copied; press Roster when ready.
+            {v.stages.length > 0 && <> The copies are added to the stages already here.</>}
+          </p>
         </details>
       )}
       {v.stages.length > 0 && <p className="muted small">Rostered {tw.lower(T.shift, true)} show on the <Link href={`/roster?site=${id}`}>roster</Link> as a Draft: nobody is told until you publish.</p>}

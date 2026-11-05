@@ -20,7 +20,7 @@ import { checkAllocation } from './projects.controller.js';
 import { rangeLine } from './projects.js';
 import { plannedQuantity, stageItemLines, type PlannedItem, type UsedItem } from './stage-items.js';
 import {
-  DEFAULT_WEEKDAYS, emptyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, moveSummary, parseWeekdays, planSlots, rosterSummary,
+  copyOffset, copyStageDates, copySummary, DEFAULT_WEEKDAYS, emptyResult, type CopyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, moveSummary, parseWeekdays, planSlots, rosterSummary,
   noRetime, shiftsOutside, shiftsToRetime, STAGE_MOVED_REASON, STAGE_REMOVED_REASON, stageLine, stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole,
   toCreate, weekdaysLine, workingDays,
   type Existing, type HoursProblem, type MakeUp, type MoveResult, type RetimeSort, type RosterResult, type StagePerson, type TimedShift, type WantedHours,
@@ -459,6 +459,112 @@ export class ProjectStagesController {
         [t.tenantId, id, f.name!.trim(), f.areaId, f.startsOn, f.endsOn, f.weekdays, f.startTime, f.endTime, f.breakMinutes, f.shiftCodeId, f.notes, auth.userId])).rows[0];
       if (teamId) await copyTeam(db, t.tenantId, auth.userId, row.id, teamId);
       return { id: row.id, ...(await stagesView(db, p)) };
+    });
+  }
+
+  /**
+   * Other {projects} whose stages can be copied here (stage templates, 5 Nov): every {project} (archived ones too)
+   * with live stages, newest first, with how many stages, their names and their dates.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('projects/:id/stage-sources')
+  sources(@Tenant() t: Membership, @Param('id', ParseUUIDPipe) id: string) {
+    return withTenant(this.pool, t.tenantId, async db => {
+      await projectOf(db, id);
+      const rows = (await db.query<{ id: string; name: string; code: string | null; status: string; clientName: string | null; stageCount: number;
+        stageNames: string[]; firstDay: string; lastDay: string }>(
+        `select f.id, f.name, f.code, f.status, c.name as "clientName", count(st.id)::int as "stageCount",
+                array_agg(st.name order by st.starts_on, st.created_at) as "stageNames",
+                to_char(min(st.starts_on), 'YYYY-MM-DD') as "firstDay", to_char(max(st.ends_on), 'YYYY-MM-DD') as "lastDay"
+           from facilities f join project_stages st on st.facility_id = f.id and st.removed_at is null
+           left join clients c on c.id = f.client_id
+          where f.kind = 'project' and f.id <> $1
+          group by f.id, c.name order by max(st.starts_on) desc, lower(f.name)`, [id])).rows;
+      return rows.map(r => ({ ...r, line: `${r.stageCount === 1 ? '1 stage' : `${r.stageCount} stages`}: ${r.stageNames.join(', ')}` }));
+    });
+  }
+
+  /**
+   * Copies another {project}'s stages here (`fromProjectId`, `startsOn` = the first stage's first day): each stage's
+   * dates (`copyStageDates`), working days, hours (a shift type of the other {site} becomes its hours), notes, the
+   * standing team it came from and its make-up; `people` (default true) its named people who are still active and
+   * still have the role; `items` (default true) its planned items still in use. {Areas} are matched by name, and added
+   * for owners and admins when this {project} doesn't have one of that name. Equipment, the supervisor and {shifts}
+   * are never copied. Adds to any stages already here.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('projects/:id/stages/copy')
+  copy(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const fromId = text(body, 'fromProjectId', { required: true, max: 40 })!;
+    if (!UUID.test(fromId)) throw new BadRequestException('Choose {a project} to copy from');
+    if (fromId === id) throw new BadRequestException('Choose another {project} to copy from');
+    const firstDay = date(body, 'startsOn');
+    if (!firstDay) throw new BadRequestException('Choose the first stage’s first day');
+    const withPeople = bool(body, 'people') ?? true;
+    const withItems = bool(body, 'items') ?? true;
+    const canAddAreas = t.role === 'owner' || t.role === 'admin';
+    return this.tx(t, auth, async db => {
+      const p = await projectOf(db, id, true);
+      const from = await projectOf(db, fromId).catch(() => { throw new NotFoundException('{Project} to copy from not found'); });
+      const src = await liveStages(db, fromId);
+      const r: CopyResult = { copied: 0, people: 0, peopleLeftOff: [], items: 0, itemsLeftOff: [], areasAdded: [], areasMissing: [], hoursInstead: 0, equipment: 0 };
+      if (!src.length) throw new BadRequestException(`${from.name} has no stages to copy`);
+      const by = copyOffset(src, firstDay);
+      const srcIds = src.map(s => s.id);
+      const [makeUp, people] = await Promise.all([makeUpOf(db, srcIds), peopleOf(db, srcIds)]);
+      const codes = new Map((await db.query<{ id: string; ok: boolean }>(
+        'select id, facility_id is null and active as ok from shift_codes where id = any($1)', [src.map(s => s.shiftCodeId).filter(Boolean)])).rows.map(x => [x.id, x.ok]));
+      const areas = new Map((await db.query<{ id: string; name: string }>('select id, name from areas where facility_id = $1 and active', [id])).rows
+        .map(a => [a.name.trim().toLowerCase(), a.id]));
+      const roles = new Map((await db.query<{ id: string; roles: string[]; status: string }>(
+        'select id, roles, status from workers where id = any($1)', [[...people.values()].flat().map(x => x.workerId)])).rows.map(w => [w.id, w]));
+      const planned = withItems ? (await db.query<{ stageId: string; itemId: string; name: string; active: boolean; quantity: string; note: string | null }>(
+        `select x.stage_id as "stageId", x.item_id as "itemId", i.name, i.active, x.quantity::text as quantity, x.note
+           from project_stage_items x join items i on i.id = x.item_id where x.stage_id = any($1) and x.removed_at is null order by x.added_at`, [srcIds])).rows : [];
+      r.equipment = (await db.query('select 1 from equipment_site_allocations where project_stage_id = any($1) and removed_at is null', [srcIds])).rowCount ?? 0;
+      for (const s of src) {
+        const d = copyStageDates(s, by);
+        let areaId: string | null = null;
+        if (s.areaName) {
+          const key = s.areaName.trim().toLowerCase();
+          areaId = areas.get(key) ?? null;
+          if (!areaId && canAddAreas) {
+            areaId = (await db.query<{ id: string }>('insert into areas(tenant_id, facility_id, name) values ($1,$2,$3) returning id', [t.tenantId, id, s.areaName.trim()])).rows[0].id;
+            areas.set(key, areaId);
+            r.areasAdded.push(s.areaName.trim());
+          } else if (!areaId && !r.areasMissing.includes(s.areaName)) r.areasMissing.push(s.areaName);
+        }
+        const keepCode = Boolean(s.shiftCodeId && codes.get(s.shiftCodeId));
+        if (s.shiftCodeId && !keepCode) r.hoursInstead++;
+        const f = keepCode
+          ? { startTime: s.ownStart, endTime: s.ownEnd, breakMinutes: s.ownStart ? s.breakMinutes : 0, shiftCodeId: s.shiftCodeId }
+          : { startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, shiftCodeId: null };
+        const problem = stageProblem({ name: s.name, ...d, weekdays: s.weekdays, ...f });
+        if (problem) throw new BadRequestException(`${s.name}: ${problem}`);
+        const stageId = (await db.query<{ id: string }>(
+          `insert into project_stages(tenant_id, facility_id, name, area_id, starts_on, ends_on, weekdays, start_time, end_time, break_minutes, shift_code_id, team_id, notes, created_by)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`,
+          [t.tenantId, id, s.name, areaId, d.startsOn, d.endsOn, s.weekdays, f.startTime, f.endTime, f.breakMinutes, f.shiftCodeId, s.teamId, s.notes, auth.userId])).rows[0].id;
+        r.copied++;
+        await replaceRoles(db, t.tenantId, stageId, makeUp.get(s.id) ?? []);
+        if (withPeople) {
+          for (const x of people.get(s.id) ?? []) {
+            const w = roles.get(x.workerId);
+            const reason = !w || w.status !== 'active' ? 'not active' : !w.roles.includes(x.role) ? `no longer ${x.role}` : null;
+            if (reason) { r.peopleLeftOff.push({ name: x.name, stage: s.name, reason }); continue; }
+            await db.query('insert into project_stage_people(tenant_id, stage_id, worker_id, role, added_by) values ($1,$2,$3,$4,$5)', [t.tenantId, stageId, x.workerId, x.role, auth.userId]);
+            r.people++;
+          }
+        }
+        for (const it of planned.filter(x => x.stageId === s.id)) {
+          if (!it.active) { r.itemsLeftOff.push({ name: it.name, stage: s.name }); continue; }
+          await db.query('insert into project_stage_items(tenant_id, stage_id, item_id, quantity, note, added_by) values ($1,$2,$3,$4,$5,$6)',
+            [t.tenantId, stageId, it.itemId, it.quantity, it.note, auth.userId]);
+          r.items++;
+        }
+      }
+      const firstCopied = copyStageDates(src.reduce((m, s) => (s.startsOn < m.startsOn ? s : m), src[0]), by).startsOn;
+      return { ...r, summary: copySummary(r, from.name, firstCopied, await wordsFor(db)), ...(await stagesView(db, p)) };
     });
   }
 

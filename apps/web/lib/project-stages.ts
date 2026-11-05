@@ -197,3 +197,25 @@ export function stageItemChoices(items: { id: string; name: string; unit: string
     label: planned.has(i.id) ? `${i.name} (${i.unit}) · ${planned.get(i.id)} planned` : `${i.name} (${i.unit})`,
   }));
 }
+
+/** Another project whose stages can be copied here (`GET /projects/:id/stage-sources`). */
+export type StageSource = {
+  id: string; name: string; code: string | null; status: string; clientName: string | null; stageCount: number; stageNames: string[];
+  firstDay: string; lastDay: string; line: string;
+};
+
+/** "Beach Hut · Example Client – 3 stages: Demolition, Build, Clean" (cut short after 90 characters). */
+export function sourceLabel(s: StageSource): string {
+  const label = `${s.name}${s.clientName ? ` · ${s.clientName}` : ''} – ${s.line}`;
+  return label.length > 90 ? `${label.slice(0, 89)}…` : label;
+}
+
+/**
+ * The first day suggested for copied stages: the day after this project's last stage when it has stages (they are
+ * added after them), else its start date when that is today or later, else today.
+ */
+export function copyFirstDay(v: Pick<StagesView, 'today' | 'span' | 'project'>): string {
+  if (v.span) return addDays(v.span.to, 1) < v.today ? v.today : addDays(v.span.to, 1);
+  if (v.project.startsOn && v.project.startsOn >= v.today) return v.project.startsOn;
+  return v.today;
+}

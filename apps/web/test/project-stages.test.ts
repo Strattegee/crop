@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  dayLabel, hoursLine, hoursNote, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
+  copyFirstDay, sourceLabel, dayLabel, hoursLine, hoursNote, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
 } from '../lib/project-stages';
 
 describe('project stages (David, 5 Nov)', () => {
@@ -89,5 +89,22 @@ describe('project stages (David, 5 Nov)', () => {
       { value: 'd', label: 'Dust masks (each)' },
       { value: 'g', label: 'Gloves (pair) · 40 planned' },
     ]);
+  });
+});
+
+describe('copying stages from another project (5 Nov)', () => {
+  const project = { id: 'p', name: 'Boat Shed', startsOn: null as string | null, endsOn: null, timezone: 'Australia/Melbourne' };
+  it('suggests a first day', () => {
+    expect(copyFirstDay({ today: '2026-11-05', span: null, project })).toBe('2026-11-05');
+    expect(copyFirstDay({ today: '2026-11-05', span: null, project: { ...project, startsOn: '2026-12-07' } })).toBe('2026-12-07');
+    expect(copyFirstDay({ today: '2026-11-05', span: null, project: { ...project, startsOn: '2026-10-01' } })).toBe('2026-11-05');
+    expect(copyFirstDay({ today: '2026-11-05', span: { from: '2026-11-09', to: '2026-11-20' }, project })).toBe('2026-11-21');
+    expect(copyFirstDay({ today: '2026-11-05', span: { from: '2026-10-01', to: '2026-10-20' }, project })).toBe('2026-11-05');
+  });
+  it('labels a project to copy from', () => {
+    const s = { id: 'x', name: 'Beach Hut', code: null, status: 'completed', clientName: 'Example Client', stageCount: 3,
+      stageNames: ['Demolition', 'Build', 'Clean'], firstDay: '2026-11-09', lastDay: '2026-11-26', line: '3 stages: Demolition, Build, Clean' };
+    expect(sourceLabel(s)).toBe('Beach Hut · Example Client – 3 stages: Demolition, Build, Clean');
+    expect(sourceLabel({ ...s, clientName: null, line: `3 stages: ${'Long name, '.repeat(12)}` }).length).toBe(90);
   });
 });

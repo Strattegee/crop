@@ -232,3 +232,15 @@ export async function removeStageItem(id: string, planId: string) {
 export async function removeStageEquipment(id: string, allocationId: string) {
   await attempt(stagesTab(id), () => api(`/equipment-allocations/${allocationId}/remove`, { method: 'POST', body: {} }), 'Taken off.');
 }
+
+/** Copies another project's stages here (stage templates, 5 Nov): dates from the first day chosen, people and items when ticked. */
+export async function copyStages(id: string, f: FormData) {
+  let r: { summary: string } | undefined;
+  await attempt(stagesTab(id), async () => {
+    const fromProjectId = str(f, 'fromProjectId');
+    if (!fromProjectId) throw new ApiError(400, 'Choose a project to copy from');
+    r = await api<{ summary: string }>(`/projects/${id}/stages/copy`, {
+      method: 'POST', body: { fromProjectId, startsOn: str(f, 'startsOn'), people: f.get('people') === 'on', items: f.get('items') === 'on' },
+    });
+  }, () => r!.summary);
+}
