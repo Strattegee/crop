@@ -1079,3 +1079,25 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .team-makeup-form > .btn { margin-top: 6px; }
 .team-remove { align-items: end; border-top: 1px solid var(--border); padding-top: 6px; }
 .team-remove > span { flex: 1 1 100%; }
+
+/* Project stages (David, 5 Nov; projects/[id]/stages-tab.tsx): a timeline across the project's dates, then a card per stage. */
+.stage-timeline { position: relative; padding-top: 22px; }
+.stage-ticks { position: absolute; top: 0; left: 0; right: 0; height: 20px; }
+.stage-tick { position: absolute; top: 0; font-size: 11px; color: var(--muted); white-space: nowrap; transform: translateX(-2px); }
+.stage-lanes { position: relative; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; min-height: 34px; overflow: hidden; }
+.stage-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.stage-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--orange); z-index: 2; }
+.stage-bar { position: absolute; height: 28px; margin-top: 3px; padding: 0 8px; box-sizing: border-box; border-radius: 6px; background: var(--sel-bg); color: var(--sel-text);
+  border: 1px solid var(--border); font-size: 12px; font-weight: 600; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; z-index: 1; }
+.stage-bar:hover { background: var(--hover); color: var(--text); }
+.stage-bar.overlap { border-color: var(--warn); box-shadow: inset 0 -3px 0 var(--warn); }
+.stage-bar.done { opacity: 0.6; }
+.stage-card.off { opacity: 0.8; }
+.stage-h { font-size: 13px; color: var(--muted); margin: 12px 0 4px; font-weight: 600; }
+.stage-days { display: flex; flex-wrap: wrap; gap: 4px 12px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin: 0; }
+.stage-days legend { font-size: 13px; padding: 0 4px; }
+.stage-days label { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; }
+.stage-tools { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.stage-tools details > summary, .stage-edit > summary, .stage-newteam > summary { cursor: pointer; }
+.stage-newteam { flex-basis: 100%; }
+.stage-edit { margin-top: 12px; }

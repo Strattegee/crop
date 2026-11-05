@@ -180,7 +180,9 @@ export class FacilitiesController {
            parking_notes = case when $16 then $17 else parking_notes end, entry_notes = case when $18 then $19 else entry_notes end,
            active = $20, office_id = case when $22 then $23::uuid else office_id end,
            kind = $24, status = $25, starts_on = $26, ends_on = $27, code = case when $28 then $29 else code end,
-           description = case when $30 then $31 else description end, manager_user_id = case when $32 then $33::uuid else manager_user_id end
+           description = case when $30 then $31 else description end, manager_user_id = case when $32 then $33::uuid else manager_user_id end,
+           -- Only projects have a supervisor (migration 0093): turning one back into a site lets go of it.
+           supervisor_worker_id = case when $24 = 'project' then supervisor_worker_id end
          where id = $1`,
         [id, text(body, 'name', { max: 200 }), has('clientId'), clientId, has('addressLine'), text(body, 'addressLine', { max: 200 }),
           has('suburb'), text(body, 'suburb', { max: 100 }), true, state, true, pc, tz,
