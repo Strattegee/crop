@@ -232,18 +232,75 @@ export function shiftsOutside(shifts: PlacedShift[], stageDays: Map<string, Set<
 export const STAGE_MOVED_REASON = 'Stage dates changed';
 export const STAGE_REMOVED_REASON = 'Stage taken off';
 
-export interface MoveResult { cancelled: number; kept: Record<KeptReason, number>; roster: RosterResult | null }
+/** A placed {shift} with its hours now (site local time) and shift type, to compare with its stage's hours. */
+export interface TimedShift extends PlacedShift { role: string; startTime: string; endTime: string; breakMinutes: number; shiftCodeId: string | null }
+/** The hours (and shift type) a stage's {shifts} should have. */
+export interface WantedHours extends DayHours { shiftCodeId: string | null }
+export interface Retime { id: string; date: string; role: string; hours: WantedHours; supervisor: boolean }
+export interface RetimeSort { retime: Retime[]; kept: Record<KeptReason, number> }
+
+const sameHours = (s: TimedShift, h: WantedHours, code: boolean) =>
+  s.startTime === h.startTime && s.endTime === h.endTime && s.breakMinutes === h.breakMinutes && (!code || s.shiftCodeId === h.shiftCodeId);
+
+/**
+ * {Shifts} on their stage's working days whose hours (start, finish, break) or shift type differ from the stage's
+ * (`stageHours`: stage id → its hours now), and supervisor {shifts} whose hours differ from that day's
+ * (`supervisorHours`, from `supervisorDays`; a supervisor {shift} never has a shift type). Each gets the new hours
+ * unless it has started, has an agency's person on it, or its week is published, like `shiftsOutside`. {Shifts} off
+ * their stage's days are `shiftsOutside`'s, and stages not in `stageHours` are ignored.
+ */
+export function shiftsToRetime(shifts: TimedShift[], stageHours: Map<string, WantedHours>, stageDays: Map<string, Set<string>>,
+  supervisorHours: Map<string, DayHours>, supervisorToo = true): RetimeSort {
+  const out: RetimeSort = { retime: [], kept: { started: 0, agency: 0, published: 0 } };
+  for (const s of shifts) {
+    let want: WantedHours | undefined;
+    if (s.supervisor) {
+      const h = supervisorToo ? supervisorHours.get(s.date) : undefined;
+      want = h ? { ...h, shiftCodeId: null } : undefined;
+    } else if (s.stageId !== null && stageDays.get(s.stageId)?.has(s.date)) want = stageHours.get(s.stageId);
+    if (!want || sameHours(s, want, !s.supervisor)) continue;
+    if (s.started) out.kept.started++;
+    else if (s.agency) out.kept.agency++;
+    else if (s.published) out.kept.published++;
+    else out.retime.push({ id: s.id, date: s.date, role: s.role, hours: want, supervisor: s.supervisor });
+  }
+  return out;
+}
+
+/** A {shift} whose person couldn't do the new hours (taken off, left open) or whose equipment couldn't (kept at the old hours). */
+export interface HoursProblem { date: string; startTime: string; role: string; workerName: string | null; reason: string }
+
+export interface MoveResult {
+  cancelled: number; kept: Record<KeptReason, number>; roster: RosterResult | null;
+  /** {Shifts} given the stage's new hours; those left at the old hours (`retimeKept`); people taken off because they couldn't work them; equipment that kept a {shift} at its old hours. */
+  retimed: number; retimeKept: Record<KeptReason, number>; takenOff: HoursProblem[]; equipmentKept: HoursProblem[];
+}
+
+export const noRetime = () => ({ retimed: 0, retimeKept: { started: 0, agency: 0, published: 0 }, takenOff: [] as HoursProblem[], equipmentKept: [] as HoursProblem[] });
+
+const keptWords = (k: Record<KeptReason, number>, w: Words) => {
+  const out: string[] = [];
+  if (k.published) out.push(`${k.published} in published weeks (change ${k.published === 1 ? 'it' : 'them'} on the roster, so people are told)`);
+  if (k.agency) out.push(`${k.agency} with ${w.a(T.agency)}’s person on ${k.agency === 1 ? 'it' : 'them'}`);
+  if (k.started) out.push(`${k.started} already started`);
+  return out;
+};
 
 /** One plain line about moving a stage's {shifts} to its dates (or taking them off with the stage). */
 export function moveSummary(r: MoveResult, w: Words = DEFAULT_WORDS, removed = false): string {
   const parts: string[] = [];
   if (r.cancelled) parts.push(`Took ${w.count(r.cancelled, T.shift)} off the Draft roster${removed ? '' : ' (no longer on the stage’s working days)'}.`);
+  if (r.retimed) parts.push(`Changed ${w.count(r.retimed, T.shift)} to the stage’s hours.`);
+  if (r.takenOff.length) {
+    const n = r.takenOff.length;
+    parts.push(`${n === 1 ? '1 person' : `${n} people`} couldn’t work the new hours, so ${n === 1 ? 'that' : 'those'} ${w.lower(T.shift, n !== 1)} ${n === 1 ? 'is' : 'are'} open again.`);
+  }
+  if (r.equipmentKept.length) parts.push(`${w.count(r.equipmentKept.length, T.shift)} kept the old hours because the ${w.lower(T.equipment)} on ${r.equipmentKept.length === 1 ? 'it' : 'them'} can’t be used at the new ones.`);
   if (r.roster && (r.roster.created || r.roster.supervisorCreated)) parts.push(rosterSummary(r.roster, w));
-  const kept: string[] = [];
-  if (r.kept.published) kept.push(`${r.kept.published} in published weeks (change ${r.kept.published === 1 ? 'it' : 'them'} on the roster, so people are told)`);
-  if (r.kept.agency) kept.push(`${r.kept.agency} with ${w.a(T.agency)}’s person on ${r.kept.agency === 1 ? 'it' : 'them'}`);
-  if (r.kept.started) kept.push(`${r.kept.started} already started`);
+  const kept = keptWords(r.kept, w);
   if (kept.length) parts.push(`Left where they are: ${kept.join('; ')}.`);
-  if (!parts.length) parts.push(`Every ${w.lower(T.shift)} is already on the stage’s dates.`);
+  const keptHours = keptWords(r.retimeKept, w);
+  if (keptHours.length) parts.push(`Left at the old hours: ${keptHours.join('; ')}.`);
+  if (!parts.length) parts.push(`Every ${w.lower(T.shift)} is already on the stage’s dates and hours.`);
   return parts.join(' ');
 }

@@ -8,7 +8,8 @@ import { bool, date, int, text } from '../common/validate.js';
 import { APP_POOL } from '../database/database.module.js';
 import { eligibilityForShift } from '../roster/eligibility-data.js';
 import { actorOf } from '../roster/publishing.js';
-import { cancelShift } from '../roster/shift-actions.js';
+import { equipmentForShift } from '../roster/equipment-data.js';
+import { cancelShift, removeWorker } from '../roster/shift-actions.js';
 import { time } from '../roster/shift-create.js';
 import { firstReason } from '../roster/templates.js';
 import { T, wordsFor } from '../terms/words.js';
@@ -19,9 +20,9 @@ import { checkAllocation } from './projects.controller.js';
 import { rangeLine } from './projects.js';
 import {
   DEFAULT_WEEKDAYS, emptyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, moveSummary, parseWeekdays, planSlots, rosterSummary,
-  shiftsOutside, STAGE_MOVED_REASON, STAGE_REMOVED_REASON, stageLine, stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole,
+  noRetime, shiftsOutside, shiftsToRetime, STAGE_MOVED_REASON, STAGE_REMOVED_REASON, stageLine, stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole,
   toCreate, weekdaysLine, workingDays,
-  type Existing, type MakeUp, type MoveResult, type PlacedShift, type RosterResult, type StagePerson,
+  type Existing, type HoursProblem, type MakeUp, type MoveResult, type RetimeSort, type RosterResult, type StagePerson, type TimedShift, type WantedHours,
 } from './stages.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -108,9 +109,11 @@ async function stageShifts(db: PoolClient, stageIds: string[]) {
  * The project's {shifts} made by its stages and its supervisor's (not cancelled), with whether each has started, has
  * an agency's person on it, or is in a published week.
  */
-async function placedShifts(db: PoolClient, facilityId: string): Promise<PlacedShift[]> {
-  return (await db.query<PlacedShift>(
-    `select s.id, s.project_stage_id as "stageId", s.project_supervisor as supervisor,
+async function placedShifts(db: PoolClient, facilityId: string): Promise<TimedShift[]> {
+  return (await db.query<TimedShift>(
+    `select s.id, s.project_stage_id as "stageId", s.project_supervisor as supervisor, s.role,
+            to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as "startTime", to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as "endTime",
+            s.break_minutes as "breakMinutes", s.shift_code_id as "shiftCodeId",
             to_char((s.starts_at at time zone f.timezone)::date, 'YYYY-MM-DD') as date, s.starts_at <= now() as started,
             exists (select 1 from roster_publications rp where rp.facility_id = s.facility_id
                      and rp.week_start = date_trunc('week', s.starts_at at time zone f.timezone)::date) as published,
@@ -137,8 +140,60 @@ async function matchShifts(db: PoolClient, tenantId: string, userId: string, p: 
   const sort = shiftsOutside(placed, days, new Set(supervisorDays(all).keys()));
   for (const id of sort.cancel) await cancelShift(db, userId, id, removed ? STAGE_REMOVED_REASON : STAGE_MOVED_REASON, 'other');
   const had = removed ? [] : stageIds.filter(id => all.some(s => s.id === id) && placed.some(x => x.stageId === id));
+  const times = removed ? noRetime() : await retimeShifts(db, tenantId,
+    retimeSort(await placedShifts(db, p.id), all.filter(s => stageIds.includes(s.id)), all), p.timezone);
   const roster = had.length ? await rosterStages(db, tenantId, userId, p, had) : null;
-  return { cancelled: sort.cancel.length, kept: sort.kept, roster };
+  return { cancelled: sort.cancel.length, kept: sort.kept, roster, ...times };
+}
+
+/** Which of the {shifts} of `stages` (and the supervisor's, from every live stage `all`) need the stage's hours now. */
+function retimeSort(placed: TimedShift[], stages: StageRow[], all: StageRow[]): RetimeSort {
+  const hours = new Map<string, WantedHours>(stages.map(s => [s.id, { startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, shiftCodeId: s.shiftCodeId }]));
+  const days = new Map(stages.map(s => [s.id, new Set(workingDays(s.startsOn, s.endsOn, s.weekdays))]));
+  return shiftsToRetime(placed, hours, days, supervisorDays(all));
+}
+
+/**
+ * Gives {shifts} their stage's hours (and shift type), each on its own savepoint, as changing a {shift}'s times does
+ * (logged as `times_changed`; Draft weeks only, so nobody is messaged): a new start already past leaves it as it was
+ * (counted as started); equipment on it that can't be used at the new hours leaves it as it was (`equipmentKept`);
+ * a person who can't work them is taken off and the {shift} left open with the reason (`takenOff`), as "Roster" does.
+ */
+async function retimeShifts(db: PoolClient, tenantId: string, sort: RetimeSort, zone: string): Promise<ReturnType<typeof noRetime>> {
+  const out = { ...noRetime(), retimeKept: { ...sort.kept } };
+  for (const r of sort.retime) {
+    const h = r.hours;
+    await db.query('savepoint stage_retime');
+    const u = (await db.query<{ future: boolean }>(
+      `update shifts set starts_at = ($2::date + $3::time) at time zone $6, ends_at = ($2::date + $5::int + $4::time) at time zone $6,
+              break_minutes = $7, shift_code_id = case when $8 then shift_code_id else $9::uuid end, updated_at = now()
+        where id = $1 and status <> 'cancelled' and starts_at > now() returning starts_at > now() as future`,
+      [r.id, r.date, h.startTime, h.endTime, h.endTime < h.startTime ? 1 : 0, zone, h.breakMinutes, r.supervisor, h.shiftCodeId])).rows[0];
+    if (!u?.future) { await db.query('rollback to savepoint stage_retime'); out.retimeKept.started++; continue; }
+    const problem: HoursProblem = { date: r.date, startTime: h.startTime, role: r.role, workerName: null, reason: '' };
+    const booked = (await db.query<{ equipment_id: string }>(
+      `select equipment_id from shift_assignments where shift_id = $1 and resource_kind = 'equipment' and status = 'confirmed'`, [r.id])).rows.map(x => x.equipment_id);
+    const stuck = booked.length ? (await equipmentForShift(db, tenantId, r.id, booked)).filter(e => e.blocks.length) : [];
+    if (stuck.length) {
+      await db.query('rollback to savepoint stage_retime');
+      out.equipmentKept.push({ ...problem, workerName: stuck[0].name, reason: firstReason(stuck[0].blocks) });
+      continue;
+    }
+    const person = (await db.query<{ worker_id: string; status: string }>(
+      `select a.worker_id, w.status from shift_assignments a join workers w on w.id = a.worker_id
+        where a.shift_id = $1 and a.resource_kind = 'worker' and a.status in ('assigned', 'confirmed')`, [r.id])).rows[0];
+    if (person && person.status !== 'agency') {
+      const [c] = await eligibilityForShift(db, tenantId, r.id, [person.worker_id]);
+      if (c && c.blocks.length) {
+        await removeWorker(db, r.id, false);
+        out.takenOff.push({ ...problem, workerName: c.name, reason: firstReason(c.blocks) });
+      }
+    }
+    await db.query('release savepoint stage_retime');
+    out.retimed++;
+  }
+  out.takenOff.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  return out;
 }
 
 /** Everything the Stages tab shows: the project's supervisor and each stage with its team copy, gaps, shifts and equipment. */
@@ -189,6 +244,12 @@ async function stagesView(db: PoolClient, p: ProjectRow) {
           outside: mine.filter(x => !days.includes(x.date)).length,
           // Of those, how many "Move to the stage's dates" would take off (Draft weeks, not started, no agency's person).
           outsideMovable: shiftsOutside(placed.filter(x => x.stageId === s.id), new Map([[s.id, new Set(days)]]), new Set()).cancel.length,
+          // Not started, on the stage's days but not at its hours (or shift type) now, and how many "Bring them in line" would change.
+          ...(() => {
+            const r = shiftsToRetime(placed.filter(x => x.stageId === s.id), new Map([[s.id, { startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, shiftCodeId: s.shiftCodeId }]]),
+              new Map([[s.id, new Set(days)]]), new Map(), false);
+            return { offHours: r.retime.length + r.kept.agency + r.kept.published, offHoursMovable: r.retime.length };
+          })(),
         },
         equipment: equipment.filter(e => e.stageId === s.id).map(({ stageId: _, ...e }) => ({ ...e, line: rangeLine(e, today) })),
       };

@@ -14,7 +14,7 @@ export type Stage = {
   teamId: string | null; teamName: string | null; notes: string | null; line: string; weekdaysLine: string; workingDays: number;
   state: 'current' | 'upcoming' | 'ended'; roles: StageRole[]; makeUpLine: string | null; needed: number; people: StagePerson[];
   shortLine: string | null; placesPerDay: number; overlaps: string[];
-  rostered: { shifts: number; open: number; days: number; outside: number; outsideMovable: number };
+  rostered: { shifts: number; open: number; days: number; outside: number; outsideMovable: number; offHours: number; offHoursMovable: number };
   equipment: { id: string; equipmentId: string; equipmentName: string; typeName: string; line: string }[];
 };
 export type StagesView = {
@@ -107,12 +107,35 @@ export function rosterMessage(r: RosterResult, shown = 6): string {
 }
 
 /** What moving a stage's shifts did (`POST /project-stages/:id/move-shifts`, or `shifts` from a change or taking it off). */
-export type MoveResult = { cancelled: number; kept: { started: number; agency: number; published: number }; roster: Omit<RosterResult, 'summary'> | null };
+export type HoursProblem = { date: string; startTime: string; role: string; workerName: string | null; reason: string };
+export type MoveResult = {
+  cancelled: number; kept: { started: number; agency: number; published: number }; roster: Omit<RosterResult, 'summary'> | null;
+  /** Shifts given the stage's new hours, and the people taken off because they couldn't work them (left open). */
+  retimed?: number; takenOff?: HoursProblem[]; equipmentKept?: HoursProblem[];
+};
 
 /** The message after moving a stage's shifts: the API's summary, then any places left open (as after "Roster"). */
-export function moveMessage(r: MoveResult | null, summary: string | null): string | null {
+export function moveMessage(r: MoveResult | null, summary: string | null, shown = 6): string | null {
   if (!r || !summary) return null;
-  return r.roster ? rosterMessage({ ...r.roster, summary }) : summary;
+  const said = r.roster ? rosterMessage({ ...r.roster, summary }, shown) : summary;
+  const off = r.takenOff ?? [];
+  if (!off.length) return said;
+  const lines = off.slice(0, shown).map(x => `${dayLabel(x.date)} ${x.startTime} ${x.role}${x.workerName ? ` (${x.workerName})` : ''}: ${x.reason}`);
+  const more = off.length > shown ? ` … and ${off.length - shown} more.` : '';
+  return `${said} Taken off for the new hours: ${lines.join('; ')}${more}`;
+}
+
+/**
+ * The note under a stage whose shifts (on its days) aren't at its hours or shift type now: how many the button would
+ * change, and why the rest stay (published weeks or an agency's person: changed on the roster). Null when all match.
+ */
+export function hoursNote(r: Pick<Stage['rostered'], 'offHours' | 'offHoursMovable'>): { movable: number; stay: number; stayLine: string | null } | null {
+  if (!r.offHours || r.offHours <= 0) return null;
+  const stay = Math.max(0, r.offHours - r.offHoursMovable);
+  return {
+    movable: r.offHoursMovable, stay,
+    stayLine: stay ? `${stay} ${stay === 1 ? 'is' : 'are'} in a published week or with an agency's person: change ${stay === 1 ? 'it' : 'them'} on the roster.` : null,
+  };
 }
 
 /**
