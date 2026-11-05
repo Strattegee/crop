@@ -1118,3 +1118,55 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 @media (max-width: 560px) { .apply-answers { grid-template-columns: 1fr; } .apply-answers dd { margin-bottom: 6px; } }
 .apply-q { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 0 0 8px; }
 .apply-q summary { cursor: pointer; }
+
+/* Recruitment list (David, 5 Nov): one row per person, a filter in each column's heading, tick boxes for bulk. */
+.rl .q-tabs { margin-bottom: 8px; }
+.rl-bar { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin: 4px 0 6px; }
+.rl-fbtn { display: none; }
+.rl-list { overflow: visible; }
+.rl-table { min-width: 0; }
+.rl-row { display: grid; grid-template-columns: var(--rl-cols); gap: 8px; align-items: center; padding: 6px 10px 6px 6px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); background: var(--surface); box-shadow: inset 3px 0 0 transparent; }
+.rl-row > * { min-width: 0; }
+.rl-row:not(.rl-head):hover, .rl-row.ticked { background: var(--hover); }
+.rl-row.action { box-shadow: inset 3px 0 0 var(--warn); }
+.rl-row .cut { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-head { position: sticky; top: 0; z-index: 5; align-items: start; background: var(--surface-2); border-radius: 10px 10px 0 0; }
+.rl-h { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rl-sort { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; text-decoration: none; white-space: nowrap; }
+a.rl-sort:hover { color: var(--accent); }
+.rl-tick { display: flex; align-items: center; justify-content: center; padding-top: 2px; }
+.rl-text, .rl-select { font-size: 12px; padding: 3px 6px; width: 100%; min-width: 0; box-sizing: border-box; }
+.rl-select.on, .rl-fsum.on { border-color: var(--orange); background: var(--hover); }
+.rl-f { position: relative; }
+.rl-fsum { list-style: none; cursor: pointer; font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-fsum::-webkit-details-marker { display: none; }
+.rl-fsum::after { content: ' ▾'; color: var(--muted); }
+.rl-fbody { width: min(280px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto; }
+.rl-h:nth-last-child(-n+5) .rl-fbody { left: auto; right: 0; }
+.rl-checks { display: flex; flex-direction: column; gap: 2px; }
+.rl-check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+.rl-group { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 6px; }
+.rl-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.rl-name a { font-weight: 600; color: var(--text); text-decoration: none; max-width: 100%; }
+.rl-name a:hover, .rl-name a:focus-visible { color: var(--accent); text-decoration: underline; }
+.rl-name .small { flex-basis: 100%; }
+.rl-stage { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.rl-stage.rs-applied { border-color: var(--orange); }
+.rl-stage.rs-onboarding { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+.rl-stage.rs-started { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.rl-stage.rs-not_proceeding { color: var(--muted); }
+.rl-docs, .rl-prog, .rl-applied { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.rl-docs .ok, .rl-prog .ok { color: var(--ok); font-weight: 600; }
+.rl-bar-track { display: block; width: 100%; max-width: 110px; height: 5px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.rl-bar-fill { display: block; height: 100%; background: var(--ok); }
+@media (max-width: 900px) {
+  .rl-fbtn { display: inline-flex; }
+  .rl-ftoggle:not(:checked) ~ .rl-list .rl-head { display: none; }
+  .rl-row { grid-template-columns: 28px minmax(0, 1fr); gap: 4px 8px; }
+  .rl-row > [role='cell']:not(.rl-tick) { grid-column: 2; }
+  .rl-row > [data-label]::before { content: attr(data-label) ': '; color: var(--muted); font-size: 12px; }
+  .rl-docs, .rl-prog, .rl-applied { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .rl-head { position: static; grid-template-columns: minmax(0, 1fr); border-radius: 10px; }
+  .rl-head .rl-tick { justify-content: flex-start; }
+  .rl-h .rl-fbody, .rl-h:nth-last-child(-n+5) .rl-fbody { left: 0; right: auto; }
+}

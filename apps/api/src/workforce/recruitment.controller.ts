@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
@@ -9,6 +9,9 @@ import { APP_POOL } from '../database/database.module.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { cardsFor } from './person-card.js';
 import { onboardingProgress } from './onboarding.controller.js';
+import { distanceFreeKm } from '../geo/distance-data.js';
+import { postcodeDistance } from '../geo/distance.js';
+import { docProgress, listPage, parseListQuery, type ListPerson, type ListStage } from './recruitment-list.js';
 import { BOARD_STAGES, daysSince, MOVES, moveRefusal, STAGE_LABEL, STARTED_DAYS, type BoardStage } from './recruitment.js';
 
 const nameOf = (auth: AuthContext | null) => (auth ? auth.displayName || auth.email : null);
@@ -82,6 +85,99 @@ export class RecruitmentController {
         `select count(distinct e.worker_id)::int as n from recruitment_events e join workers w on w.id = e.worker_id
           where e.to_stage = 'not_proceeding' and e.at > now() - make_interval(days => $1) and w.status = 'inactive'`, [STARTED_DAYS])).rows[0].n;
       return { columns, notProceeding, today: ctx.today };
+    });
+  }
+
+  /**
+   * The recruitment list (David, 5 Nov): everyone in recruitment, one row each, filtered, counted, sorted and paged
+   * here (`recruitment-list.ts`), so the page never loads everyone's records. Query: `stage`, `role`, `work`, `state`
+   * (comma lists or repeated), `place` (suburb or postcode), `office` (within `km` of one of its sites), `near` (a site)
+   * + `km`, `docs` done|missing|none|to_check, `waiting` 3|7|14|action, `source` online|office, `q`, `sort` (`-` for
+   * descending), `limit`. Counts per stage ignore the stage filter.
+   */
+  @Roles(...OFFICE_ROLES)
+  @Get('recruitment/list')
+  list(@Tenant() t: Membership, @Query() query: Record<string, unknown>) {
+    const f = parseListQuery(query);
+    return withTenant(this.pool, t.tenantId, async db => {
+      const ctx = await complianceContext(db, t.tenantId);
+      type Row = Omit<ListPerson, 'docs' | 'days' | 'appliedAt' | 'movedAt'> & {
+        appliedAt: Date | null; movedAt: Date | null; country: string | null; employmentType: string | null; appWorkTypes: string[] | null;
+      };
+      const rows = (await db.query<Row>(
+        `with cand as (
+           select w.id from workers w
+            where w.status = 'applicant'
+               or (w.status = 'onboarding' and exists (select 1 from worker_onboardings o where o.worker_id = w.id and o.finished_at is null))
+               or (w.status = 'active' and exists (select 1 from worker_onboardings o where o.worker_id = w.id and o.outcome = 'completed'
+                                                     and o.finished_at > now() - make_interval(days => $1))
+                                       and exists (select 1 from recruitment_events e where e.worker_id = w.id))
+               or (w.status = 'inactive' and exists (select 1 from recruitment_events e where e.worker_id = w.id and e.to_stage = 'not_proceeding'))
+         )
+         select w.id, w.first_name as "firstName", w.last_name as "lastName", w.preferred_name as "preferredName", w.email, w.phone, w.roles,
+                case w.status when 'applicant' then coalesce(w.recruitment_stage, 'applied') when 'onboarding' then 'onboarding'
+                              when 'active' then 'started' else 'not_proceeding' end as stage,
+                case w.status when 'applicant' then coalesce(w.stage_changed_at, w.created_at) when 'onboarding' then ob.started_at
+                              when 'active' then fin.finished_at else last.at end as "movedAt",
+                coalesce((select min(e.at) from recruitment_events e where e.worker_id = w.id and e.to_stage = 'applied'), app.confirmed_at, w.created_at) as "appliedAt",
+                case when app.id is not null then 'online' else 'office' end as source,
+                app.work_types as "appWorkTypes",
+                (select et.employment_type::text from employment_terms et where et.worker_id = w.id and et.withdrawn_at is null
+                  order by et.starts_on desc limit 1) as "employmentType",
+                a.suburb, a.region, a.postcode, a.country,
+                ob.id as "onboardingId"
+           from cand join workers w on w.id = cand.id
+           left join lateral (select o.id, o.started_at from worker_onboardings o where o.worker_id = w.id and o.finished_at is null limit 1) ob on true
+           left join lateral (select o.finished_at from worker_onboardings o where o.worker_id = w.id and o.outcome = 'completed'
+                               order by o.finished_at desc limit 1) fin on true
+           left join lateral (select e.to_stage, e.at from recruitment_events e where e.worker_id = w.id order by e.at desc limit 1) last on true
+           left join lateral (select j.id, j.confirmed_at, j.work_types from job_applications j where j.worker_id = w.id and j.status = 'confirmed'
+                               order by j.confirmed_at desc limit 1) app on true
+           left join worker_addresses a on a.worker_id = w.id and a.is_current and a.removed_at is null and a.replaced_at is null
+          where w.status <> 'inactive' or last.to_stage = 'not_proceeding'`, [STARTED_DAYS])).rows;
+      const ids = rows.map(r => r.id);
+      const [facts, rtw] = [await credentialFactsByWorker(db, ids), await rightToWorkByWorker(db, ids)];
+
+      // Distance: from one site (`near`), or from any of an office's sites (`office`).
+      const freeKm = await distanceFreeKm(db);
+      const km = f.km ?? (freeKm > 0 ? freeKm : 25);
+      if (f.km === null && (f.near || f.office)) f.km = km;
+      const siteRows = f.near || f.office ? (await db.query<{ id: string; office_id: string | null; country: string; postcode: string | null }>(
+        'select id, office_id, country, postcode from facilities where id = $1 or office_id = $2', [f.near, f.office])).rows : [];
+      const nearSite = siteRows.find(s => s.id === f.near) ?? null;
+      const officeSites = siteRows.filter(s => f.office && s.office_id === f.office);
+
+      const people: ListPerson[] = rows.map(r => {
+        const c = ctx.evaluate(r.roles, facts.get(r.id) ?? [], rtw.get(r.id) ?? null);
+        const home = { country: r.country, postcode: r.postcode };
+        const workTypes = [...new Set([...(r.appWorkTypes ?? []), ...(r.employmentType ? [r.employmentType] : [])])];
+        const p: ListPerson = {
+          id: r.id, firstName: r.firstName, lastName: r.lastName, preferredName: r.preferredName, email: r.email, phone: r.phone, roles: r.roles,
+          stage: r.stage as ListStage, source: r.source, workTypes, suburb: r.suburb, region: r.region, postcode: r.postcode,
+          appliedAt: r.appliedAt ? new Date(r.appliedAt).toISOString() : null,
+          movedAt: r.movedAt ? new Date(r.movedAt).toISOString() : null,
+          days: daysSince(r.movedAt),
+          docs: docProgress(r.roles, ctx.rules, c.issues),
+          onboardingId: r.onboardingId,
+        };
+        if (nearSite) p.distanceKm = r.postcode ? postcodeDistance(home, nearSite) : null;
+        if (f.office) p.inOffice = !!r.postcode && officeSites.some(s => { const d = postcodeDistance(home, s); return d !== null && d <= km; });
+        return p;
+      });
+      const page = listPage(people, f);
+
+      // Onboarding checklist progress, for the onboarding people shown (as on their page).
+      const progress = new Map<string, { done: number; total: number; ready: boolean }>();
+      for (const p of page.rows.filter(r => r.stage === 'onboarding' && r.onboardingId).slice(0, 200)) {
+        const sm = (await onboardingProgress(db, t.tenantId, p.onboardingId!)).summary as { done: number; total: number; ready: boolean };
+        progress.set(p.id, { done: sm.done, total: sm.total, ready: sm.ready });
+      }
+      const offices = (await db.query<{ id: string; name: string }>('select id, name from offices where active order by name')).rows;
+      return {
+        ...page,
+        rows: page.rows.map(r => ({ ...r, progress: progress.get(r.id) ?? null })),
+        filter: f, km, offices, today: ctx.today,
+      };
     });
   }
 
