@@ -101,6 +101,8 @@ export const SHIFT_COLS = `s.id, s.facility_id as "facilityId", f.name as "facil
   (select coalesce(uw.preferred_name, uw.first_name) || ' ' || uw.last_name from workers uw where uw.id = s.usual_worker_id) as "usualName",
   ${USUAL_AWAY} as "usualAway",
 f.client_id as "clientId",
+  s.project_stage_id as "projectStageId", (select ps.name from project_stages ps where ps.id = s.project_stage_id) as "projectStageName",
+  s.project_supervisor as "projectSupervisor",
   coalesce((select cc.confirms_bookings from client_orders co join clients cc on cc.id = co.client_id where co.id = s.client_order_id), false) as "clientConfirms",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_at end as "clientConfirmedAt",
   case when s.client_confirmed_worker_id = sa.worker_id then s.client_confirmed_by end as "clientConfirmedBy"`;

@@ -9,10 +9,10 @@ import {
 import { UNCHECKED } from '../../../lib/outside-agency';
 import { confirm } from './actions';
 import { AutoSelect, BULK_FORM, ListTools } from './list-tools';
-import { requestsFor, shiftMarkers, tLines, type DayRequest, type MarkerShift } from './view';
+import { projectStageLine, requestsFor, shiftMarkers, tLines, type DayRequest, type MarkerShift, type ProjectStageShift } from './view';
 
 /** A roster shift as the list needs it (`GET /roster` rows). */
-export type ListRowShift = ListShift & MarkerShift & { breakMinutes?: number; agencyUnchecked?: boolean; clientId?: string | null; equipment?: { name: string; vehicle?: boolean }[] };
+export type ListRowShift = ListShift & MarkerShift & ProjectStageShift & { breakMinutes?: number; agencyUnchecked?: boolean; clientId?: string | null; equipment?: { name: string; vehicle?: boolean }[] };
 
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
@@ -193,6 +193,7 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
         <span role="cell" className="lst-mk">{letterCol(s)}</span>
         <span role="cell" className="cut small">
           {t.map(l => <span key={l.tone} className={`tline tl-${l.tone}`} title={l.title}>{l.text}</span>)}
+          {projectStageLine(s) && <span className="tline pstage">{projectStageLine(s)}</span>}
         </span>
         <span role="cell" className="lst-warn">
           {warn.map(w => <span key={w.key} className={`lst-w${w.bad ? ' bad' : ''}`} title={w.title}>{w.text}</span>)}

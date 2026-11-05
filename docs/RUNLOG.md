@@ -843,3 +843,9 @@ Newest first. One entry per working session or scheduled run.
 - Rostering makes Draft shifts only (nobody told until publishing), puts each named person on where they can work it, leaves gaps and refusals open with the reason, never doubles up on a second press, and leaves past days alone. The supervisor gets one shift a day across every stage's working days.
 - Checked: API tests (working days, overlaps, moving later stages, places and the never-double rule, the supervisor's days, the whole flow including eligibility, Draft, the log, ranking, equipment clashes, supervisors read-only, another business and a site-limited allocator see nothing, audit) and web tests for the timeline and wording helpers; every test passes; typecheck and build clean. Not checked in a browser (no local sign-in).
 - Next: show the stage on roster cards; move a stage's shifts with it when its dates change.
+
+## 2026-11-05 evening, 3:10pm Melbourne (scheduled run): the project stage on the roster
+- Shipped: the first "still to do" of project stages. Shifts that a project stage's "Roster" made now say so on the roster: cards (Cards and Detailed looks) and the List layout show "Stage: Demolition", or "Project supervisor" for the supervisor's daily shift, and the hover title says it too. The shift panel shows it under the site and links to the project's Stages tab. The List layout's search finds shifts by stage name.
+- Checked: API test (roster rows carry the stage and the supervisor flag, also for a supervisor's sign-in) and web tests for the wording, link and search; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this run).
+- Next: move a stage's shifts with it when its dates change (draft weeks only, with care for published ones), then a stage's items and stage templates.
+- Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).

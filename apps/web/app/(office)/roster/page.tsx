@@ -24,7 +24,7 @@ import { ListView } from './list-view';
 import { NEW_PROJECT, siteChoices } from '../../../lib/projects';
 import { NewProjectForm } from '../projects/new-project-form';
 import {
-  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
+  LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, projectStageLine, projectStagesHref, type ProjectStageShift, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
   addDaysIso, parseStripFilter, shiftMarkers, teamDuring, type TeamEntry,
 } from './view';
 
@@ -58,7 +58,7 @@ type Shift = {
   agencyUnchecked?: boolean;
   /** On an order whose client confirms each booking, and when they confirmed this person (migration 0069). */
   clientConfirms?: boolean; clientConfirmedAt?: string | null; clientConfirmedBy?: string | null;
-};
+} & ProjectStageShift;
 /** A duty a shift can carry, with what it needs (Settings → Shift duties, migration 0029). */
 type Duty = { id: string; name: string; active: boolean; requirements: { typeName: string; severity: 'hard' | 'warning' | 'optional' }[] };
 type Person = { id: string; name: string; roles: string[]; employmentType: string | null; contractedHours: number | null; rosteredHours: number };
@@ -380,7 +380,7 @@ export default async function RosterPage({ searchParams }: {
     'data-takes-equipment': s.status !== 'cancelled' ? '1' : '0',
     // For dropping an item: who it goes to (the person on the shift), as the panel's "Give to" does.
     'data-worker': s.workerId ?? '', 'data-worker-name': s.workerName ?? '', 'data-equipment-only': s.equipmentOnly ? '1' : '0',
-    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${tLines(s).map(l => ` · T ${l.text}`).join('')}`,
+    title: s.pulledOutName ? `${s.pulledOutName} pulled out` : `${s.localStart}–${s.localEnd} ${s.role}${s.workerName ? ` · ${s.workerName}${s.agencyName ? ` (${s.agencyName}${s.agencyUnchecked ? `, ${UNCHECKED}` : ''})` : ''}` : ''}${tLines(s).map(l => ` · T ${l.text}`).join('')}${projectStageLine(s) ? ` · ${projectStageLine(s)}` : ''}`,
   });
   // Marker letters (David, 30 Oct): F/M, V, E, I, D so the rosterer sees a shift is more than labour.
   // The letter column down the left of every card (David, 31 Oct): the shift's letter, then colour-coded markers
@@ -409,6 +409,7 @@ export default async function RosterPage({ searchParams }: {
       {tLines(s).map(l => <span key={l.tone} className={`cv tl-${l.tone}`} title={l.title}>{l.text}</span>)}
       {!!s.equipment?.length && <span className="eq">+ {s.equipment.map(e => e.name).join(', ')}</span>}
       {!!s.duties?.length && <span className="dt">{s.duties.map(d => d.name).join(' · ')}</span>}
+      {projectStageLine(s) && <span className="pstage">{projectStageLine(s)}</span>}
       {cardLook === 'detailed' && detailLines(s, kind, view).map((l, i) => <span key={i} className="dl">{l}</span>)}
       {cardLook === 'detailed' && s.status !== 'cancelled' && requestsFor(s, roster.dayRequests ?? []).map(r => (
         <span key={r.id} className={`dl rq${r.breaks ? ' off' : ''}`} title="Asked for in the app">{letters.request} {r.line}</span>
@@ -1151,6 +1152,7 @@ export default async function RosterPage({ searchParams }: {
             <p style={{ margin: '4px 0 8px' }}>
               <strong>{longDate(selected.localDate)} · {selected.localStart}–{selected.localEnd}</strong><br />
               <span className="muted">{selected.facilityName}{selected.areaName ? ` · ${selected.areaName}` : ''} · {fmtHours(selected.hours)} h</span>
+              {projectStageLine(selected) && <><br /><Link href={projectStagesHref(selected.facilityId)} className="small">{projectStageLine(selected)}</Link></>}
             </p>
             {panelError && <div className="notice error">{panelError}</div>}
             {selected.status === 'cancelled' ? (

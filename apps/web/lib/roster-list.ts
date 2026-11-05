@@ -56,6 +56,8 @@ export type ListShift = {
   status: 'open' | 'assigned' | 'booked' | 'cancelled'; localDate: string; localStart: string; localEnd: string; hours: number;
   workerId: string | null; workerName: string | null; equipmentOnly?: boolean; offersPending?: number; pulledOutName?: string | null;
   agencyName?: string | null; usualName?: string | null; coveringName?: string | null;
+  /** The project stage a stage's "Roster" made it for (searchable by its name). */
+  projectStageName?: string | null;
 };
 
 /** The stage colour of a shift, exactly as its card (`stage()` on the roster page uses this). */
@@ -79,11 +81,11 @@ const stageMatches = (s: ListShift, f: StageFilter) => {
   return c === f;
 };
 
-/** Every word of the search must appear in the person, role, area, site, shift type, usual person or covering name. */
+/** Every word of the search must appear in the person, role, area, site, shift type, usual person, covering name or project stage. */
 export function matchesSearch(s: ListShift, q: string): boolean {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const hay = [s.workerName, s.role, s.areaName, s.facilityName, s.shiftCode, s.usualName, s.coveringName, s.agencyName].filter(Boolean).join(' ').toLowerCase();
+  const hay = [s.workerName, s.role, s.areaName, s.facilityName, s.shiftCode, s.usualName, s.coveringName, s.agencyName, s.projectStageName].filter(Boolean).join(' ').toLowerCase();
   return words.every(w => hay.includes(w));
 }
 

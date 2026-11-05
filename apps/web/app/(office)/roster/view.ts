@@ -252,6 +252,22 @@ export function detailLines(s: CardShift, kind: string, view: 'area' | 'person')
   return out;
 }
 
+/** What a project's stage rostering made a shift for (migration 0093): its stage, or the project's supervisor. */
+export type ProjectStageShift = { projectStageId?: string | null; projectStageName?: string | null; projectSupervisor?: boolean };
+
+/**
+ * The card's and panel's stage line (5 Nov): "Stage: Demolition" for a shift a stage's "Roster" made,
+ * "Project supervisor" for the supervisor's daily shift, null otherwise (or when the stage has been removed).
+ */
+export function projectStageLine(s: ProjectStageShift): string | null {
+  if (s.projectSupervisor) return 'Project supervisor';
+  const name = s.projectStageName?.trim();
+  return s.projectStageId && name ? `Stage: ${name}` : null;
+}
+
+/** Where the stage line links: the project's Stages tab. */
+export const projectStagesHref = (facilityId: string) => `/projects/${facilityId}?tab=stages`;
+
 /** The one line on a Simple card: who is on it, else the role (or the equipment-only label). */
 export function simpleLine(s: CardShift & { equipment?: unknown[] }, kind: string): string {
   // Area rows (29 Oct): who is on it, or Unfilled, then the role.

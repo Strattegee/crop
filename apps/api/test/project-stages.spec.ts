@@ -241,6 +241,12 @@ describe('project stages: API (migration 0093)', () => {
     const cands = (await http().get(`/shifts/${open}/candidates`).set(as('alloc')).expect(200)).body.candidates as { workerId: string; team: { teamRole: string } | null }[];
     expect(cands.find(c => c.workerId === ids.eve)?.team).toBeNull();
 
+    // Roster rows say which stage made them (the card's stage line), and which is the supervisor's.
+    const stageName = (await owner.query<{ name: string }>('select name from project_stages where id = $1', [ids.a])).rows[0].name;
+    expect((await http().get(`/shifts/${open}`).set(as('alloc')).expect(200)).body).toMatchObject({ projectStageId: ids.a, projectStageName: stageName, projectSupervisor: false });
+    const supShift = (await owner.query<{ id: string }>(`select id from shifts where facility_id = $1 and project_supervisor limit 1`, [ids.p])).rows[0].id;
+    expect((await http().get(`/shifts/${supShift}`).set(as('sup')).expect(200)).body).toMatchObject({ projectSupervisor: true });
+
     // The whole project: the other stages, and the supervisor once a day even where stages overlap.
     r = (await http().post(`/projects/${ids.p}/roster`).set(as('admin')).expect(201)).body;
     // Build: 3 days of Cy; Clean: 2 days of Dee (no right to work, left open); supervisor Mon–Thu of week 2.
