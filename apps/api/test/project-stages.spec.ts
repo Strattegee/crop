@@ -9,8 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import {
-  addDays, GAP_REASON, moveLaterStages, moveSummary, parseWeekdays, shiftsOutside, type PlacedShift, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
-  supervisorDays, supervisorRole, toCreate, weekdaysLine, workingDays,
+  addDays, GAP_REASON, moveLaterStages, moveSummary, noRetime, parseWeekdays, shiftsOutside, type PlacedShift, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
+  shiftsToRetime, supervisorDays, supervisorRole, toCreate, type TimedShift, weekdaysLine, workingDays,
 } from '../src/projects/stages.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
@@ -127,10 +127,43 @@ describe('project stages: shifts follow their stage (rules)', () => {
   });
   it('sums it up in the business’s words', () => {
     const w = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1090, singular: 'Labour hire firm', plural: 'Labour hire firms' }]);
-    expect(moveSummary({ cancelled: 2, kept: { started: 0, agency: 1, published: 1 }, roster: null }, w))
+    expect(moveSummary({ cancelled: 2, kept: { started: 0, agency: 1, published: 1 }, roster: null, ...noRetime() }, w))
       .toBe('Took 2 jobs off the Draft roster (no longer on the stage’s working days). Left where they are: 1 in published weeks (change it on the roster, so people are told); 1 with a labour hire firm’s person on it.');
-    expect(moveSummary({ cancelled: 0, kept: { started: 0, agency: 0, published: 0 }, roster: null }, w)).toBe('Every job is already on the stage’s dates.');
-    expect(moveSummary({ cancelled: 1, kept: { started: 0, agency: 0, published: 0 }, roster: null }, w, true)).toBe('Took 1 job off the Draft roster.');
+    expect(moveSummary({ cancelled: 0, kept: { started: 0, agency: 0, published: 0 }, roster: null, ...noRetime() }, w)).toBe('Every job is already on the stage’s dates and hours.');
+    expect(moveSummary({ cancelled: 1, kept: { started: 0, agency: 0, published: 0 }, roster: null, ...noRetime() }, w, true)).toBe('Took 1 job off the Draft roster.');
+  });
+});
+
+describe('project stages: shifts follow their stage\'s hours (rules)', () => {
+  const sh = (id: string, date: string, more: Partial<TimedShift> = {}): TimedShift => ({
+    id, stageId: 'a', supervisor: false, date, started: false, published: false, agency: false,
+    role: 'Carpenter', startTime: '07:00', endTime: '15:30', breakMinutes: 30, shiftCodeId: null, ...more,
+  });
+  const days = new Map([['a', new Set(['2026-11-10', '2026-11-11'])]]);
+  const want = new Map([['a', { startTime: '06:00', endTime: '14:30', breakMinutes: 30, shiftCodeId: null }]]);
+  it('changes Draft, not started shifts on the stage\'s days to its hours', () => {
+    const r = shiftsToRetime([
+      sh('x', '2026-11-10'), sh('same', '2026-11-11', { startTime: '06:00', endTime: '14:30' }), sh('off', '2026-11-12'),
+      sh('pub', '2026-11-11', { published: true }), sh('ag', '2026-11-11', { agency: true }), sh('old', '2026-11-10', { started: true }),
+      sh('b', '2026-11-10', { stageId: 'b' }),
+      sh('sup', '2026-11-10', { stageId: null, supervisor: true, shiftCodeId: 'code' }), sh('supNo', '2026-11-12', { stageId: null, supervisor: true }),
+    ], want, days, new Map([['2026-11-10', { startTime: '06:00', endTime: '14:30', breakMinutes: 30 }]]));
+    expect(r.retime.map(x => x.id)).toEqual(['x', 'sup']);
+    expect(r.retime[0]).toMatchObject({ date: '2026-11-10', role: 'Carpenter', hours: { startTime: '06:00' }, supervisor: false });
+    expect(r.kept).toEqual({ started: 1, agency: 1, published: 1 });
+    // A changed break or shift type counts too; the supervisor's are left out when asked.
+    expect(shiftsToRetime([sh('br', '2026-11-10', { startTime: '06:00', endTime: '14:30', breakMinutes: 0 })], want, days, new Map()).retime.length).toBe(1);
+    expect(shiftsToRetime([sh('code', '2026-11-10', { startTime: '06:00', endTime: '14:30', shiftCodeId: 'old' })], want, days, new Map()).retime.length).toBe(1);
+    expect(shiftsToRetime([sh('sup', '2026-11-10', { stageId: null, supervisor: true })], want, days,
+      new Map([['2026-11-10', { startTime: '06:00', endTime: '14:30', breakMinutes: 30 }]]), false).retime).toEqual([]);
+  });
+  it('sums it up in the business’s words', () => {
+    const w = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }]);
+    const p = { date: '2026-11-10', startTime: '06:00', role: 'Carpenter', workerName: 'Ana Example', reason: 'Already rostered' };
+    const none = { started: 0, agency: 0, published: 0 };
+    expect(moveSummary({ cancelled: 0, kept: none, roster: null, retimed: 3, retimeKept: { started: 2, agency: 0, published: 1 }, takenOff: [p], equipmentKept: [p] }, w))
+      .toBe('Changed 3 jobs to the stage’s hours. 1 person couldn’t work the new hours, so that job is open again. 1 job kept the old hours because the equipment on it can’t be used at the new ones. Left at the old hours: 1 in published weeks (change it on the roster, so people are told); 2 already started.');
+    expect(moveSummary({ cancelled: 0, kept: none, roster: null, ...noRetime() }, w)).toBe('Every job is already on the stage’s dates and hours.');
   });
 });
 
@@ -281,7 +314,7 @@ describe('project stages: API (migration 0093)', () => {
     expect(supDays).toBe(8);
     const v = (await http().get(`/projects/${ids.p}/stages`).set(as('sup')).expect(200)).body;
     expect(v.supervisor).toMatchObject({ name: 'Sam Example', role: 'Site Supervisor', workingDays: 8, daysRostered: 8 });
-    expect((v.stages as Stage[]).find(s => s.id === ids.a)!.rostered).toEqual({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0 });
+    expect((v.stages as Stage[]).find(s => s.id === ids.a)!.rostered).toEqual({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0, offHours: 0, offHoursMovable: 0 });
     const ana = (await owner.query<{ id: string }>(`select id from shifts where project_stage_id = $1 and usual_worker_id = $2 limit 1`, [ids.a, ids.ana])).rows[0].id;
     const c2 = (await http().get(`/shifts/${ana}/candidates`).set(as('alloc')).expect(200)).body.candidates as { workerId: string; team: { teamRole: string } | null }[];
     expect(c2.find(c => c.workerId === ids.ben)?.team).toMatchObject({ teamRole: 'worker', areaName: 'Hut' });
@@ -337,6 +370,43 @@ describe('project stages: API (migration 0093)', () => {
     const off = (await http().post(`/project-stages/${v.id}/remove`).set(as('alloc')).send({ cancelShifts: true }).expect(201)).body;
     expect(off.shifts).toMatchObject({ cancelled: 4, roster: null });
     expect(off.shiftsSummary).toBe('Took 4 shifts off the Draft roster.');
+  });
+
+  it('gives a stage\'s shifts its new hours, taking off anyone who can\'t work them', async () => {
+    const stage = (v: { stages: (Stage & { rostered: { offHours: number; offHoursMovable: number } })[] }, id: string) => v.stages.find(s => s.id === id)!;
+    // Ana already works early at Head Office on the Wednesday: the new 06:00 start would double book her there.
+    const early = (await http().post('/shifts').set(as('alloc'))
+      .send({ facilityId: ids.site, role: 'Carpenter', startDate: W(2), endDate: W(2), startTime: '05:00', endTime: '06:30' }).expect(201)).body.ids[0];
+    await http().post(`/shifts/${early}/assign`).set(as('alloc')).send({ workerId: ids.ana }).expect(200);
+    const logged = async () => (await owner.query(`select 1 from shift_changes where facility_id = $1 and kind = 'times_changed'`, [ids.p])).rowCount;
+    const before = await logged();
+    let v = (await http().patch(`/project-stages/${ids.a}`).set(as('alloc')).send({ startTime: '06:00', endTime: '14:30', moveShifts: true }).expect(200)).body;
+    // 12 of the stage's shifts and the supervisor's 4 days that only this stage works.
+    expect(v.shifts).toMatchObject({ cancelled: 0, retimed: 16, roster: { created: 0, supervisorCreated: 0 } });
+    expect(v.shifts.takenOff).toHaveLength(1);
+    expect(v.shifts.takenOff[0]).toMatchObject({ date: W(2), workerName: 'Ana Example', role: 'Carpenter' });
+    expect(v.shiftsSummary).toMatch(/Changed 16 shifts to the stage’s hours\. 1 person couldn’t work the new hours, so that shift is open again\./);
+    expect(stage(v, ids.a).rostered).toMatchObject({ offHours: 0, offHoursMovable: 0 });
+    const times = (await owner.query<{ t: string; status: string; usual: string | null }>(
+      `select to_char(s.starts_at at time zone f.timezone, 'HH24:MI') || '-' || to_char(s.ends_at at time zone f.timezone, 'HH24:MI') as t, s.status, s.usual_worker_id as usual
+         from shifts s join facilities f on f.id = s.facility_id where s.project_stage_id = $1 and s.status <> 'cancelled'`, [ids.a])).rows;
+    expect(new Set(times.map(x => x.t))).toEqual(new Set(['06:00-14:30']));
+    const anaWed = (await owner.query<{ status: string }>(
+      `select s.status from shifts s join facilities f on f.id = s.facility_id where s.project_stage_id = $1 and s.usual_worker_id = $2
+          and (s.starts_at at time zone f.timezone)::date = $3::date`, [ids.a, ids.ana, W(2)])).rows[0];
+    expect(anaWed.status).toBe('open');
+    const sup = (await owner.query<{ t: string }>(
+      `select to_char(s.starts_at at time zone f.timezone, 'HH24:MI') as t from shifts s join facilities f on f.id = s.facility_id
+        where s.facility_id = $1 and s.project_supervisor and s.status <> 'cancelled' and (s.starts_at at time zone f.timezone)::date = $2::date`, [ids.p, W(1)])).rows[0];
+    expect(sup.t).toBe('06:00');
+    expect((await logged())! - before!).toBe(16);
+
+    // Without "move", the shifts stay at the old hours and the stage says so; the button brings them in line.
+    v = (await http().patch(`/project-stages/${ids.a}`).set(as('alloc')).send({ startTime: '07:00', endTime: '15:30' }).expect(200)).body;
+    expect(stage(v, ids.a).rostered).toMatchObject({ offHours: 12, offHoursMovable: 12 });
+    const r = (await http().post(`/project-stages/${ids.a}/move-shifts`).set(as('alloc')).expect(201)).body;
+    expect(r).toMatchObject({ cancelled: 0, retimed: 16, takenOff: [] });
+    expect(r.summary).toBe('Changed 16 shifts to the stage’s hours.');
   });
 
   it('keeps supervisors to reading, and other businesses out', async () => {

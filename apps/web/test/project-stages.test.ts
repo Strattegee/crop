@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  dayLabel, hoursLine, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
+  dayLabel, hoursLine, hoursNote, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
 } from '../lib/project-stages';
 
 describe('project stages (David, 5 Nov)', () => {
@@ -17,8 +17,8 @@ describe('project stages (David, 5 Nov)', () => {
     expect(namedWords({ needed: 4, people: [p(), p(), p(false)] })).toBe('2 of 4 named');
     expect(namedWords({ needed: 0, people: [p()] })).toBe('1 named');
     expect(namedWords({ needed: 3, people: [] })).toBe('No one named yet');
-    expect(rosteredLine({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0 }, 'shifts')).toBe('12 shifts made over 4 days · 4 open');
-    expect(rosteredLine({ shifts: 0, open: 0, days: 0, outside: 0, outsideMovable: 0 }, 'shifts')).toBeNull();
+    expect(rosteredLine({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0, offHours: 0, offHoursMovable: 0 }, 'shifts')).toBe('12 shifts made over 4 days · 4 open');
+    expect(rosteredLine({ shifts: 0, open: 0, days: 0, outside: 0, outsideMovable: 0, offHours: 0, offHoursMovable: 0 }, 'shifts')).toBeNull();
   });
 
   it('lays stages out on lanes so overlaps show', () => {
@@ -73,5 +73,12 @@ describe('project stages (David, 5 Nov)', () => {
     const roster = { created: 1, assigned: 0, alreadyRostered: 0, pastDays: 0, supervisorCreated: 0, supervisorAssigned: 0,
       leftOpen: [{ date: '2026-11-13', startTime: '07:00', role: 'Carpenter', workerName: null, reason: 'Nobody named for this place' }] };
     expect(moveMessage({ cancelled: 1, kept, roster }, 'Done.')).toBe('Done. Left open: Fri 13 Nov 07:00 Carpenter: Nobody named for this place');
+    // New hours: the people taken off, with the reason.
+    const takenOff = [{ date: '2026-11-11', startTime: '06:00', role: 'Carpenter', workerName: 'Ana Example', reason: 'Already rostered 05:00–06:30' }];
+    expect(moveMessage({ cancelled: 0, kept, roster: null, retimed: 3, takenOff }, 'Changed 3 shifts.'))
+      .toBe('Changed 3 shifts. Taken off for the new hours: Wed 11 Nov 06:00 Carpenter (Ana Example): Already rostered 05:00–06:30');
+    expect(hoursNote({ offHours: 0, offHoursMovable: 0 })).toBeNull();
+    expect(hoursNote({ offHours: 4, offHoursMovable: 4 })).toEqual({ movable: 4, stay: 0, stayLine: null });
+    expect(hoursNote({ offHours: 4, offHoursMovable: 3 })?.stayLine).toBe("1 is in a published week or with an agency's person: change it on the roster.");
   });
 });
