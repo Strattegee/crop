@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import {
-  addDays, GAP_REASON, moveLaterStages, parseWeekdays, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
+  addDays, GAP_REASON, moveLaterStages, moveSummary, parseWeekdays, shiftsOutside, type PlacedShift, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
   supervisorDays, supervisorRole, toCreate, weekdaysLine, workingDays,
 } from '../src/projects/stages.js';
 import { makeWords } from '../src/terms/words.js';
@@ -107,6 +107,30 @@ describe('project stages: rules (David, 5 Nov)', () => {
     expect(rosterSummary(r)).toBe('Created 16 shifts: 12 with their person, 4 left open. 1 day already past left alone. They are in the Draft roster: nobody is told until you publish.');
     const w = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }]);
     expect(rosterSummary({ ...r, created: 0, assigned: 0, supervisorCreated: 0, supervisorAssigned: 0, alreadyRostered: 16, pastDays: 0 }, w)).toBe('No new jobs needed. 16 jobs already rostered.');
+  });
+});
+
+describe('project stages: shifts follow their stage (rules)', () => {
+  const sh = (id: string, date: string, more: Partial<PlacedShift> = {}): PlacedShift =>
+    ({ id, stageId: 'a', supervisor: false, date, started: false, published: false, agency: false, ...more });
+  it('takes off only Draft, not started shifts without an agency person', () => {
+    const days = new Map([['a', new Set(['2026-11-10', '2026-11-11'])]]);
+    const r = shiftsOutside([
+      sh('in', '2026-11-10'), sh('out', '2026-11-09'), sh('pub', '2026-11-09', { published: true }), sh('ag', '2026-11-09', { agency: true, published: true }),
+      sh('old', '2026-11-02', { started: true, agency: true }), sh('other', '2026-11-09', { stageId: 'b' }),
+      sh('supIn', '2026-11-10', { stageId: null, supervisor: true }), sh('supOut', '2026-11-12', { stageId: null, supervisor: true }),
+    ], days, new Set(['2026-11-10']));
+    expect(r.cancel).toEqual(['out', 'supOut']);
+    expect(r.kept).toEqual({ started: 1, agency: 1, published: 1 });
+    // A stage taken off has no days: every shift of it goes.
+    expect(shiftsOutside([sh('x', '2026-11-10')], new Map([['a', new Set()]]), new Set()).cancel).toEqual(['x']);
+  });
+  it('sums it up in the business’s words', () => {
+    const w = makeWords([{ code: 1040, singular: 'Job', plural: 'Jobs' }, { code: 1090, singular: 'Labour hire firm', plural: 'Labour hire firms' }]);
+    expect(moveSummary({ cancelled: 2, kept: { started: 0, agency: 1, published: 1 }, roster: null }, w))
+      .toBe('Took 2 jobs off the Draft roster (no longer on the stage’s working days). Left where they are: 1 in published weeks (change it on the roster, so people are told); 1 with a labour hire firm’s person on it.');
+    expect(moveSummary({ cancelled: 0, kept: { started: 0, agency: 0, published: 0 }, roster: null }, w)).toBe('Every job is already on the stage’s dates.');
+    expect(moveSummary({ cancelled: 1, kept: { started: 0, agency: 0, published: 0 }, roster: null }, w, true)).toBe('Took 1 job off the Draft roster.');
   });
 });
 
@@ -257,7 +281,7 @@ describe('project stages: API (migration 0093)', () => {
     expect(supDays).toBe(8);
     const v = (await http().get(`/projects/${ids.p}/stages`).set(as('sup')).expect(200)).body;
     expect(v.supervisor).toMatchObject({ name: 'Sam Example', role: 'Site Supervisor', workingDays: 8, daysRostered: 8 });
-    expect((v.stages as Stage[]).find(s => s.id === ids.a)!.rostered).toEqual({ shifts: 12, open: 4, days: 4, outside: 0 });
+    expect((v.stages as Stage[]).find(s => s.id === ids.a)!.rostered).toEqual({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0 });
     const ana = (await owner.query<{ id: string }>(`select id from shifts where project_stage_id = $1 and usual_worker_id = $2 limit 1`, [ids.a, ids.ana])).rows[0].id;
     const c2 = (await http().get(`/shifts/${ana}/candidates`).set(as('alloc')).expect(200)).body.candidates as { workerId: string; team: { teamRole: string } | null }[];
     expect(c2.find(c => c.workerId === ids.ben)?.team).toMatchObject({ teamRole: 'worker', areaName: 'Hut' });
@@ -281,6 +305,38 @@ describe('project stages: API (migration 0093)', () => {
     expect(alloc).toEqual({ s: W(8), e: W(10) });
     const clash = await http().post(`/project-stages/${ids.c}/equipment`).set(as('alloc')).send({ equipmentId: bin }).expect(409);
     expect(clash.body.message).toMatch(/Bin 1 is already allocated to Beach Hut/);
+  });
+
+  it('moves a stage\'s shifts to its new dates, Draft weeks only', async () => {
+    const stage = (v: { stages: Stage[] }, id: string) => v.stages.find(s => s.id === id)!;
+    // Demolition moves a day later: Monday's shifts (and the supervisor's) come off, Friday's are made. The supervisor's
+    // Monday of week 2 goes too: Build moved to the Tuesday in the last test, so no stage works that day now.
+    let v = (await http().patch(`/project-stages/${ids.a}`).set(as('alloc')).send({ startsOn: W(1), endsOn: W(4), moveShifts: true }).expect(200)).body;
+    expect(v.shifts).toMatchObject({ cancelled: 5, kept: { started: 0, agency: 0, published: 0 }, roster: { created: 3, supervisorCreated: 1 } });
+    expect(v.shiftsSummary).toMatch(/^Took 5 shifts off the Draft roster/);
+    expect(stage(v, ids.a).rostered).toMatchObject({ shifts: 12, outside: 0, outsideMovable: 0 });
+    const gone = (await owner.query<{ reason: string; kind: string }>(
+      `select distinct cancelled_reason as reason, cancel_kind as kind from shifts where facility_id = $1 and status = 'cancelled'`, [ids.p])).rows;
+    expect(gone).toEqual([{ reason: 'Stage dates changed', kind: 'other' }]);
+    expect((await owner.query(`select 1 from shift_changes where facility_id = $1 and kind = 'cancelled' and actor_name = 'alloc@x.com'`, [ids.p])).rowCount).toBe(5);
+
+    // A published week is left for the office to change on the roster, so people are told.
+    expect(stage(v, ids.b).rostered).toMatchObject({ outside: 1, outsideMovable: 1 });
+    await http().post('/roster/publish').set(as('admin')).send({ facilityId: ids.p, weekStart: W(7), notify: false }).expect(201);
+    v = (await http().get(`/projects/${ids.p}/stages`).set(as('alloc')).expect(200)).body;
+    expect(stage(v, ids.b).rostered).toMatchObject({ outside: 1, outsideMovable: 0 });
+    const r = (await http().post(`/project-stages/${ids.b}/move-shifts`).set(as('alloc')).expect(201)).body;
+    expect(r).toMatchObject({ cancelled: 0, kept: { published: 1 }, roster: { created: 1 } });
+    expect(r.summary).toMatch(/Left where they are: 1 in published weeks \(change it on the roster/);
+    await http().post(`/project-stages/${ids.b}/move-shifts`).set(as('sup')).expect(403);
+
+    // Taking a stage off can take its Draft shifts with it (and the supervisor's on days nobody else works).
+    v = (await http().post(`/projects/${ids.p}/stages`).set(as('alloc')).send({ name: 'Touch up', startsOn: W(14), endsOn: W(15), startTime: '07:00', endTime: '15:00' }).expect(201)).body;
+    await http().post(`/project-stages/${v.id}/people`).set(as('alloc')).send({ workerId: ids.eve, role: 'Carpenter' }).expect(201);
+    expect((await http().post(`/project-stages/${v.id}/roster`).set(as('alloc')).expect(201)).body).toMatchObject({ created: 2, supervisorCreated: 2 });
+    const off = (await http().post(`/project-stages/${v.id}/remove`).set(as('alloc')).send({ cancelShifts: true }).expect(201)).body;
+    expect(off.shifts).toMatchObject({ cancelled: 4, roster: null });
+    expect(off.shiftsSummary).toBe('Took 4 shifts off the Draft roster.');
   });
 
   it('keeps supervisors to reading, and other businesses out', async () => {

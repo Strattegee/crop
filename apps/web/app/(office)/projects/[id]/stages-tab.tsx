@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import type { industryGroups } from '../../../../lib/industry-groups';
 import {
-  DAY_SHORT, DEFAULT_WEEKDAYS, hoursLine, namedWords, rosteredLine, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
+  DAY_SHORT, DEFAULT_WEEKDAYS, hoursLine, namedWords, outsideNote, rosteredLine, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
   type Stage, type StagesView,
 } from '../../../../lib/project-stages';
 import { T, type Words } from '../../../../lib/terms';
 import { MakeUpLines, type RoleRow } from '../../teams/make-up-lines';
 import {
-  addStage, addStagePerson, bookStageEquipment, removeStage, removeStageEquipment, removeStagePerson, rosterProject, rosterStage,
+  addStage, addStagePerson, bookStageEquipment, moveStageShifts, removeStage, removeStageEquipment, removeStagePerson, rosterProject, rosterStage,
   setProjectSupervisor, setStageRoles, setStageTeam, updateStage,
 } from '../actions';
 
@@ -85,6 +85,7 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
 }) {
   const shifts = tw.lower(T.shift, true);
   const done = rosteredLine(s.rostered, shifts);
+  const outside = outsideNote(s.rostered);
   const groups = stagePicker(s, people);
   const booked = new Set(s.equipment.map(e => e.equipmentId));
   return (
@@ -153,7 +154,19 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
         {v.supervisor && ` · plus ${v.supervisor.name} as supervisor`}
         {done && <span className="muted"> · {done}</span>}
       </p>
-      {s.rostered.outside > 0 && <p className="small" style={{ margin: '0 0 6px' }}><span className="badge warn">{tw.count(s.rostered.outside, T.shift)} outside the stage&apos;s dates now</span> <span className="muted">Move or cancel them on the roster.</span></p>}
+      {outside && (
+        <div className="small" style={{ margin: '0 0 6px' }}>
+          <span className="badge warn">{tw.count(s.rostered.outside, T.shift)} outside the stage&apos;s dates now</span>
+          {canEdit && outside.movable > 0 && (
+            <form action={moveStageShifts.bind(null, id, s.id)} style={{ display: 'inline', marginLeft: 6 }}>
+              <button className="btn small" type="submit">Move {outside.movable === 1 ? 'it' : outside.stay ? `${outside.movable} of them` : 'them'} to the stage&apos;s dates</button>
+            </form>
+          )}
+          {canEdit && outside.movable > 0 && <span className="muted"> Takes {outside.movable === 1 ? 'it' : 'them'} off the Draft roster and adds what&apos;s missing on the stage&apos;s days.</span>}
+          {outside.stayLine && <span className="muted"> {outside.stayLine}</span>}
+          {!canEdit && !outside.stayLine && <span className="muted"> The office can move {outside.movable === 1 ? 'it' : 'them'}.</span>}
+        </div>
+      )}
       {canEdit && s.state !== 'ended' && (s.placesPerDay > 0 || v.supervisor) && (
         <form action={rosterStage.bind(null, id, s.id)}>
           <button className="btn small" type="submit">Roster this stage</button>
@@ -190,10 +203,12 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
           <form action={updateStage.bind(null, id, s.id)} className="form-row">
             <StageFields s={s} areas={areas} codes={codes} tw={tw} />
             <label className="inline" style={{ flexBasis: '100%' }}><input type="checkbox" name="moveLater" /> Move later stages too (by as many days as the last day moves)</label>
+            {s.rostered.shifts > 0 && <label className="inline" style={{ flexBasis: '100%' }}><input type="checkbox" name="moveShifts" defaultChecked /> Move {tw.lower(T.shift, true)} already made to the new dates (Draft weeks only; published weeks stay for you to change on the roster)</label>}
             <button className="btn small" type="submit">Save</button>
           </form>
           <form action={removeStage.bind(null, id, s.id)} style={{ marginTop: 8 }}>
-            <button className="btn small secondary" type="submit" title={`Kept on file; ${tw.lower(T.shift, true)} already made stay`}>Take this stage off</button>
+            {s.rostered.shifts > 0 && <label className="inline small"><input type="checkbox" name="cancelShifts" defaultChecked /> Also take its {tw.lower(T.shift, true)} off the Draft roster </label>}
+            <button className="btn small secondary" type="submit" title="Kept on file">Take this stage off</button>
           </form>
         </details>
       )}

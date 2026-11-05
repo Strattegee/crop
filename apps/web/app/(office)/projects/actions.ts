@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { api, ApiError } from '../../../lib/api';
 import { attempt, failTo as fail, str } from '../../../lib/actions';
 import { newProjectDone, newProjectFrom, newProjectRetry, parseAreaList } from '../../../lib/projects';
-import { rosterMessage, weekdaysFromForm, type RosterResult } from '../../../lib/project-stages';
+import { moveMessage, rosterMessage, weekdaysFromForm, type MoveResult, type RosterResult } from '../../../lib/project-stages';
 import { makeUpFromForm, splitPick } from '../../../lib/teams';
 import { T, words } from '../../../lib/terms';
 
@@ -139,17 +139,34 @@ export async function addStage(id: string, f: FormData) {
   }, 'Stage added.');
 }
 
+type WithShifts = { shifts: MoveResult | null; shiftsSummary: string | null };
+
 export async function updateStage(id: string, stageId: string, f: FormData) {
-  let moved = 0;
+  let r: ({ moved: unknown[] } & WithShifts) | undefined;
   await attempt(stagesTab(id), async () => {
-    moved = (await api<{ moved: unknown[] }>(`/project-stages/${stageId}`, { method: 'PATCH', body: { ...stageBody(f), moveLater: f.get('moveLater') === 'on' } })).moved.length;
-  }, () => (moved ? `Stage saved. ${moved === 1 ? '1 later stage' : `${moved} later stages`} moved too.` : 'Stage saved.'));
+    r = await api<{ moved: unknown[] } & WithShifts>(`/project-stages/${stageId}`, {
+      method: 'PATCH', body: { ...stageBody(f), moveLater: f.get('moveLater') === 'on', moveShifts: f.get('moveShifts') === 'on' },
+    });
+  }, () => {
+    const moved = r!.moved.length;
+    const said = moved ? `Stage saved. ${moved === 1 ? '1 later stage' : `${moved} later stages`} moved too.` : 'Stage saved.';
+    const shifts = moveMessage(r!.shifts, r!.shiftsSummary);
+    return shifts ? `${said} ${shifts}` : said;
+  });
 }
 
-export async function removeStage(id: string, stageId: string) {
+export async function removeStage(id: string, stageId: string, f: FormData) {
   const tw = await words();
-  await attempt(stagesTab(id), () => api(`/project-stages/${stageId}/remove`, { method: 'POST', body: {} }),
-    `Stage taken off. ${tw.many(T.shift)} already made for it stay on the roster.`);
+  const cancelShifts = f.get('cancelShifts') === 'on';
+  let r: WithShifts | undefined;
+  await attempt(stagesTab(id), async () => { r = await api<WithShifts>(`/project-stages/${stageId}/remove`, { method: 'POST', body: { cancelShifts } }); },
+    () => `Stage taken off. ${moveMessage(r!.shifts, r!.shiftsSummary) ?? `${tw.many(T.shift)} already made for it stay on the roster.`}`);
+}
+
+export async function moveStageShifts(id: string, stageId: string) {
+  let r: (MoveResult & { summary: string }) | undefined;
+  await attempt(stagesTab(id), async () => { r = await api<MoveResult & { summary: string }>(`/project-stages/${stageId}/move-shifts`, { method: 'POST', body: {} }); },
+    () => moveMessage(r!, r!.summary)!);
 }
 
 export async function setStageTeam(id: string, stageId: string, f: FormData) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  dayLabel, hoursLine, namedWords, rosteredLine, rosterMessage, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
+  dayLabel, hoursLine, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
 } from '../lib/project-stages';
 
 describe('project stages (David, 5 Nov)', () => {
@@ -17,8 +17,8 @@ describe('project stages (David, 5 Nov)', () => {
     expect(namedWords({ needed: 4, people: [p(), p(), p(false)] })).toBe('2 of 4 named');
     expect(namedWords({ needed: 0, people: [p()] })).toBe('1 named');
     expect(namedWords({ needed: 3, people: [] })).toBe('No one named yet');
-    expect(rosteredLine({ shifts: 12, open: 4, days: 4, outside: 0 }, 'shifts')).toBe('12 shifts made over 4 days · 4 open');
-    expect(rosteredLine({ shifts: 0, open: 0, days: 0, outside: 0 }, 'shifts')).toBeNull();
+    expect(rosteredLine({ shifts: 12, open: 4, days: 4, outside: 0, outsideMovable: 0 }, 'shifts')).toBe('12 shifts made over 4 days · 4 open');
+    expect(rosteredLine({ shifts: 0, open: 0, days: 0, outside: 0, outsideMovable: 0 }, 'shifts')).toBeNull();
   });
 
   it('lays stages out on lanes so overlaps show', () => {
@@ -61,5 +61,17 @@ describe('project stages (David, 5 Nov)', () => {
     );
     expect(groups.map(g => `${g.label}:${g.options.map(o => o.label).join(',')}`)).toEqual(['Plasterer (short 1):Zo', 'Painter (not in the make-up):Al,Zo']);
     expect(groups[0].options[0].value).toBe('zo|Plasterer');
+  });
+
+  it('says what moving a stage\'s shifts would do, and what it did', () => {
+    expect(outsideNote({ outside: 0, outsideMovable: 0 })).toBeNull();
+    expect(outsideNote({ outside: 3, outsideMovable: 3 })).toEqual({ movable: 3, stay: 0, stayLine: null });
+    expect(outsideNote({ outside: 3, outsideMovable: 2 })?.stayLine).toBe("1 is in a published week, started or with an agency's person: change it on the roster.");
+    const kept = { started: 0, agency: 0, published: 0 };
+    expect(moveMessage(null, null)).toBeNull();
+    expect(moveMessage({ cancelled: 1, kept, roster: null }, 'Took 1 shift off.')).toBe('Took 1 shift off.');
+    const roster = { created: 1, assigned: 0, alreadyRostered: 0, pastDays: 0, supervisorCreated: 0, supervisorAssigned: 0,
+      leftOpen: [{ date: '2026-11-13', startTime: '07:00', role: 'Carpenter', workerName: null, reason: 'Nobody named for this place' }] };
+    expect(moveMessage({ cancelled: 1, kept, roster }, 'Done.')).toBe('Done. Left open: Fri 13 Nov 07:00 Carpenter: Nobody named for this place');
   });
 });
