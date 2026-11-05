@@ -18,7 +18,8 @@ const GROUPS: { codes: number[]; label?: (w: Awaited<ReturnType<typeof words>>) 
   { codes: [1000] },
   { codes: [2000] },
   { codes: [3000, 3100, 3200, 3300, 3500], label: w => w.many(T.worker) },
-  { codes: [4000, 4100, 4200], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
+  // Projects sit under clients (David, 5 Nov): shown as a sub-item of Clients, before the sites list.
+  { codes: [4000, 4200, 4100], label: w => `${w.many(T.client)} & ${w.lower(T.site, true)}` },
   { codes: [5000, 5500], label: w => `${w.one(T.equipment)} & ${w.lower(T.item, true)}` },
   { codes: [6000] },
 ];
@@ -43,7 +44,8 @@ export default async function OfficeLayout({ children }: { children: ReactNode }
   const items: NavItem[] = GROUPS.map(g => {
     const links = g.codes.map(link).filter((l): l is NavLink => l !== null)
       // A business whose site word is its project word (the construction template) would see the same label twice.
-      .map((l, _, all) => (l.code === 4100 && all.some(x => x.code === 4200 && x.label === l.label) ? { ...l, label: 'All locations' } : l));
+      .map((l, _, all) => (l.code === 4100 && all.some(x => x.code === 4200 && x.label === l.label) ? { ...l, label: 'All locations' } : l))
+      .map((l, _, all) => (l.code === 4200 && all.some(x => x.code === 4000) ? { ...l, sub: true } : l));
     // A group left with one screen (a supervisor's) is named after that screen.
     return { label: g.label && links.length > 1 ? g.label(w) : links[0]?.label ?? '', links };
   }).filter(i => i.links.length);

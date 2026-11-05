@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-export type NavLink = { href: string; label: string; code: number };
+/** `sub`: shown indented under the link before it (Projects under Clients, 5 Nov). */
+export type NavLink = { href: string; label: string; code: number; sub?: boolean };
 /** A top-menu entry: a single link, or a group that opens a small menu (like People ▾). */
 export type NavItem = { label: string; links: NavLink[] };
 
@@ -48,7 +49,7 @@ export function TopNav({ items }: { items: NavItem[] }) {
             {isOpen && (
               <div className="topnav-menu" role="menu">
                 {item.links.map(l => (
-                  <Link key={l.href} href={l.href} role="menuitem" data-fn={l.code} aria-current={isOn(path, l.href) ? 'page' : undefined}>{l.label}</Link>
+                  <Link key={l.href} href={l.href} role="menuitem" data-fn={l.code} className={l.sub ? 'sub' : undefined} aria-current={isOn(path, l.href) ? 'page' : undefined}>{l.label}</Link>
                 ))}
               </div>
             )}

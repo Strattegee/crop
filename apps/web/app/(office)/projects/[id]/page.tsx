@@ -102,10 +102,14 @@ export default async function ProjectPage({ params, searchParams }: {
 
   return (
     <>
-      <p style={{ margin: '0 0 8px' }}><Link href="/projects">← {tw.many(T.project)}</Link></p>
+      <p style={{ margin: '0 0 8px' }}>
+        {p.clientId && p.clientName
+          ? <><Link href={`/clients/${p.clientId}`}>← {p.clientName}</Link> <span className="muted">·</span> <Link href="/projects">All {tw.lower(T.project, true)}</Link></>
+          : <Link href="/projects">← {tw.many(T.project)}</Link>}
+      </p>
       <h1 style={{ marginBottom: 4 }}>{p.name} {p.code && <span className="muted" style={{ fontWeight: 400 }}>· {p.code}</span>} {isProject && <Badge label={statusBadge(p.status)} />}</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        {[p.dates, p.clientName, p.managerName && `Manager: ${p.managerName}`, p.officeName && `${p.officeName} office`, placeLine(p) || null, `${zoneName(p.timezone)} time`].filter(Boolean).join(' · ')}
+        {[p.dates, p.clientName && `For ${p.clientName}`, p.managerName && `Manager: ${p.managerName}`, p.officeName && `${p.officeName} office`, placeLine(p) || null, `${zoneName(p.timezone)} time`].filter(Boolean).join(' · ')}
       </p>
       <Notices error={sp.error} done={sp.done} />
       <div className="proj-links">

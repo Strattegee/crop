@@ -126,20 +126,22 @@ export class ProjectsController {
    */
   @Roles(...SITE_ROLES)
   @Get()
-  list(@Tenant() t: Membership, @Query('status') statusQ?: string) {
+  list(@Tenant() t: Membership, @Query('status') statusQ?: string, @Query('clientId') clientQ?: string) {
+    const clientId = clientQ && UUID.test(clientQ) ? clientQ : null;
     const status = statusQ === 'all' ? 'all' : (PROJECT_STATUSES as readonly string[]).includes(statusQ ?? '') ? statusQ! : null;
     return withTenant(this.pool, t.tenantId, async db => {
       const rows = (await db.query<{
-        id: string; name: string; code: string | null; status: ProjectStatus; startsOn: string | null; endsOn: string | null; clientName: string | null;
+        id: string; name: string; code: string | null; status: ProjectStatus; startsOn: string | null; endsOn: string | null; clientId: string | null; clientName: string | null;
         managerName: string | null; officeName: string | null; timezone: string; teamSize: number; shiftsThisWeek: number; unfilledThisWeek: number;
         unfilledNext7: number; equipmentCount: number; areaCount: number;
       }>(
         `with p as (
            select f.*, (now() at time zone f.timezone)::date as today from facilities f
             where f.kind = 'project' and ($1::text = 'all' or ($1::text is null and f.status <> 'archived') or f.status = $1)
+              and ($2::uuid is null or f.client_id = $2)
          )
          select p.id, p.name, p.code, p.status, to_char(p.starts_on, 'YYYY-MM-DD') as "startsOn", to_char(p.ends_on, 'YYYY-MM-DD') as "endsOn",
-                c.name as "clientName", o.name as "officeName", p.timezone,
+                p.client_id as "clientId", c.name as "clientName", o.name as "officeName", p.timezone,
                 (select t.name from app_office_team() t where t.user_id = p.manager_user_id) as "managerName",
                 (select count(*)::int from site_members m where m.facility_id = p.id and m.removed_at is null
                    and m.starts_on <= p.today and (m.ends_on is null or m.ends_on >= p.today)) as "teamSize",
@@ -154,7 +156,7 @@ export class ProjectsController {
                 (select count(*)::int from areas a where a.facility_id = p.id and a.active) as "areaCount"
            from p left join clients c on c.id = p.client_id left join offices o on o.id = p.office_id
           order by case p.status when 'active' then 0 when 'on_hold' then 1 when 'planned' then 2 when 'completed' then 3 else 4 end,
-                   lower(p.name)`, [status])).rows;
+                   lower(p.name)`, [status, clientId])).rows;
       return rows.map(({ timezone, ...r }) => ({ ...r, statusLabel: STATUS_LABEL[r.status], dates: projectDates(r.startsOn, r.endsOn, todayIn(timezone).slice(0, 4)) }));
     });
   }
