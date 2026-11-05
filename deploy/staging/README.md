@@ -51,6 +51,9 @@ cd /srv/crop/app/deploy/staging
 docker compose --env-file /srv/crop/.env run --rm -T -e CROP_ENV=staging migrate node dist/demo/demo-day-cli.js --tenant cfy --confirm RESET
 ```
 
+## Application form spam check (optional)
+The public application form (`/apply/<slug>`, opened per business in Settings › Application form) works without any keys: it has a hidden trap field, refuses forms sent too fast, limits applications per connection, business and email, and every applicant confirms their email. Cloudflare Turnstile (invisible, nobody solves a puzzle) is added only when both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are in `/srv/crop/.env` (create a free widget in Cloudflare for staging.cropwms.com, widget mode "Invisible"; enter the secret with `read -s`). Remove either key to switch it off again.
+
 ## Document storage
 Bucket `crop-staging-docs` (Spaces, SYD1). The access key (limited to that bucket) is in `/srv/crop/.env` as `SPACES_KEY` / `SPACES_SECRET`. Without them, uploads are refused with "Document storage is not set up yet".
 

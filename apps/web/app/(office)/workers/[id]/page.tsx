@@ -27,6 +27,8 @@ import { businessZone, todayIn, whenIn } from '../../../../lib/business';
 import { mobileExample, showMobile } from '../../../../lib/phone';
 import { personTabs, type PersonTab } from '../../../../lib/person-tabs';
 import { RecruitmentCard } from './recruitment-card';
+import { ApplicationCard } from './application-card';
+import type { JobApplication } from '../../../../lib/apply';
 import { LogCall } from '../../allocations/log-call';
 import { callLine, type CallRow } from '../../../../lib/calls';
 import type { RecruitmentEvent } from '../../../../lib/recruitment';
@@ -107,6 +109,8 @@ export default async function WorkerPage({ params, searchParams }: {
     : [];
   const recruitment = tab === 'overview' && w.status !== 'agency'
     ? await api<RecruitmentEvent[]>(`/workers/${id}/recruitment`).catch(() => [] as RecruitmentEvent[]) : [];
+  const applications = tab === 'overview' && w.status !== 'agency'
+    ? await api<JobApplication[]>(`/workers/${id}/applications`).catch(() => [] as JobApplication[]) : [];
   const calls = tab === 'overview' && w.status !== 'agency'
     ? await api<CallRow[]>(`/calls?workerId=${id}&days=90&limit=8`).catch(() => [] as CallRow[]) : [];
   const teams = tab === 'overview' && w.status !== 'agency'
@@ -174,6 +178,8 @@ export default async function WorkerPage({ params, searchParams }: {
         <RecruitmentCard workerId={id} status={w.status} stage={w.recruitmentStage ?? null} events={recruitment}
           checklists={checklists.filter(c => !c.archived)} roles={w.roles} when={whenIn(zone)} />
       )}
+
+      {applications.length > 0 && <ApplicationCard workerId={id} apps={applications} when={whenIn(zone)} />}
 
       {onboarding && (
         <OnboardingCard workerId={id} o={onboarding} checklists={checklists} roles={w.roles} status={w.status} canDecide={canVerify} contact={{ first: w.preferredName || w.firstName, email: !!w.email, phone: !!w.phone }} timeZone={zone} />
