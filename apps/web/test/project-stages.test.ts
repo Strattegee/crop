@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  dayLabel, hoursLine, hoursNote, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
+  dayLabel, hoursLine, hoursNote, moveMessage, namedWords, outsideNote, rosteredLine, rosterMessage, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt, weekdaysFromForm,
 } from '../lib/project-stages';
 
 describe('project stages (David, 5 Nov)', () => {
@@ -80,5 +80,14 @@ describe('project stages (David, 5 Nov)', () => {
     expect(hoursNote({ offHours: 0, offHoursMovable: 0 })).toBeNull();
     expect(hoursNote({ offHours: 4, offHoursMovable: 4 })).toEqual({ movable: 4, stay: 0, stayLine: null });
     expect(hoursNote({ offHours: 4, offHoursMovable: 3 })?.stayLine).toBe("1 is in a published week or with an agency's person: change it on the roster.");
+  });
+
+  it('offers active items to plan, saying what is planned already', () => {
+    const items = [{ id: 'g', name: 'Gloves', unit: 'pair' }, { id: 'b', name: 'Bin bags', unit: 'roll', active: false }, { id: 'd', name: 'Dust masks', unit: 'each' }];
+    const line = { id: 'x', itemId: 'g', name: 'Gloves', unit: 'pair', tracksStock: true, planned: 40, used: 0, toGo: 40, note: null, line: '', short: null };
+    expect(stageItemChoices(items, { items: [line, { ...line, id: null, itemId: 'd', planned: null }] })).toEqual([
+      { value: 'd', label: 'Dust masks (each)' },
+      { value: 'g', label: 'Gloves (pair) · 40 planned' },
+    ]);
   });
 });

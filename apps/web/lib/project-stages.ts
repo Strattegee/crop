@@ -16,12 +16,19 @@ export type Stage = {
   shortLine: string | null; placesPerDay: number; overlaps: string[];
   rostered: { shifts: number; open: number; days: number; outside: number; outsideMovable: number; offHours: number; offHoursMovable: number };
   equipment: { id: string; equipmentId: string; equipmentName: string; typeName: string; line: string }[];
+  items: StageItem[];
+};
+/** A stage's item (5 Nov): planned (`id`) or used on its shifts without a plan (`id` null). Wording from the API. */
+export type StageItem = {
+  id: string | null; itemId: string; name: string; unit: string; tracksStock: boolean; planned: number | null; used: number; toGo: number;
+  note: string | null; line: string; short: { need: number; onHand: number } | null;
 };
 export type StagesView = {
   project: { id: string; name: string; startsOn: string | null; endsOn: string | null; timezone: string };
   today: string; span: { from: string; to: string } | null;
   supervisor: { workerId: string; name: string; active: boolean; role: string; workingDays: number; daysRostered: number } | null;
   stages: Stage[];
+  itemShortages: { itemId: string; name: string; unit: string; need: number; onHand: number; line: string }[];
 };
 export type RosterResult = {
   created: number; assigned: number; alreadyRostered: number; pastDays: number; supervisorCreated: number; supervisorAssigned: number;
@@ -177,4 +184,16 @@ export function stagePicker(s: Pick<Stage, 'roles' | 'people'>, people: { id: st
       options: free.filter(p => p.roles.includes(role)).sort((a, b) => a.name.localeCompare(b.name)).map(p => ({ value: `${p.id}|${role}`, label: p.name })),
     };
   }).filter(g => g.options.length > 0);
+}
+
+/**
+ * The items a stage can plan, active ones by name; an item the stage has planned says how many (choosing it again
+ * changes the quantity).
+ */
+export function stageItemChoices(items: { id: string; name: string; unit: string; active?: boolean }[], s: Pick<Stage, 'items'>): { value: string; label: string }[] {
+  const planned = new Map(s.items.filter(i => i.id !== null).map(i => [i.itemId, i.planned]));
+  return items.filter(i => i.active !== false).sort((a, b) => a.name.localeCompare(b.name)).map(i => ({
+    value: i.id,
+    label: planned.has(i.id) ? `${i.name} (${i.unit}) · ${planned.get(i.id)} planned` : `${i.name} (${i.unit})`,
+  }));
 }

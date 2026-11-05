@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import type { industryGroups } from '../../../../lib/industry-groups';
 import {
-  DAY_SHORT, DEFAULT_WEEKDAYS, hoursLine, hoursNote, namedWords, outsideNote, rosteredLine, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
+  DAY_SHORT, DEFAULT_WEEKDAYS, hoursLine, hoursNote, namedWords, outsideNote, rosteredLine, stageItemChoices, stagePicker, timelineBars, timelineSpan, timelineTicks, todayAt,
   type Stage, type StagesView,
 } from '../../../../lib/project-stages';
 import { T, type Words } from '../../../../lib/terms';
 import { MakeUpLines, type RoleRow } from '../../teams/make-up-lines';
 import {
-  addStage, addStagePerson, bookStageEquipment, moveStageShifts, removeStage, removeStageEquipment, removeStagePerson, rosterProject, rosterStage,
+  addStage, addStagePerson, bookStageEquipment, moveStageShifts, planStageItem, removeStage, removeStageEquipment, removeStageItem, removeStagePerson, rosterProject, rosterStage,
   setProjectSupervisor, setStageRoles, setStageTeam, updateStage,
 } from '../actions';
 
@@ -16,6 +16,7 @@ export type PersonChoice = { id: string; name: string; roles: string[] };
 type Area = { id: string; name: string; active: boolean };
 type ShiftCode = { id: string; code: string; name: string; startTime?: string; endTime?: string; active?: boolean };
 type EquipmentChoice = { id: string; name: string; typeName: string; status: string };
+export type ItemChoice = { id: string; name: string; unit: string; active?: boolean };
 
 function DayBoxes({ value }: { value: number[] }) {
   return (
@@ -79,9 +80,9 @@ function TeamChooser({ teams, roleGroups, tw, current }: { teams: TeamChoice[]; 
   );
 }
 
-function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment }: {
+function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment, items }: {
   id: string; s: Stage; v: StagesView; canEdit: boolean; tw: Words; areas: Area[]; codes: ShiftCode[]; teams: TeamChoice[];
-  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[];
+  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[]; items: ItemChoice[];
 }) {
   const shifts = tw.lower(T.shift, true);
   const done = rosteredLine(s.rostered, shifts);
@@ -211,6 +212,32 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
         </form>
       )}
 
+      <h3 className="stage-h">{tw.many(T.item)} for this stage</h3>
+      {s.items.length ? (
+        <ul className="team-people">
+          {s.items.map(i => (
+            <li key={i.id ?? `used-${i.itemId}`}>
+              <span>{i.name}</span> <span className="muted small">· {i.line}{i.note ? ` · ${i.note}` : ''}</span>
+              {i.short && <span className="badge bad" title={`${i.short.onHand} on hand here for ${i.short.need} still to go across the stages`}>Not enough on hand</span>}
+              {canEdit && i.id && <form action={removeStageItem.bind(null, id, i.id)} style={{ display: 'inline' }}><button className="btn small secondary" type="submit">Take off</button></form>}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="muted small">Nothing planned. Plan what the stage will use, e.g. gloves and dust masks; what its {tw.lower(T.shift, true)} use counts against it.</p>}
+      {canEdit && s.state !== 'ended' && items.length > 0 && (
+        <form action={planStageItem.bind(null, id, s.id)} className="form-row">
+          <label>Plan {tw.lower(T.item, true)}
+            <select name="itemId" required defaultValue="">
+              <option value="" disabled>Choose…</option>
+              {stageItemChoices(items, s).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <label>How many<input name="quantity" type="number" min="0.001" step="any" required style={{ width: 90 }} /></label>
+          <label>Note<input name="note" maxLength={200} placeholder="Optional" /></label>
+          <button className="btn small" type="submit">Plan</button>
+        </form>
+      )}
+
       {canEdit && (
         <details className="stage-edit">
           <summary className="small">Change this stage</summary>
@@ -231,9 +258,9 @@ function StageCard({ id, s, v, canEdit, tw, areas, codes, teams, roleGroups, peo
 }
 
 /** The project's stages (David, 5 Nov): a timeline across its dates, then each stage with its team copy, rostering and equipment. */
-export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment, dateLabel }: {
+export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups, people, equipment, items, dateLabel }: {
   id: string; v: StagesView; canEdit: boolean; tw: Words; areas: Area[]; codes: ShiftCode[]; teams: TeamChoice[];
-  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[]; dateLabel: (d: string) => string;
+  roleGroups: ReturnType<typeof industryGroups<RoleRow>>; people: PersonChoice[]; equipment: EquipmentChoice[]; items: ItemChoice[]; dateLabel: (d: string) => string;
 }) {
   const span = timelineSpan(v);
   const lay = span ? timelineBars(v.stages, span) : null;
@@ -290,10 +317,17 @@ export function StagesTab({ id, v, canEdit, tw, areas, codes, teams, roleGroups,
             <p className="muted small" style={{ margin: '6px 0 0' }}>{dateLabel(span.from)} – {dateLabel(span.to)}. Stages on a second line overlap another stage.</p>
           </div>
         )}
+        {v.itemShortages.length > 0 && (
+          <div className="small" style={{ marginTop: 8 }}>
+            <span className="badge bad">Not enough {tw.lower(T.item, true)} on hand</span>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{v.itemShortages.map(x => <li key={x.itemId}>{x.line}</li>)}</ul>
+            <p className="muted" style={{ margin: '2px 0 0' }}>Receive or transfer stock to this {tw.lower(T.project)} on the <Link href="/items">{tw.many(T.item)}</Link> page.</p>
+          </div>
+        )}
       </div>
 
       <div className="team-grid">
-        {v.stages.map(s => <StageCard key={s.id} id={id} s={s} v={v} canEdit={canEdit} tw={tw} areas={areas} codes={codes} teams={teams} roleGroups={roleGroups} people={people} equipment={equipment} />)}
+        {v.stages.map(s => <StageCard key={s.id} id={id} s={s} v={v} canEdit={canEdit} tw={tw} areas={areas} codes={codes} teams={teams} roleGroups={roleGroups} people={people} equipment={equipment} items={items} />)}
       </div>
 
       {canEdit && (

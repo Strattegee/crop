@@ -18,6 +18,7 @@ import { knownRoles } from '../teams/teams.controller.js';
 import { todayIn } from '../workforce/compliance.js';
 import { checkAllocation } from './projects.controller.js';
 import { rangeLine } from './projects.js';
+import { plannedQuantity, stageItemLines, type PlannedItem, type UsedItem } from './stage-items.js';
 import {
   DEFAULT_WEEKDAYS, emptyResult, GAP_REASON, MAX_ROSTER_SHIFTS, moveLaterStages, moveSummary, parseWeekdays, planSlots, rosterSummary,
   noRetime, shiftsOutside, shiftsToRetime, STAGE_MOVED_REASON, STAGE_REMOVED_REASON, stageLine, stageOverlaps, stageProblem, stageShortLine, supervisorDays, supervisorRole,
@@ -207,6 +208,7 @@ async function stagesView(db: PoolClient, p: ProjectRow) {
             to_char(x.starts_on, 'YYYY-MM-DD') as "from", to_char(x.ends_on, 'YYYY-MM-DD') as "to"
        from equipment_site_allocations x join equipment e on e.id = x.equipment_id join equipment_types et on et.id = e.equipment_type_id
       where x.project_stage_id = any($1) and x.removed_at is null order by e.name`, [ids])).rows : [];
+  const items = await stageItems(db, p, stages.map(s => ({ id: s.id, state: stageState(s, today) })));
   const overlaps = stageOverlaps(stages);
   const sup = p.supervisorWorkerId ? (await db.query<{ id: string; name: string; status: string; roles: string[] }>(
     `select id, coalesce(preferred_name, first_name) || ' ' || last_name as name, status, roles from workers where id = $1`, [p.supervisorWorkerId])).rows[0] ?? null : null;
@@ -233,7 +235,7 @@ async function stagesView(db: PoolClient, p: ProjectRow) {
         startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, ownTimes: s.ownStart !== null, shiftCodeId: s.shiftCodeId, shiftCode: s.shiftCode,
         teamId: s.teamId, teamName: s.teamName, notes: s.notes,
         line: stageLine(s), weekdaysLine: weekdaysLine(s.weekdays), workingDays: days.length,
-        state: s.endsOn < today ? 'ended' : s.startsOn > today ? 'upcoming' : 'current',
+        state: stageState(s, today),
         roles: m, makeUpLine: makeUpLine(m), needed: m.reduce((n, r) => n + r.count, 0),
         people: ppl.map(x => ({ ...x, supervisor: x.workerId === p.supervisorWorkerId })), shortLine: stageShortLine(m, ppl),
         placesPerDay: slots.length,
@@ -252,9 +254,37 @@ async function stagesView(db: PoolClient, p: ProjectRow) {
           })(),
         },
         equipment: equipment.filter(e => e.stageId === s.id).map(({ stageId: _, ...e }) => ({ ...e, line: rangeLine(e, today) })),
+        items: items.byStage.get(s.id) ?? [],
       };
     }),
+    itemShortages: items.shortages,
   };
+}
+
+const stageState = (s: { startsOn: string; endsOn: string }, today: string): 'ended' | 'current' | 'upcoming' =>
+  s.endsOn < today ? 'ended' : s.startsOn > today ? 'upcoming' : 'current';
+
+/**
+ * The stages' planned items, what each stage's {shifts} used (issued for or used on them, net of returns) and the
+ * project's stock on hand of counted items, worked out into lines and shortages (`stageItemLines`).
+ */
+async function stageItems(db: PoolClient, p: ProjectRow, stages: { id: string; state: 'ended' | 'current' | 'upcoming' }[]) {
+  const ids = stages.map(s => s.id);
+  if (!ids.length) return stageItemLines([], [], [], new Map());
+  const planned = (await db.query<PlannedItem>(
+    `select x.id, x.stage_id as "stageId", x.item_id as "itemId", i.name, i.unit, i.tracks_stock as "tracksStock", x.quantity::float8 as planned, x.note
+       from project_stage_items x join items i on i.id = x.item_id
+      where x.stage_id = any($1) and x.removed_at is null order by lower(i.name), x.added_at`, [ids])).rows;
+  const used = (await db.query<UsedItem>(
+    `select s.project_stage_id as "stageId", m.item_id as "itemId", i.name, i.unit, i.tracks_stock as "tracksStock", (-sum(m.quantity))::float8 as used
+       from stock_movements m join shifts s on s.id = m.shift_id join items i on i.id = m.item_id
+      where s.project_stage_id = any($1) and m.kind in ('issued', 'used', 'returned')
+      group by s.project_stage_id, m.item_id, i.name, i.unit, i.tracks_stock`, [ids])).rows;
+  const counted = [...new Set(planned.filter(x => x.tracksStock).map(x => x.itemId))];
+  const onHand = new Map(counted.length ? (await db.query<{ item_id: string; n: number }>(
+    `select item_id, coalesce(sum(quantity), 0)::float8 as n from stock_movements where facility_id = $1 and item_id = any($2) group by item_id`,
+    [p.id, counted])).rows.map(r => [r.item_id, r.n] as const) : []);
+  return stageItemLines(stages, planned, used, onHand);
 }
 
 interface StageFields {
@@ -601,6 +631,43 @@ export class ProjectStagesController {
       }
       await db.query('update facilities set supervisor_worker_id = $2 where id = $1', [id, workerId]);
       return stagesView(db, { ...p, supervisorWorkerId: workerId });
+    });
+  }
+
+  /**
+   * Plans an item for the stage (`itemId`, `quantity`, `note`): how much of it the stage is expected to use. Planning
+   * an item the stage already has replaces its quantity (the old row is kept, marked removed).
+   */
+  @Roles(...OFFICE_ROLES)
+  @Post('project-stages/:id/items')
+  planItem(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const itemId = text(body, 'itemId', { required: true, max: 40 })!;
+    if (!UUID.test(itemId)) throw new BadRequestException('Choose {an item}');
+    const qty = plannedQuantity(body?.quantity);
+    if (typeof qty !== 'number') throw new BadRequestException(qty.problem);
+    const note = text(body, 'note', { max: 200 });
+    return this.tx(t, auth, async db => {
+      const st = await liveStage(db, id);
+      const item = (await db.query<{ name: string; active: boolean }>('select name, active from items where id = $1', [itemId])).rows[0];
+      if (!item) throw new NotFoundException('{Item} not found');
+      if (!item.active) throw new ConflictException(`${item.name} is no longer in use`);
+      await db.query('update project_stage_items set removed_at = now() where stage_id = $1 and item_id = $2 and removed_at is null', [id, itemId]);
+      await db.query('insert into project_stage_items(tenant_id, stage_id, item_id, quantity, note, added_by) values ($1,$2,$3,$4,$5,$6)',
+        [t.tenantId, id, itemId, qty, note, auth.userId]);
+      return stagesView(db, await projectOf(db, st.facilityId));
+    });
+  }
+
+  /** Takes a planned item off the stage (kept on file). What its {shifts} used stays in the stock ledger. */
+  @Roles(...OFFICE_ROLES)
+  @Post('project-stage-items/:id/remove')
+  removeItem(@Tenant() t: Membership, @Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.tx(t, auth, async db => {
+      const r = (await db.query<{ stage_id: string }>(
+        'update project_stage_items set removed_at = now() where id = $1 and removed_at is null returning stage_id', [id])).rows[0];
+      if (!r) throw new NotFoundException('{Item} not found on that stage');
+      const st = await liveStage(db, r.stage_id);
+      return stagesView(db, await projectOf(db, st.facilityId));
     });
   }
 

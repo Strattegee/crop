@@ -219,6 +219,16 @@ export async function bookStageEquipment(id: string, stageId: string, f: FormDat
   await attempt(stagesTab(id), () => api(`/project-stages/${stageId}/equipment`, { method: 'POST', body: { equipmentId: str(f, 'equipmentId') } }), 'Booked for the stage’s dates.');
 }
 
+export async function planStageItem(id: string, stageId: string, f: FormData) {
+  await attempt(stagesTab(id), () => api(`/project-stages/${stageId}/items`, {
+    method: 'POST', body: { itemId: str(f, 'itemId'), quantity: str(f, 'quantity'), note: str(f, 'note') || null },
+  }), 'Planned for the stage.');
+}
+
+export async function removeStageItem(id: string, planId: string) {
+  await attempt(stagesTab(id), () => api(`/project-stage-items/${planId}/remove`, { method: 'POST', body: {} }), 'Taken off the plan.');
+}
+
 export async function removeStageEquipment(id: string, allocationId: string) {
   await attempt(stagesTab(id), () => api(`/equipment-allocations/${allocationId}/remove`, { method: 'POST', body: {} }), 'Taken off.');
 }
