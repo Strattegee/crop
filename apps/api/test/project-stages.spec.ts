@@ -12,6 +12,7 @@ import {
   addDays, GAP_REASON, moveLaterStages, moveSummary, noRetime, parseWeekdays, shiftsOutside, type PlacedShift, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
   shiftsToRetime, supervisorDays, supervisorRole, toCreate, type TimedShift, weekdaysLine, workingDays,
 } from '../src/projects/stages.js';
+import { itemLine, plannedQuantity, stageItemLines } from '../src/projects/stage-items.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -164,6 +165,39 @@ describe('project stages: shifts follow their stage\'s hours (rules)', () => {
     expect(moveSummary({ cancelled: 0, kept: none, roster: null, retimed: 3, retimeKept: { started: 2, agency: 0, published: 1 }, takenOff: [p], equipmentKept: [p] }, w))
       .toBe('Changed 3 jobs to the stage’s hours. 1 person couldn’t work the new hours, so that job is open again. 1 job kept the old hours because the equipment on it can’t be used at the new ones. Left at the old hours: 1 in published weeks (change it on the roster, so people are told); 2 already started.');
     expect(moveSummary({ cancelled: 0, kept: none, roster: null, ...noRetime() }, w)).toBe('Every job is already on the stage’s dates and hours.');
+  });
+});
+
+describe('project stages: items (5 Nov)', () => {
+  const gloves = { itemId: 'g', name: 'Gloves', unit: 'pair', tracksStock: true };
+  it('words planned against used', () => {
+    expect(itemLine({ planned: 40, used: 0, unit: 'pair' })).toBe('40 pair planned · none used yet');
+    expect(itemLine({ planned: 40, used: 12, unit: 'pair' })).toBe('40 pair planned · 12 used · 28 to go');
+    expect(itemLine({ planned: 40, used: 40, unit: 'pair' })).toBe('40 pair planned · all used');
+    expect(itemLine({ planned: 40, used: 45.5, unit: 'pair' })).toBe('40 pair planned · 45.5 used (5.5 over)');
+    expect(itemLine({ planned: null, used: 3, unit: 'litre' })).toBe('3 litre used, not planned');
+    expect(plannedQuantity('2.5')).toBe(2.5);
+    expect(plannedQuantity(0)).toHaveProperty('problem');
+    expect(plannedQuantity('lots')).toHaveProperty('problem');
+    expect(plannedQuantity(2_000_000)).toHaveProperty('problem');
+  });
+
+  it('finds what the stock on hand can\'t cover, leaving finished stages out', () => {
+    const stages = [{ id: 'a', state: 'current' as const }, { id: 'b', state: 'upcoming' as const }, { id: 'z', state: 'ended' as const }];
+    const planned = [
+      { id: 'pa', stageId: 'a', ...gloves, planned: 40, note: null }, { id: 'pb', stageId: 'b', ...gloves, planned: 30, note: 'Spare sizes' },
+      { id: 'pz', stageId: 'z', ...gloves, planned: 50, note: null },
+      { id: 'pf', stageId: 'a', itemId: 'f', name: 'Fuel', unit: 'litre', tracksStock: false, planned: 100, note: null },
+    ];
+    const used = [{ stageId: 'a', ...gloves, used: 12 }, { stageId: 'b', itemId: 'm', name: 'Masks', unit: 'each', tracksStock: true, used: 4 }];
+    let r = stageItemLines(stages, planned, used, new Map([['g', 20]]));
+    expect(r.shortages).toEqual([{ itemId: 'g', name: 'Gloves', unit: 'pair', need: 58, onHand: 20, line: 'Gloves: stages still need 58 pair, 20 on hand here' }]);
+    expect(r.byStage.get('a')!.map(l => [l.name, l.toGo, l.short])).toEqual([['Gloves', 28, { need: 58, onHand: 20 }], ['Fuel', 100, null]]);
+    expect(r.byStage.get('b')!.map(l => [l.name, l.planned, l.line])).toEqual([['Gloves', 30, '30 pair planned · none used yet'], ['Masks', null, '4 each used, not planned']]);
+    expect(r.byStage.get('z')![0].short).toBeNull();
+    r = stageItemLines(stages, planned, used, new Map([['g', 58]]));
+    expect(r.shortages).toEqual([]);
+    expect(stageItemLines(stages, planned, used, new Map()).shortages[0].line).toBe('Gloves: stages still need 58 pair, none on hand here');
   });
 });
 
@@ -409,13 +443,54 @@ describe('project stages: API (migration 0093)', () => {
     expect(r.summary).toBe('Changed 16 shifts to the stage’s hours.');
   });
 
+  it('plans a stage\'s items and counts what its shifts used', async () => {
+    const gloves = (await http().post('/items').set(as('admin')).send({ name: 'Gloves', unit: 'pair', tracksStock: true }).expect(201)).body.id;
+    const fuel = (await http().post('/items').set(as('admin')).send({ name: 'Fuel', unit: 'litre', tracksStock: false }).expect(201)).body.id;
+    await http().post(`/items/${gloves}/receive`).set(as('admin')).send({ facilityId: ids.p, quantity: 30 }).expect(201);
+    await http().post(`/project-stages/${ids.a}/items`).set(as('alloc')).send({ itemId: gloves, quantity: 40 }).expect(201);
+    await http().post(`/project-stages/${ids.a}/items`).set(as('alloc')).send({ itemId: fuel, quantity: '50' }).expect(201);
+    await http().post(`/project-stages/${ids.b}/items`).set(as('alloc')).send({ itemId: gloves, quantity: 30, note: 'Spare sizes' }).expect(201);
+    const shift = (await owner.query<{ id: string }>(
+      `select id from shifts where project_stage_id = $1 and status <> 'cancelled' and starts_at > now() order by starts_at limit 1`, [ids.a])).rows[0].id;
+    await http().post(`/items/${gloves}/issue`).set(as('alloc')).send({ shiftId: shift, quantity: 12 }).expect(201);
+    await http().post(`/items/${gloves}/return`).set(as('alloc')).send({ shiftId: shift, quantity: 2 }).expect(201);
+    await http().post(`/items/${fuel}/issue`).set(as('alloc')).send({ shiftId: shift, quantity: 5 }).expect(201);
+
+    type Line = { id: string | null; name: string; planned: number | null; used: number; toGo: number; line: string; short: { need: number; onHand: number } | null };
+    const lines = (v: { stages: { id: string; items: Line[] }[] }, id: string) => v.stages.find(s => s.id === id)!.items;
+    let v = (await http().get(`/projects/${ids.p}/stages`).set(as('sup')).expect(200)).body;
+    expect(lines(v, ids.a).map(l => l.line)).toEqual(['50 litre planned · 5 used · 45 to go', '40 pair planned · 10 used · 30 to go']);
+    // 30 + 30 still to go, 20 on hand: both stages flagged; fuel isn't counted, so never short.
+    expect(v.itemShortages).toEqual([expect.objectContaining({ name: 'Gloves', need: 60, onHand: 20 })]);
+    expect(lines(v, ids.a)[1].short).toEqual({ need: 60, onHand: 20 });
+    expect(lines(v, ids.b)[0]).toMatchObject({ planned: 30, short: { need: 60, onHand: 20 } });
+    expect(lines(v, ids.a)[0].short).toBeNull();
+
+    // A new quantity replaces the plan (kept on file); taking fuel off leaves what was used.
+    v = (await http().post(`/project-stages/${ids.a}/items`).set(as('alloc')).send({ itemId: gloves, quantity: 10 }).expect(201)).body;
+    expect(lines(v, ids.a).find(l => l.name === 'Gloves')!.line).toBe('10 pair planned · all used');
+    expect(v.itemShortages).toEqual([expect.objectContaining({ need: 30, onHand: 20 })]);
+    expect((await owner.query('select 1 from project_stage_items where stage_id = $1 and item_id = $2', [ids.a, gloves])).rowCount).toBe(2);
+    const fuelLine = lines(v, ids.a).find(l => l.name === 'Fuel')!;
+    v = (await http().post(`/project-stage-items/${fuelLine.id}/remove`).set(as('alloc')).expect(201)).body;
+    expect(lines(v, ids.a).find(l => l.name === 'Fuel')).toMatchObject({ id: null, line: '5 litre used, not planned' });
+    await http().post(`/project-stage-items/${fuelLine.id}/remove`).set(as('alloc')).expect(404);
+
+    // Refusals, and supervisors only read.
+    expect((await http().post(`/project-stages/${ids.a}/items`).set(as('alloc')).send({ itemId: gloves, quantity: 0 }).expect(400)).body.message).toBe('Enter how many the stage needs (more than 0)');
+    await http().post(`/project-stages/${ids.a}/items`).set(as('alloc')).send({ itemId: ids.p, quantity: 1 }).expect(404);
+    await http().post(`/project-stages/${ids.a}/items`).set(as('sup')).send({ itemId: gloves, quantity: 1 }).expect(403);
+    await http().post(`/project-stages/${ids.a}/items`).set(as('nosy')).send({ itemId: gloves, quantity: 1 }).expect(404);
+    expect((await owner.query(`select 1 from audit_log where table_name = 'project_stage_items'`)).rowCount).toBeGreaterThan(0);
+  });
+
   it('keeps supervisors to reading, and other businesses out', async () => {
     await http().get(`/projects/${ids.p}/stages`).set(as('sup')).expect(200);
     await http().post(`/projects/${ids.p}/stages`).set(as('sup')).send({ name: 'X', startsOn: W(0), endsOn: W(1), startTime: '07:00', endTime: '15:00' }).expect(403);
     await http().post(`/project-stages/${ids.a}/roster`).set(as('sup')).expect(403);
     await http().get(`/projects/${ids.p}/stages`).set(as('nosy')).expect(404);
     await http().post(`/project-stages/${ids.a}/remove`).set(as('nosy')).send({}).expect(404);
-    for (const table of ['project_stages', 'project_stage_roles', 'project_stage_people']) {
+    for (const table of ['project_stages', 'project_stage_roles', 'project_stage_people', 'project_stage_items']) {
       const n = await withTenant(pool, ids.nosy, async c => (await c.query(`select count(*)::int as n from ${table}`)).rows[0].n);
       expect(n).toBe(0);
       // Someone limited to another site sees none of the project's stages.

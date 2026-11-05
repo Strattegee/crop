@@ -16,7 +16,7 @@ import { OfficeField } from '../../settings/offices/office-field';
 import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
 import { dayLabel, type StagesView } from '../../../../lib/project-stages';
 import type { RoleRow } from '../../teams/make-up-lines';
-import { StagesTab, type TeamChoice } from './stages-tab';
+import { StagesTab, type ItemChoice, type TeamChoice } from './stages-tab';
 import {
   addTeamMember, addWorkArea, allocateEquipment, endAllocation, moveAllocation, removeAllocation, removeTeamMember, setWorkAreaActive,
   setProjectSupervisorFromOverview, updateProject, updateTeamMember,
@@ -85,14 +85,15 @@ export default async function ProjectPage({ params, searchParams }: {
 
   const onStages = tab === 'stages' && isProject;
   const stages = onStages ? await api<StagesView>(`/projects/${id}/stages`) : null;
-  const [teamList, stageRoles, stagePacks, stagePeople, stageEquipment, stageCodes] = onStages && canPlan ? await Promise.all([
+  const [teamList, stageRoles, stagePacks, stagePeople, stageEquipment, stageCodes, stageItems] = onStages && canPlan ? await Promise.all([
     api<{ teams: TeamChoice[] }>('/teams').then(r => r.teams).catch(() => [] as TeamChoice[]),
     api<RoleRow[]>('/roles').catch(() => [] as RoleRow[]),
     api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
     api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []),
     api<{ id: string; name: string; typeName: string; status: string }[]>('/equipment').catch(() => []),
     api<{ id: string; code: string; name: string; active?: boolean }[]>(`/shift-codes?facilityId=${id}`).catch(() => []),
-  ]) : [[], [], [], [], [], []];
+    api<ItemChoice[]>('/items').catch(() => [] as ItemChoice[]),
+  ]) : [[], [], [], [], [], [], []];
   const supervisorPeople = tab === 'overview' && canPlan && isProject
     ? (await api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []))
       .filter(w => w.status === 'active').map(w => ({ id: w.id, name: `${w.preferredName || w.firstName} ${w.lastName}` })).sort((a, b) => a.name.localeCompare(b.name))
@@ -242,7 +243,7 @@ export default async function ProjectPage({ params, searchParams }: {
         <StagesTab id={id} v={stages} canEdit={canPlan} tw={tw} areas={p.areas} codes={stageCodes} teams={teamList}
           roleGroups={industryGroups(stageRoles.filter(r => r.active !== false), stagePacks)}
           people={stagePeople.filter(w => w.status === 'active').map(w => ({ id: w.id, name: `${w.preferredName || w.firstName} ${w.lastName}`, roles: w.roles }))}
-          equipment={stageEquipment} dateLabel={dayLabel} />
+          equipment={stageEquipment} items={stageItems} dateLabel={dayLabel} />
       )}
 
       {tab === 'team' && (<>
