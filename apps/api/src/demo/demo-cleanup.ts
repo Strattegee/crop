@@ -37,7 +37,7 @@ export const DELETE_TABLES = [
   'allocation_presence', 'areas', 'audit_log', 'availability_dates', 'availability_patterns', 'call_logs', 'client_contacts',
   'client_order_confirmations', 'client_order_notices', 'client_orders', 'clients', 'credential_documents', 'customer_requests', 'credential_events',
   'dashboard_snapshots', 'day_requests', 'detail_change_requests', 'employment_terms', 'equipment', 'equipment_checks', 'equipment_site_allocations', 'facilities', 'leave_records',
-  'member_offices', 'member_sites', 'notifications', 'offices', 'onboarding_ticks', 'outside_agency_emails', 'recruitment_events', 'reminder_marks',
+  'member_offices', 'member_sites', 'notifications', 'offices', 'onboarding_ticks', 'project_stage_people', 'project_stage_roles', 'project_stages', 'outside_agency_emails', 'recruitment_events', 'reminder_marks',
   'right_to_work_events', 'right_to_work_records', 'roster_change_requests', 'roster_publications', 'roster_template_duties',
   'roster_template_equipment', 'roster_template_shifts', 'roster_templates', 'shift_assignments', 'shift_changes', 'shift_duty_links',
   'shift_offers', 'shift_swaps', 'shifts', 'site_members', 'stock_movements', 'team_members', 'team_roles', 'teams', 'upload_links', 'worker_addresses', 'worker_credentials', 'worker_notice_acknowledgements',

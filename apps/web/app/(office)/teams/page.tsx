@@ -1,47 +1,18 @@
 import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { currentAgency } from '../../../lib/current-user';
-import { industryGroups, needsHeadings, type PackInfo } from '../../../lib/industry-groups';
-import { awayLine, awayWords, BLANK_MAKE_UP_LINES, namedLine, pickerGroups, teamFilter, type MakeUpRow, type PickPerson, type Team } from '../../../lib/teams';
+import { industryGroups, type PackInfo } from '../../../lib/industry-groups';
+import { awayLine, awayWords, namedLine, pickerGroups, teamFilter, type PickPerson, type Team } from '../../../lib/teams';
 import { T, words } from '../../../lib/terms';
 import { formatDate } from '../../../lib/format';
 import { businessZone, todayIn } from '../../../lib/business';
 import { Notices } from '../notices';
+import { MakeUpLines, type RoleRow } from './make-up-lines';
 import { addTeam, addTeamPerson, removeTeamPerson, setTeamActive, setTeamRoles, updateTeam } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-type RoleRow = { id: string; name: string; active: boolean; industries?: string[] };
 type WorkerRow = { id: string; firstName: string; lastName: string; preferredName: string | null; roles: string[] };
-
-/** One make-up line: a role (grouped by industry, like every role list) and how many. */
-function RoleLine({ i, row, roleGroups, roleWord }: { i: number; row?: MakeUpRow; roleGroups: ReturnType<typeof industryGroups<RoleRow>>; roleWord: string }) {
-  const known = roleGroups.some(g => g.items.some(r => r.name === row?.role));
-  return (
-    <div className="team-line">
-      <label>{roleWord}
-        <select name={`role_${i}`} defaultValue={row?.role ?? ''}>
-          <option value="">{row ? `No ${roleWord.toLowerCase()} (drop this line)` : '—'}</option>
-          {row && !known && <option value={row.role}>{row.role}</option>}
-          {needsHeadings(roleGroups)
-            ? roleGroups.map(g => <optgroup key={g.key} label={g.label}>{g.items.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}</optgroup>)
-            : roleGroups.flatMap(g => g.items).map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-        </select>
-      </label>
-      <label>How many<input type="number" name={`count_${i}`} min={0} max={99} defaultValue={row?.count ?? 1} /></label>
-    </div>
-  );
-}
-
-function MakeUpLines({ rows, roleGroups, roleWord, blanks = BLANK_MAKE_UP_LINES }: { rows: MakeUpRow[]; blanks?: number; roleGroups: ReturnType<typeof industryGroups<RoleRow>>; roleWord: string }) {
-  const n = rows.length + blanks;
-  return (
-    <>
-      <input type="hidden" name="lines" value={n} />
-      {Array.from({ length: n }, (_, i) => <RoleLine key={i} i={i} row={rows[i]} roleGroups={roleGroups} roleWord={roleWord} />)}
-    </>
-  );
-}
 
 /**
  * Standing teams (David, 5 Nov): the business's own teams, kept over time outside any project. Each has a make-up

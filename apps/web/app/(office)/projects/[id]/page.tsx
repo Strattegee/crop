@@ -13,9 +13,13 @@ import {
 import { T, words, type Words } from '../../../../lib/terms';
 import { Notices } from '../../notices';
 import { OfficeField } from '../../settings/offices/office-field';
+import { industryGroups, type PackInfo } from '../../../../lib/industry-groups';
+import { dayLabel, type StagesView } from '../../../../lib/project-stages';
+import type { RoleRow } from '../../teams/make-up-lines';
+import { StagesTab, type TeamChoice } from './stages-tab';
 import {
   addTeamMember, addWorkArea, allocateEquipment, endAllocation, moveAllocation, removeAllocation, removeTeamMember, setWorkAreaActive,
-  updateProject, updateTeamMember,
+  setProjectSupervisorFromOverview, updateProject, updateTeamMember,
 } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +32,7 @@ type Allocation = { id: string; equipmentId: string; equipmentName: string; type
 type Project = {
   id: string; name: string; kind: string; code: string | null; description: string | null; status: ProjectStatus | null; statusLabel: string | null;
   startsOn: string | null; endsOn: string | null; dates: string | null; clientId: string | null; clientName: string | null; officeId: string | null;
-  officeName: string | null; managerUserId: string | null; managerName: string | null; timezone: string; addressLine: string | null; suburb: string | null;
+  officeName: string | null; managerUserId: string | null; managerName: string | null; supervisorWorkerId: string | null; supervisorName: string | null; timezone: string; addressLine: string | null; suburb: string | null;
   state: string | null; postcode: string | null; country: string; active: boolean; today: string; weekStart: string;
   areas: { id: string; name: string; specialty: string | null; active: boolean }[];
   team: Member[]; days: { day: string; rostered: number; filled: number; unfilled: number }[]; week: { shifts: number; unfilled: number };
@@ -71,12 +75,28 @@ export default async function ProjectPage({ params, searchParams }: {
   const links = projectLinks(p, p.weekStart);
   const href = (t: ProjectTab) => (t === 'overview' ? `/projects/${id}` : `/projects/${id}?tab=${t}`);
   const shifts = tw.lower(T.shift, true);
+  const isProject = p.kind === 'project';
+  // Stages (David, 5 Nov): office roles change them; supervisors only read.
+  const canPlan = agency?.role === 'owner' || agency?.role === 'admin' || agency?.role === 'allocator';
   const tabs: [ProjectTab, string, number | null][] = [
-    ['overview', 'Overview', null], ['team', 'Team', p.counts.team], ['areas', tw.many(T.area), p.areas.filter(a => a.active).length],
+    ['overview', 'Overview', null], ...(isProject ? [['stages', 'Stages', null] as [ProjectTab, string, number | null]] : []), ['team', 'Team', p.counts.team], ['areas', tw.many(T.area), p.areas.filter(a => a.active).length],
     ['equipment', tw.one(T.equipment), p.counts.equipment], ['consumables', tw.many(T.item), null],
   ];
-  const isProject = p.kind === 'project';
 
+  const onStages = tab === 'stages' && isProject;
+  const stages = onStages ? await api<StagesView>(`/projects/${id}/stages`) : null;
+  const [teamList, stageRoles, stagePacks, stagePeople, stageEquipment, stageCodes] = onStages && canPlan ? await Promise.all([
+    api<{ teams: TeamChoice[] }>('/teams').then(r => r.teams).catch(() => [] as TeamChoice[]),
+    api<RoleRow[]>('/roles').catch(() => [] as RoleRow[]),
+    api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
+    api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []),
+    api<{ id: string; name: string; typeName: string; status: string }[]>('/equipment').catch(() => []),
+    api<{ id: string; code: string; name: string; active?: boolean }[]>(`/shift-codes?facilityId=${id}`).catch(() => []),
+  ]) : [[], [], [], [], [], []];
+  const supervisorPeople = tab === 'overview' && canPlan && isProject
+    ? (await api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []))
+      .filter(w => w.status === 'active').map(w => ({ id: w.id, name: `${w.preferredName || w.firstName} ${w.lastName}` })).sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const team = tab === 'team' ? await api<Member[]>(`/facilities/${id}/team${sp.past ? '?all=true' : ''}`) : p.team;
   const people = tab === 'team' ? await api<{ id: string; firstName: string; lastName: string; preferredName: string | null; status: string; roles: string[] }[]>('/workers').catch(() => []) : [];
   // How far each person lives from here (David, 4 Nov): approximate km between postcodes, never the address.
@@ -138,6 +158,25 @@ export default async function ProjectPage({ params, searchParams }: {
           <Tile title={`Low ${tw.lower(T.item, true)}`} value={p.counts.lowStock} note={p.stock.length ? `${p.stock.length} counted here` : 'Nothing counted here yet'} warn={p.counts.lowStock > 0} />
         </div>
         {p.description && <div className="card"><p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{p.description}</p></div>}
+        {isProject && (
+          <div className="card">
+            <h2>Supervisor</h2>
+            <p className="small" style={{ marginTop: 0 }}>{p.supervisorName
+              ? <><Link href={`/workers/${p.supervisorWorkerId}`}>{p.supervisorName}</Link> <span className="muted">· works on this {tw.lower(T.project)} full time and is rostered with every stage (<Link href={href('stages')}>Stages</Link>)</span></>
+              : <span className="muted">Nobody yet. The supervisor works on this {tw.lower(T.project)} full time and is rostered on every working day of its <Link href={href('stages')}>stages</Link>.</span>}</p>
+            {canPlan && (
+              <form action={setProjectSupervisorFromOverview.bind(null, id)} className="form-row">
+                <label>{p.supervisorName ? 'Change to' : 'Choose'}
+                  <select name="workerId" defaultValue={p.supervisorWorkerId ?? ''}>
+                    <option value="">Nobody</option>
+                    {supervisorPeople.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </label>
+                <button className="btn small" type="submit">Save</button>
+              </form>
+            )}
+          </div>
+        )}
         <div className="card">
           <h2>Team</h2>
           {p.team.length === 0 ? <p className="muted" style={{ margin: 0 }}>Nobody on the team yet. <Link href={href('team')}>Add people</Link>; they come first when you fill this {tw.lower(T.project)}&apos;s {shifts}.</p> : (
@@ -198,6 +237,13 @@ export default async function ProjectPage({ params, searchParams }: {
           </details>
         )}
       </>)}
+
+      {onStages && stages && (
+        <StagesTab id={id} v={stages} canEdit={canPlan} tw={tw} areas={p.areas} codes={stageCodes} teams={teamList}
+          roleGroups={industryGroups(stageRoles.filter(r => r.active !== false), stagePacks)}
+          people={stagePeople.filter(w => w.status === 'active').map(w => ({ id: w.id, name: `${w.preferredName || w.firstName} ${w.lastName}`, roles: w.roles }))}
+          equipment={stageEquipment} dateLabel={dayLabel} />
+      )}
 
       {tab === 'team' && (<>
         <div className="card" style={{ overflowX: 'auto' }}>

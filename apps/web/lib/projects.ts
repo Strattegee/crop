@@ -16,7 +16,7 @@ export const STATUS_TONE: Record<ProjectStatus, 'ok' | 'warn' | 'neutral'> = {
 export const statusBadge = (s: ProjectStatus | null | undefined): [string, string] | undefined => (s ? [STATUS_LABEL[s], STATUS_TONE[s]] : undefined);
 export const TEAM_ROLE_LABEL: Record<string, string> = { supervisor: 'Supervisor', worker: 'Worker' };
 
-export const PROJECT_TABS = ['overview', 'team', 'areas', 'equipment', 'consumables'] as const;
+export const PROJECT_TABS = ['overview', 'stages', 'team', 'areas', 'equipment', 'consumables'] as const;
 export type ProjectTab = typeof PROJECT_TABS[number];
 export const parseProjectTab = (v: string | undefined): ProjectTab => (PROJECT_TABS as readonly string[]).includes(v ?? '') ? v as ProjectTab : 'overview';
 

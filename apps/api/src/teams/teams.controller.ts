@@ -17,7 +17,7 @@ const DEFAULT_ZONE = 'Australia/Melbourne';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The business's role names: its role list and the roles its own active people have (as `GET /roles`). */
-async function knownRoles(db: PoolClient): Promise<string[]> {
+export async function knownRoles(db: PoolClient): Promise<string[]> {
   return (await db.query<{ name: string }>(
     `select name from business_roles
      union
@@ -25,7 +25,7 @@ async function knownRoles(db: PoolClient): Promise<string[]> {
      order by 1`)).rows.map(r => r.name);
 }
 
-async function businessToday(db: PoolClient): Promise<string> {
+export async function businessToday(db: PoolClient): Promise<string> {
   // tenant_settings shows only this business's row (row-level security); CROP's default zone when it has none.
   const z = (await db.query<{ timezone: string }>('select timezone from tenant_settings limit 1')).rows[0]?.timezone;
   return todayIn(z ?? DEFAULT_ZONE);

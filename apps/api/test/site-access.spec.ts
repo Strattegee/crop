@@ -294,6 +294,22 @@ describe('site access: API and database (migration 0086)', () => {
     await http().get(`/shifts/${ids.a1}`).set(as('nosy')).expect(404);
   });
 
+  it('keeps project stages to the people who see the project (migration 0093)', async () => {
+    const proj = (await http().post('/facilities').set(as('admin')).send({ name: 'Gamma Project', kind: 'project', state: 'VIC' }).expect(201)).body.id;
+    const v = (await http().post(`/projects/${proj}/stages`).set(as('admin')).send({ name: 'Fit-out', startsOn: ahead(10), endsOn: ahead(12), startTime: '07:00', endTime: '15:00', weekdays: [1, 2, 3, 4, 5, 6, 7] }).expect(201)).body;
+    await http().put(`/project-stages/${v.id}/roles`).set(as('admin')).send({ roles: [{ role: 'Carer', count: 1 }] }).expect(200);
+    const scoped = (sites: string[] | null, fn: Parameters<typeof withTenant>[2]) =>
+      auditStore.run({ scope: { tenantId: ids.acme, role: 'allocator', sites } }, () => withTenant(pool, ids.acme, fn));
+    for (const table of ['project_stages', 'project_stage_roles']) {
+      const count = async (c: Parameters<Parameters<typeof withTenant>[2]>[0]) => (await c.query(`select count(*)::int as n from ${table}`)).rows[0].n as number;
+      expect(await scoped([ids.A], count)).toBe(0);
+      expect(await scoped([proj], count)).toBe(1);
+      expect(await scoped(null, count)).toBe(1);
+    }
+    // Limited to Alpha: the project's stages aren't theirs.
+    await http().get(`/projects/${proj}/stages`).set(as('lim')).expect(404);
+  });
+
   it('stops equipment going to two places even when the other place is out of sight', async () => {
     const type = (await http().post('/equipment-types').set(as('admin')).send({ name: 'Hoist' }).expect(201)).body.id;
     const hoist = (await http().post('/equipment').set(as('admin')).send({ equipmentTypeId: type, name: 'Hoist 1' }).expect(201)).body.id;

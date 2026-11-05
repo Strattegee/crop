@@ -100,7 +100,7 @@ function bookingsMessage(name: string, list: { label: string; siteName: string }
 }
 
 /** Checks a new or changed allocation, with plain reasons (409). */
-async function checkAllocation(db: PoolClient, equipment: { id: string; name: string }, facilityId: string, r: DateRange, exceptId?: string) {
+export async function checkAllocation(db: PoolClient, equipment: { id: string; name: string }, facilityId: string, r: DateRange, exceptId?: string) {
   const p = rangeProblem(r);
   if (p) throw new BadRequestException(p);
   // Every site (migration 0086): someone limited to some sites must still be stopped by another site's allocation or booking.
@@ -171,11 +171,13 @@ export class ProjectsController {
     return withTenant(this.pool, t.tenantId, async db => {
       const p = (await db.query<{ id: string; name: string; kind: string; code: string | null; description: string | null; status: ProjectStatus | null;
         startsOn: string | null; endsOn: string | null; clientId: string | null; clientName: string | null; officeId: string | null; officeName: string | null;
-        managerUserId: string | null; managerName: string | null; timezone: string; addressLine: string | null; suburb: string | null; state: string | null;
+        managerUserId: string | null; managerName: string | null; supervisorWorkerId: string | null; supervisorName: string | null; timezone: string; addressLine: string | null; suburb: string | null; state: string | null;
         postcode: string | null; country: string; active: boolean }>(
         `select f.id, f.name, f.kind, f.code, f.description, f.status, to_char(f.starts_on, 'YYYY-MM-DD') as "startsOn", to_char(f.ends_on, 'YYYY-MM-DD') as "endsOn",
                 f.client_id as "clientId", c.name as "clientName", f.office_id as "officeId", o.name as "officeName", f.manager_user_id as "managerUserId",
                 (select t.name from app_office_team() t where t.user_id = f.manager_user_id) as "managerName", f.timezone,
+                f.supervisor_worker_id as "supervisorWorkerId",
+                (select coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name from workers w where w.id = f.supervisor_worker_id) as "supervisorName",
                 f.address_line as "addressLine", f.suburb, f.state, f.postcode, f.country, f.active
            from facilities f left join clients c on c.id = f.client_id left join offices o on o.id = f.office_id where f.id = $1`, [id])).rows[0];
       if (!p) throw new NotFoundException('{Site} not found');

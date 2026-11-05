@@ -7,6 +7,7 @@ import {
 describe('projects (David and Steve, 4 Nov)', () => {
   it('reads the tab and the list filter', () => {
     expect(parseProjectTab('team')).toBe('team');
+    expect(parseProjectTab('stages')).toBe('stages');
     expect(parseProjectTab('nope')).toBe('overview');
     expect(parseProjectTab(undefined)).toBe('overview');
     expect(listFilter('archived')).toBe('archived');
