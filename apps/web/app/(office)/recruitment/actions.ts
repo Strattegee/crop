@@ -4,11 +4,12 @@ import { redirect } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { attempt, failTo, str } from '../../../lib/actions';
 
-const BACK = '/recruitment';
+const BACK = '/recruitment?show=board';
 
 /** Adds someone straight onto the board at Applied. */
 export async function addApplicant(f: FormData) {
   const roles = [...new Set([...f.getAll('roleNames').map(String), ...(str(f, 'roles') ?? '').split(',').map(r => r.trim())].filter(Boolean))];
+  const back = str(f, 'back') === '/recruitment?show=board' ? '/recruitment?show=board' : '/recruitment';
   let name = '';
   try {
     const w = await api<{ firstName: string; lastName: string }>('/workers', {
@@ -17,9 +18,9 @@ export async function addApplicant(f: FormData) {
     });
     name = `${w.firstName} ${w.lastName}`;
   } catch (err) {
-    failTo(BACK, err);
+    failTo(back, err);
   }
-  redirect(`${BACK}?done=${encodeURIComponent(`${name} added to Applied.`)}`);
+  redirect(`${back}${back.includes('?') ? '&' : '?'}done=${encodeURIComponent(`${name} added to Applied.`)}`);
 }
 
 export async function moveTo(workerId: string, stage: string, label: string, f: FormData) {

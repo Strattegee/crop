@@ -12,6 +12,8 @@ import { checklistOption, suggestedChecklist, type ChecklistChoice } from '../..
 import { addApplicant, moveTo, startOnboarding } from './actions';
 import { BoardDrag } from './board-drag';
 import { STAGES, nextStage, previousStage, daysLine } from '../../../lib/recruitment';
+import { listQuery, parseRecruitParams } from '../../../lib/recruitment-list';
+import { RecruitList, type ListData } from './list-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,29 +27,42 @@ type Board = { columns: { stage: string; label: string; people: BoardPerson[] }[
  * The recruitment board (David, 31 Oct): one record from applicant to worker, each person shown as their employee
  * card. Applied → Screening → Interview → Offer, then Onboarding (off the roster until finished), then Started.
  */
-export default async function RecruitmentPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
+export default async function RecruitmentPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const tw = await words();
   const sp = await searchParams;
-  const [b, checklists, packs, roleList] = await Promise.all([
-    api<Board>('/recruitment'),
+  const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]) as string | undefined;
+  const asBoard = one('show') === 'board';
+  const lp = parseRecruitParams(sp);
+  const [b, list, sites, checklists, packs, roleList] = await Promise.all([
+    asBoard ? api<Board>('/recruitment') : Promise.resolve(null),
+    asBoard ? Promise.resolve(null) : api<ListData>(`/recruitment/list${listQuery(lp)}`),
+    asBoard ? Promise.resolve([]) : api<{ id: string; name: string; active: boolean }[]>('/facilities').catch(() => []),
     api<ChecklistChoice[]>('/onboarding-checklists').catch(() => [] as ChecklistChoice[]),
     api<PackInfo[]>('/industry-packs').catch(() => [] as PackInfo[]),
     api<{ id: string; name: string; active: boolean; industries?: string[] }[]>('/roles').catch(() => []),
   ]);
-  const today = todayIn(await businessZone());
+  const zone = await businessZone();
+  const today = todayIn(zone);
   const country = (await businessSettings()).country;
   const roleGroups = industryGroups(roleList.filter(r => r.active), packs);
-  const total = b.columns.reduce((n, c) => n + c.people.length, 0);
+  const total = b ? b.columns.reduce((n, c) => n + c.people.length, 0) : Object.values(list!.counts).reduce((n, c) => n + c, 0);
+  const switchTo = (
+    <span className="view-switch" style={{ marginLeft: 'auto' }}>
+      <Link href="/recruitment" aria-current={!asBoard ? 'true' : undefined}>List</Link>
+      <Link href="/recruitment?show=board" aria-current={asBoard ? 'true' : undefined}>Board</Link>
+    </span>
+  );
 
   return (
     <>
-      <h1>Recruitment</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><h1>Recruitment</h1>{switchTo}</div>
       <p className="muted">Everyone from the day they apply to their first weeks at work, each shown on their employee card. Applicants and people being onboarded are kept off the {tw.lower(T.roster)} until they start. People can also apply through your <Link href="/settings/application-form">application form</Link>.</p>
-      <Notices error={sp.error} done={sp.done} />
+      <Notices error={one('error')} done={one('done')} />
 
       <details className="card" open={total === 0}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Add an applicant</summary>
         <form action={addApplicant} className="form-row" style={{ marginTop: 12 }}>
+          <input type="hidden" name="back" value={asBoard ? '/recruitment?show=board' : '/recruitment'} />
           <label>First name<input name="firstName" required maxLength={100} /></label>
           <label>Last name<input name="lastName" required maxLength={100} /></label>
           <label>Email<input name="email" type="email" maxLength={200} /></label>
@@ -57,6 +72,11 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
         </form>
       </details>
 
+      {list && (
+        <RecruitList data={list} p={lp} tw={tw} zone={zone} roleGroups={roleGroups} canOnboard={checklists.length > 0}
+          sites={sites.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name }))} />
+      )}
+      {b && <>
       {total > 0 && <p className="muted small" style={{ margin: '0 0 8px' }}>Drag a card to another stage, or use its buttons.</p>}
       <BoardDrag>
         {b.columns.map(col => (
@@ -121,6 +141,7 @@ export default async function RecruitmentPage({ searchParams }: { searchParams: 
       {b.notProceeding > 0 && (
         <p className="muted small">{b.notProceeding} not proceeding in the last 30 days. <Link href="/recruitment/not-proceeding">See them</Link></p>
       )}
+      </>}
     </>
   );
 }
