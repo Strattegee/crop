@@ -10,7 +10,7 @@ import { configureApp } from '../src/configure.js';
 import { addDays, todayIn } from '../src/workforce/compliance.js';
 import { defaultFocus, kpiByKey, KPIS, kpisFor, median, percent, seesCosts, standing, targetRefusal, trendDays, worded } from '../src/dashboard/kpis.js';
 import { DEFAULT_WORDS, makeWords, T } from '../src/terms/words.js';
-import { dailyEmail, emailValue, worthSending } from '../src/dashboard/daily-email.js';
+import { dailyEmail, emailValue, namesLine, worthSending } from '../src/dashboard/daily-email.js';
 import { ExpiryReminders } from '../src/notifications/reminders.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -72,6 +72,13 @@ describe('daily dashboard email (David, 31 Oct)', () => {
     expect(dailyEmail({ ...base, numbers: [{ ...base.numbers[0], standing: 'on_target' }] })).toBeNull();
     expect(worthSending(base)).toBe(true);
     expect(worthSending({ ...base, numbers: [], decisions: { leave: 1, changes: 0 } })).toBe(true);
+  });
+  it('says which sites the list covers for someone limited to some (5 Nov)', () => {
+    expect(namesLine(['Smith St'])).toBe('Smith St');
+    expect(namesLine(['Jones Rd', 'Smith St', 'Avon'])).toBe('Avon, Jones Rd and Smith St');
+    const attention = { total: 1, urgent: 0, items: [{ urgent: false, title: 'Nobody on this shift', when: '2026-11-03 09:00 Carer', where: 'Bayside (starts in 1 day)' }] };
+    expect(dailyEmail({ ...base, attention, sites: ['Bayside', 'Albert Park'] })!.body).toContain('Needs attention in the next 7 days at Albert Park and Bayside: 1');
+    expect(dailyEmail({ ...base, attention })!.body).toContain('Needs attention in the next 7 days: 1');
   });
   it('puts numbers off target first and says what to do', () => {
     const m = dailyEmail({ ...base, numbers: [...base.numbers].reverse(),

@@ -166,4 +166,35 @@ describe('expiry reminders', () => {
     const digests = (await sent()).filter(m => m.template === 'daily_dashboard');
     expect(digests.at(-1)!.body).toContain('- Forklift 2 (FL-02): Registration is due today; booked on 1 shift after that date');
   });
+
+  it('gives people limited to some sites their own Needs attention, without the dates (5 Nov)', async () => {
+    await owner.query(`insert into invitations(tenant_id, email, role) values ($1,'sup@x.com','supervisor'),($1,'nosites@x.com','supervisor'),($1,'lim@x.com','allocator')`, [tenantId]);
+    for (const [sub, email] of [['sup', 'sup@x.com'], ['nosites', 'nosites@x.com'], ['lim', 'lim@x.com']]) {
+      idp.addUser({ sub, email, email_verified: true, name: `${sub} Example` });
+      await http().get('/me').set('authorization', `Bearer ${await idp.token(sub, { expiresIn: '1h' })}`).expect(200);
+    }
+    const site = async (name: string) => (await owner.query<{ id: string }>(`insert into facilities(tenant_id, name, timezone) values ($1,$2,'UTC') returning id`, [tenantId, name])).rows[0].id;
+    const south = await site('South Yard');
+    const east = await site('East Yard');
+    for (const [f, role] of [[south, 'Rigger'], [east, 'Dogman']]) {
+      await owner.query(`insert into shifts(tenant_id, facility_id, role, starts_at, ends_at) values ($1,$2,$3, now() + interval '1 day', now() + interval '1 day 4 hours')`, [tenantId, f, role]);
+    }
+    const user = async (email: string) => (await owner.query<{ id: string }>('select id from users where email = $1', [email])).rows[0].id;
+    await owner.query(`insert into member_sites(tenant_id, user_id, facility_id) values ($1,$2,$3),($1,$4,$5)`,
+      [tenantId, await user('sup@x.com'), south, await user('lim@x.com'), east]);
+
+    const day = addDays(TODAY, 40);
+    await reminders.runOnce(at(9, day));
+    const mail = (await owner.query<{ to_address: string; body: string }>(
+      `select to_address, body from notifications where template = 'daily_dashboard' and dedupe_key like $1`, [`daily:${day}:%`])).rows;
+    const to = (who: string) => mail.find(m => m.to_address === who)?.body ?? '';
+    expect(to('sup@x.com')).toContain('Needs attention in the next 7 days at South Yard: 1');
+    expect(to('sup@x.com')).toContain('Rigger, South Yard');
+    expect(to('sup@x.com')).not.toMatch(/North Yard|East Yard|Dogman|Dates to follow up|Waiting on your decision/);
+    expect(to('lim@x.com')).toContain('at East Yard: 1');
+    expect(to('lim@x.com')).not.toMatch(/South Yard|North Yard/);
+    expect(mail.some(m => m.to_address === 'nosites@x.com')).toBe(false); // limited to no sites: nothing to act on
+    expect(to('office@x.com')).toContain('Needs attention in the next 7 days:');
+    expect(to('office@x.com')).not.toContain('Needs attention in the next 7 days at');
+  });
 });
