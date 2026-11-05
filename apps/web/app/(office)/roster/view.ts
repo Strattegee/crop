@@ -481,13 +481,14 @@ export function shiftMarkers(s: MarkerShift, letters: MarkerLetters = DEFAULT_MA
 }
 
 /**
- * The strip's filters (David, 2 Nov): kept in the roster URL (`role`, `hours=left`) like the rest of the roster's state,
- * so they survive dropping someone onto a shift (the server action returns to `back`) and picking another shift.
+ * The strip's filters (David, 2 Nov): kept in the roster URL (`role`, `hours=left`, `team=1`) like the rest of the roster's
+ * state, so they survive dropping someone onto a shift (the server action returns to `back`) and picking another shift.
+ * `team` (projects, 4 Nov) shows only the site's team; it only applies when one site is chosen.
  */
-export type StripFilter = { role: string; hoursLeft: boolean };
-export function parseStripFilter(sp: { role?: string; hours?: string }): StripFilter {
+export type StripFilter = { role: string; hoursLeft: boolean; team: boolean };
+export function parseStripFilter(sp: { role?: string; hours?: string; team?: string }): StripFilter {
   const role = (sp.role ?? '').trim().slice(0, 100);
-  return { role, hoursLeft: sp.hours === 'left' };
+  return { role, hoursLeft: sp.hours === 'left', team: sp.team === '1' };
 }
 
 /** The current roster URL with new strip filters; everything else kept, old messages dropped. */
@@ -495,9 +496,28 @@ export function withStripFilter(current: string, f: StripFilter): string {
   const u = new URL(current.startsWith('/roster') ? current : '/roster', 'http://roster.local');
   if (f.role) u.searchParams.set('role', f.role); else u.searchParams.delete('role');
   if (f.hoursLeft) u.searchParams.set('hours', 'left'); else u.searchParams.delete('hours');
+  if (f.team) u.searchParams.set('team', '1'); else u.searchParams.delete('team');
   u.searchParams.delete('done');
   u.searchParams.delete('error');
   return `${u.pathname}${u.search}`;
+}
+
+/** A site's team entry as `GET /facilities/:id/team?all=true` gives it (local dates; `to` null = no end). */
+export type TeamEntry = { workerId: string; teamRole: string; from: string; to: string | null };
+
+/**
+ * Who is on the site's team at any time in the dates on screen (`from`..`to`, local dates), with their team role
+ * (supervisor wins when someone has both entries in the period). People whose time on the team ended before, or
+ * starts after, the period aren't on it for this roster.
+ */
+export function teamDuring(entries: TeamEntry[], from: string, to: string): Map<string, 'supervisor' | 'worker'> {
+  const out = new Map<string, 'supervisor' | 'worker'>();
+  for (const e of entries) {
+    if (e.from > to || (e.to !== null && e.to < from)) continue;
+    const role = e.teamRole === 'supervisor' ? 'supervisor' : 'worker';
+    if (out.get(e.workerId) !== 'supervisor') out.set(e.workerId, role);
+  }
+  return out;
 }
 
 /** A shift picked for assigning several at once (David, 2 Nov): its local date and start time. */

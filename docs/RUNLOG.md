@@ -819,3 +819,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: API tests (only accepted requests, the right client, once, the order and its shifts, the request showing its order, another business can't use it) and web tests for the new wording helpers; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this run).
 - Next: the light client portal needs a client sign-in role (held for David: sign-in and permissions), so the next backlog item not waiting on David.
 - Waiting on David: unchanged (customer acknowledgement email, the client sign-in role, the questions already listed).
+
+## 2026-11-05 midday, 12:10pm Melbourne (scheduled run): the site's team on the roster strip
+- Shipped: the last open screen piece of projects. When the roster shows one site or project, the people strip on the left marks who is on its team in the dates on screen ("Team", or "Team · sup" for a supervisor), lists them first in each role group, and has a "Team only" tick box beside "Has hours left". Like the other strip filters it stays set after dragging someone onto a shift. Never a block: everyone else is still there, after the team.
+- Checked: web tests for the dates rule (someone who left the day before or starts next week isn't counted; supervisor wins) and the address; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this run).
+- Next: the next backlog item not waiting on David (a daily email for limited people, or the names-only picker for project teams).
+- Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
