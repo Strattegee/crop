@@ -371,6 +371,8 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .duty-list label.inline { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 .rcard .cv { padding: 0 6px 3px; font-size: 10px; font-weight: 600; color: #8a5a00; overflow-wrap: anywhere; }
 .rcard .dt { padding: 0 6px 3px; font-size: 10px; font-weight: 600; color: #6a4c93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcard .pstage { padding: 0 6px 3px; font-size: 10px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tline.pstage { color: var(--muted); }
 /* Dashboard: Needs attention (same marks as the roster's panel). */
 .dash-attention h2 { margin-top: 0; font-size: 1.1rem; }
 .dash-attention .bad { color: var(--bad); }
