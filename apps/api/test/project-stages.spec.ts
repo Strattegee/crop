@@ -12,6 +12,7 @@ import {
   addDays, GAP_REASON, moveLaterStages, moveSummary, noRetime, parseWeekdays, shiftsOutside, type PlacedShift, planSlots, rosterSummary, stageLine, stageOverlaps, stageProblem, stageShortLine,
   shiftsToRetime, supervisorDays, supervisorRole, toCreate, type TimedShift, weekdaysLine, workingDays,
 } from '../src/projects/stages.js';
+import { copyOffset, copyStageDates, copySummary } from '../src/projects/stages.js';
 import { itemLine, plannedQuantity, stageItemLines } from '../src/projects/stage-items.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
@@ -198,6 +199,28 @@ describe('project stages: items (5 Nov)', () => {
     r = stageItemLines(stages, planned, used, new Map([['g', 58]]));
     expect(r.shortages).toEqual([]);
     expect(stageItemLines(stages, planned, used, new Map()).shortages[0].line).toBe('Gloves: stages still need 58 pair, none on hand here');
+  });
+});
+
+describe('project stages: copying to another project (rules)', () => {
+  it('keeps each stage\'s working days and its distance from the first', () => {
+    // Mon 9 Nov – Thu 12 Nov (4 working days), copied 2 days later: starts Wed 11, still 4 working days (to Mon 16).
+    const demo = { startsOn: '2026-11-09', endsOn: '2026-11-12', weekdays: [1, 2, 3, 4, 5] };
+    expect(copyStageDates(demo, 2)).toEqual({ startsOn: '2026-11-11', endsOn: '2026-11-16' });
+    expect(copyStageDates(demo, 7)).toEqual({ startsOn: '2026-11-16', endsOn: '2026-11-19' });
+    // Landing on a Saturday moves on to Monday.
+    expect(copyStageDates({ startsOn: '2026-11-13', endsOn: '2026-11-13', weekdays: [1, 2, 3, 4, 5] }, 1)).toEqual({ startsOn: '2026-11-16', endsOn: '2026-11-16' });
+    expect(copyOffset([{ startsOn: '2026-11-13' }, { startsOn: '2026-11-09' }], '2026-12-07')).toBe(28);
+  });
+
+  it('sums up a copy in the business\'s words', () => {
+    const r = { copied: 3, people: 4, peopleLeftOff: [{ name: 'Dee Example', stage: 'Clean', reason: 'not active' }], items: 2, itemsLeftOff: [],
+      areasAdded: ['Hut'], areasMissing: [], hoursInstead: 1, equipment: 1 };
+    expect(copySummary(r, 'Beach Hut', '2026-11-16', makeWords([{ code: 1030, singular: 'Zone', plural: 'Zones' }]))).toBe(
+      'Copied 3 stages from Beach Hut, the first starting Mon 16 Nov. 4 people named; left off: Dee Example (not active). 2 planned items. '
+      + 'Added zone: Hut. 1 stage keeps the hours of a shift type that belongs to the other site. Equipment isn\'t copied: book it for each stage. '
+      + 'Nothing is rostered until you press Roster.');
+    expect(copySummary({ ...r, copied: 0 }, 'Beach Hut', '2026-11-16')).toBe('Beach Hut has no stages to copy.');
   });
 });
 
@@ -482,6 +505,50 @@ describe('project stages: API (migration 0093)', () => {
     await http().post(`/project-stages/${ids.a}/items`).set(as('sup')).send({ itemId: gloves, quantity: 1 }).expect(403);
     await http().post(`/project-stages/${ids.a}/items`).set(as('nosy')).send({ itemId: gloves, quantity: 1 }).expect(404);
     expect((await owner.query(`select 1 from audit_log where table_name = 'project_stage_items'`)).rowCount).toBeGreaterThan(0);
+  });
+
+  it('copies a project\'s stages to a new project', async () => {
+    const src = (await http().get(`/projects/${ids.p}/stages`).set(as('alloc')).expect(200)).body.stages as (Stage & { weekdays: number[]; areaName: string | null; items: { name: string }[] })[];
+    ids.q = (await http().post('/facilities').set(as('admin')).send({ name: 'Boat Shed', kind: 'project', state: 'VIC', postcode: '3000' }).expect(201)).body.id;
+    const sources = (await http().get(`/projects/${ids.q}/stage-sources`).set(as('alloc')).expect(200)).body;
+    expect(sources).toEqual([expect.objectContaining({ id: ids.p, name: 'Beach Hut', stageCount: src.length })]);
+    expect(sources[0].line).toMatch(/^3 stages: /);
+    const first = addDays(monday, 28);
+    const v = (await http().post(`/projects/${ids.q}/stages/copy`).set(as('admin')).send({ fromProjectId: ids.p, startsOn: first }).expect(201)).body;
+    expect(v.copied).toBe(src.length);
+    expect(v.areasAdded).toEqual(['Hut']);
+    expect(v.summary).toMatch(/^Copied 3 stages from Beach Hut, the first starting /);
+    expect(v.summary).toContain('Nothing is rostered until you press Roster.');
+    const by = copyOffset(src, first);
+    for (const s of src) {
+      const c = (v.stages as typeof src).find(x => x.name === s.name)!;
+      expect(c).toMatchObject({ ...copyStageDates(s, by), weekdays: s.weekdays, makeUpLine: s.makeUpLine, teamName: s.teamName, areaName: s.areaName });
+      expect(c.people.map(p => p.workerId).sort()).toEqual(s.people.map(p => p.workerId).sort());
+      expect(c.items.map(i => i.name)).toEqual(s.items.filter(i => (i as { id: string | null } & typeof i).id !== null).map(i => i.name));
+      expect(c.rostered.shifts).toBe(0);
+    }
+    // Nothing in the source changed, and no shifts were made.
+    expect((await owner.query('select 1 from shifts where facility_id = $1', [ids.q])).rowCount).toBe(0);
+    expect((await http().get(`/projects/${ids.p}/stages`).set(as('alloc')).expect(200)).body.stages.length).toBe(src.length);
+
+    // An allocator can't add areas: the stages come without one, named in the summary; people no longer active are left off.
+    ids.r = (await http().post('/facilities').set(as('admin')).send({ name: 'Jetty', kind: 'project', state: 'VIC' }).expect(201)).body.id;
+    await owner.query(`update workers set status = 'inactive' where id = $1`, [ids.cy]);
+    const w = (await http().post(`/projects/${ids.r}/stages/copy`).set(as('alloc')).send({ fromProjectId: ids.p, startsOn: first, items: false }).expect(201)).body;
+    await owner.query(`update workers set status = 'active' where id = $1`, [ids.cy]);
+    expect(w.areasMissing).toEqual(['Hut']);
+    expect(w.peopleLeftOff).toEqual([expect.objectContaining({ name: 'Cy Example', reason: 'not active' })]);
+    expect(w.items).toBe(0);
+    expect((await owner.query('select 1 from areas where facility_id = $1', [ids.r])).rowCount).toBe(0);
+
+    // Refusals.
+    await http().post(`/projects/${ids.q}/stages/copy`).set(as('alloc')).send({ fromProjectId: ids.q, startsOn: first }).expect(400);
+    await http().post(`/projects/${ids.q}/stages/copy`).set(as('alloc')).send({ fromProjectId: ids.p }).expect(400);
+    expect((await http().post(`/projects/${ids.p}/stages/copy`).set(as('alloc')).send({ fromProjectId: ids.r, startsOn: first }).expect(201)).body.copied).toBe(3);
+    await http().post(`/projects/${ids.q}/stages/copy`).set(as('alloc')).send({ fromProjectId: ids.site, startsOn: first }).expect(404);
+    await http().post(`/projects/${ids.q}/stages/copy`).set(as('sup')).send({ fromProjectId: ids.p, startsOn: first }).expect(403);
+    await http().post(`/projects/${ids.q}/stages/copy`).set(as('nosy')).send({ fromProjectId: ids.p, startsOn: first }).expect(404);
+    await http().get(`/projects/${ids.q}/stage-sources`).set(as('sup')).expect(403);
   });
 
   it('keeps supervisors to reading, and other businesses out', async () => {

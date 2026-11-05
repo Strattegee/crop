@@ -304,3 +304,60 @@ export function moveSummary(r: MoveResult, w: Words = DEFAULT_WORDS, removed = f
   if (!parts.length) parts.push(`Every ${w.lower(T.shift)} is already on the stage’s dates and hours.`);
   return parts.join(' ');
 }
+
+/**
+ * Copying a project's stages to another project (stage templates, 5 Nov): each stage starts the same number of days
+ * after the first stage as it did in the source, moved on to its first working day when that date isn't one, and
+ * keeps its number of working days (so a 4-day demolition is still 4 working days however the weekdays fall).
+ */
+export function copyStageDates(s: { startsOn: string; endsOn: string; weekdays: readonly number[] }, by: number): { startsOn: string; endsOn: string } {
+  const n = workingDays(s.startsOn, s.endsOn, s.weekdays).length;
+  let start = addDays(s.startsOn, by);
+  if (!n) return { startsOn: start, endsOn: addDays(s.endsOn, by) };
+  while (!s.weekdays.includes(isoWeekday(start))) start = addDays(start, 1);
+  let end = start;
+  for (let count = 1; count < n;) {
+    end = addDays(end, 1);
+    if (s.weekdays.includes(isoWeekday(end))) count++;
+  }
+  return { startsOn: start, endsOn: end };
+}
+
+/** How far the stages move: from the source's first stage to the chosen first day. */
+export function copyOffset(stages: { startsOn: string }[], firstDay: string): number {
+  if (!stages.length) return 0;
+  return daysBetween(stages.reduce((m, s) => (s.startsOn < m ? s.startsOn : m), stages[0].startsOn), firstDay);
+}
+
+export interface CopyResult {
+  copied: number;
+  people: number;
+  peopleLeftOff: { name: string; stage: string; reason: string }[];
+  items: number;
+  itemsLeftOff: { name: string; stage: string }[];
+  areasAdded: string[];
+  areasMissing: string[];
+  /** Stages whose site-only shift type couldn't come with them, so they keep its hours instead. */
+  hoursInstead: number;
+  equipment: number;
+}
+
+/** "Copied 3 stages from Beach Hut, the first starting Mon 16 Nov. 5 people named, 1 left off: …". */
+export function copySummary(r: CopyResult, from: string, firstDay: string, w: Words = DEFAULT_WORDS): string {
+  if (!r.copied) return `${from} has no stages to copy.`;
+  const parts = [`Copied ${r.copied === 1 ? '1 stage' : `${r.copied} stages`} from ${from}, the first starting ${fmtDate(firstDay)}.`];
+  if (r.people || r.peopleLeftOff.length) {
+    const left = r.peopleLeftOff.map(p => `${p.name} (${p.reason})`).join(', ');
+    parts.push(`${r.people === 1 ? '1 person' : `${r.people} people`} named${left ? `; left off: ${left}` : ''}.`);
+  }
+  if (r.items || r.itemsLeftOff.length) {
+    const left = [...new Set(r.itemsLeftOff.map(i => i.name))].join(', ');
+    parts.push(`${r.items === 1 ? '1 planned item' : `${r.items} planned items`}${left ? `; no longer in use: ${left}` : ''}.`);
+  }
+  if (r.areasAdded.length) parts.push(`Added ${r.areasAdded.length === 1 ? w.lower(T.area) : w.lower(T.area, true)}: ${r.areasAdded.join(', ')}.`);
+  if (r.areasMissing.length) parts.push(`Not ${w.a(T.area)} of this ${w.lower(T.project)}, so left without one: ${r.areasMissing.join(', ')}.`);
+  if (r.hoursInstead) parts.push(`${r.hoursInstead === 1 ? '1 stage keeps' : `${r.hoursInstead} stages keep`} the hours of a shift type that belongs to the other ${w.lower(T.site)}.`);
+  if (r.equipment) parts.push(`${w.one(T.equipment)} isn't copied: book it for each stage.`);
+  parts.push(`Nothing is rostered until you press Roster.`);
+  return parts.join(' ');
+}
