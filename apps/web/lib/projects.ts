@@ -74,3 +74,45 @@ export function joinable<W extends { id: string; status: string }>(all: W[], tea
   const on = new Set(team.filter(m => m.state !== 'ended').map(m => m.workerId));
   return all.filter(w => (w.status === 'active' || w.status === 'onboarding') && !on.has(w.id));
 }
+
+/**
+ * Projects under clients (David, 5 Nov). The roster's site picker: ordinary sites, then projects in their own group
+ * (each with its client's name, so a project can be picked on its own), plus the "+ New project" choice.
+ */
+export const NEW_PROJECT = '__new';
+export type PickerPlace = { id: string; name: string; kind?: string | null; clientName?: string | null; active: boolean };
+export function siteChoices(places: PickerPlace[]): { sites: { id: string; name: string }[]; projects: { id: string; name: string }[] } {
+  const live = places.filter(p => p.active);
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'en-AU', { sensitivity: 'base' });
+  return {
+    sites: live.filter(p => p.kind !== 'project').map(p => ({ id: p.id, name: p.name })).sort(byName),
+    projects: live.filter(p => p.kind === 'project').map(p => ({ id: p.id, name: p.clientName ? `${p.name} · ${p.clientName}` : p.name })).sort(byName),
+  };
+}
+
+/** Where a new project goes from: the roster (back to it, that project on its own, in that week) or a client's page. */
+export type NewProjectFrom = { from: 'roster'; week: string | null } | { from: 'client'; clientId: string } | { from: 'projects' };
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ID = /^[0-9a-f-]{36}$/i;
+export function newProjectFrom(from: string | null | undefined, week: string | null | undefined, clientId: string | null | undefined): NewProjectFrom {
+  if (from === 'roster') return { from: 'roster', week: week && DAY.test(week) ? week : null };
+  if (from === 'client' && clientId && ID.test(clientId)) return { from: 'client', clientId };
+  return { from: 'projects' };
+}
+/** The page to go back to when the form has a problem. */
+export function newProjectRetry(f: NewProjectFrom): string {
+  if (f.from === 'roster') return `/roster?site=${NEW_PROJECT}${f.week ? `&week=${f.week}` : ''}`;
+  if (f.from === 'client') return `/clients/${f.clientId}?newProject=1`;
+  return '/projects?new=1';
+}
+/** After creating: from the roster, the new project alone on the roster in the same week (a Draft week: nothing published); otherwise its page. */
+export function newProjectDone(f: NewProjectFrom, id: string): string {
+  return f.from === 'roster' ? `/roster?site=${id}${f.week ? `&week=${f.week}` : ''}` : `/projects/${id}`;
+}
+
+/** A client's projects card: current ones first (as the API orders them), archived only counted. */
+export function clientProjectsLine(n: { current: number; archived: number }, one: string, many: string): string {
+  if (!n.current && !n.archived) return `No ${many.toLowerCase()} yet.`;
+  const cur = n.current ? `${n.current} current ${n.current === 1 ? one.toLowerCase() : many.toLowerCase()}` : `No current ${many.toLowerCase()}`;
+  return n.archived ? `${cur} · ${n.archived} archived` : cur;
+}

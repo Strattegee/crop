@@ -825,3 +825,8 @@ Newest first. One entry per working session or scheduled run.
 - Checked: web tests for the dates rule (someone who left the day before or starts next week isn't counted; supervisor wins) and the address; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this run).
 - Next: the next backlog item not waiting on David (a daily email for limited people, or the names-only picker for project teams).
 - Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-05 afternoon (session with David): projects under clients
+- Shipped: David's first decision of today (`docs/decisions/2026-11-05-teams-and-stages.md`). A client's page now has a Projects card listing that client's projects (status, dates, manager, anything unfilled in the next 7 days) with "+ New project for <client>". The clients list counts projects separately from sites. In the menu, Projects now sits indented under Clients. A project's page goes back to its client. On the roster, the site picker lists projects in their own group with the client's name, and owners and admins can choose "+ New project": a short form (name, client, code, dates, work areas) that comes back to the roster with only that project showing, in its Draft week, ready to set up.
+- Checked: API tests (a client's projects apart from its sites, the counts) and web tests for the picker grouping and where the form returns to; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in in this session).
+- Next: standing teams (part 2, being built alongside) and project stages (part 3).

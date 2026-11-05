@@ -13,7 +13,7 @@ import { businessNumberKind, showBusinessNumber } from '../../../lib/business-nu
 
 export const dynamic = 'force-dynamic';
 
-type ClientRow = { id: string; name: string; abn: string | null; status: string; billingEmail: string | null; facilityCount: number; confirmsBookings: boolean; rank: number | null };
+type ClientRow = { id: string; name: string; abn: string | null; status: string; billingEmail: string | null; facilityCount: number; projectCount?: number; confirmsBookings: boolean; rank: number | null };
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ error?: string; done?: string }> }) {
   const tw = await words();
@@ -42,13 +42,14 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       <div className="card" style={{ overflowX: 'auto' }}>
         {clients.length === 0 ? <p className="muted" style={{ margin: 0 }}>No clients yet.</p> : (
           <table>
-            <thead><tr><th>Name</th><th>{bn.label}</th><th>Facilities</th><th>Billing email</th><th>Rank</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>{bn.label}</th><th>{tw.many(T.site)}</th><th>{tw.many(T.project)}</th><th>Billing email</th><th>Rank</th><th>Status</th></tr></thead>
             <tbody>
               {clients.map(c => (
                 <tr key={c.id}>
                   <td><Link href={`/clients/${c.id}`}>{c.name}</Link></td>
                   <td>{showBusinessNumber(c.abn)}</td>
                   <td>{c.facilityCount}</td>
+                  <td>{c.projectCount ? <Link href={`/clients/${c.id}#projects`}>{c.projectCount}</Link> : <span className="muted">0</span>}</td>
                   <td>{c.billingEmail ?? '—'}</td>
                   <td>{rankChip(c.rank) ? <span className="rank-chip">{rankChip(c.rank)}</span> : '—'}{c.confirmsBookings && <div className="muted small">Confirms bookings</div>}</td>
                   <td><Badge label={CLIENT_STATUS[c.status]} /></td>

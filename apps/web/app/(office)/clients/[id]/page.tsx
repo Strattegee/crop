@@ -11,25 +11,33 @@ import { contactLine, rankChip, type ClientContact } from '../../../../lib/clien
 import { ClientAllocationFields } from '../client-fields';
 import { OfficeField } from '../../settings/offices/office-field';
 import { businessNumberKind, showBusinessNumber } from '../../../../lib/business-number';
+import { clientProjectsLine, statusBadge, type ProjectStatus } from '../../../../lib/projects';
+import { NewProjectForm } from '../../projects/new-project-form';
 
 export const dynamic = 'force-dynamic';
 
+type ProjectRow = { id: string; name: string; code: string | null; status: ProjectStatus; dates: string | null; managerName: string | null; areaCount: number; unfilledNext7: number };
 type ClientDetail = {
   id: string; name: string; abn: string | null; status: string; billingContactName: string | null; billingEmail: string | null;
   phone: string | null; notes: string | null; confirmsBookings: boolean; rank: number | null;
-  facilities: { id: string; name: string; suburb: string | null; state: string | null; active: boolean; areaCount: number }[];
+  facilities: { id: string; name: string; kind?: string; suburb: string | null; state: string | null; active: boolean; areaCount: number }[];
   contacts?: ClientContact[];
 };
 
-export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string }> }) {
+export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; done?: string; newProject?: string }> }) {
   const tw = await words();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [c, agency, settings, offices] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' })),
-    api<{ id: string; name: string; active: boolean }[]>('/offices').catch(() => [])]);
+  const [c, agency, settings, offices, projects] = await Promise.all([api<ClientDetail>(`/clients/${id}`), currentAgency(), api<{ country?: string }>('/settings').catch(() => ({ country: 'AU' })),
+    api<{ id: string; name: string; active: boolean }[]>('/offices').catch(() => []),
+    api<ProjectRow[]>(`/projects?status=all&clientId=${id}`).catch(() => [] as ProjectRow[])]);
   const home = settings.country ?? 'AU';
   const bn = businessNumberKind(home);
   const canEdit = agency?.role === 'owner' || agency?.role === 'admin';
   const contacts = c.contacts ?? [];
+  // Projects sit under their client (David, 5 Nov); the Sites card lists the client's ordinary sites.
+  const sites = c.facilities.filter(f => f.kind !== 'project');
+  const people = canEdit ? await api<{ userId: string; name: string }[]>('/offices/people').catch(() => []) : [];
+  const P = tw.many(T.project);
   return (
     <>
       <p style={{ margin: '0 0 8px' }}><Link href="/clients">← Clients</Link></p>
@@ -40,11 +48,11 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>{tw.many(T.site)}</h2>
-        {c.facilities.length === 0 ? <p className="muted">No facilities yet.</p> : (
+        {sites.length === 0 ? <p className="muted">No {tw.lower(T.site, true)} yet.</p> : (
           <table>
             <thead><tr><th>Name</th><th>Location</th><th>Areas</th></tr></thead>
             <tbody>
-              {c.facilities.map(f => (
+              {sites.map(f => (
                 <tr key={f.id} style={{ opacity: f.active ? 1 : 0.5 }}>
                   <td><Link href={`/facilities/${f.id}`}>{f.name}</Link></td>
                   <td>{[f.suburb, f.state].filter(Boolean).join(', ') || '—'}</td>
@@ -55,7 +63,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
           </table>
         )}
         {canEdit && (
-          <details style={{ marginTop: 12 }} open={c.facilities.length === 0}>
+          <details style={{ marginTop: 12 }} open={sites.length === 0 && projects.length === 0}>
             <summary style={{ cursor: 'pointer' }}>Add a facility</summary>
             <form action={addFacility.bind(null, c.id)} className="form-row" style={{ marginTop: 12 }}>
               <label>Name<input name="name" required maxLength={200} placeholder="e.g. Northside Private Hospital" /></label>
@@ -69,6 +77,36 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
         )}
       </div>
 
+      <div className="card" style={{ overflowX: 'auto' }} id="projects">
+        <h2>{P}</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          {clientProjectsLine({ current: projects.filter(p => p.status !== 'archived').length, archived: projects.filter(p => p.status === 'archived').length }, tw.one(T.project), P)}
+          {' '}Each has its own {tw.lower(T.area, true)}, team and roster; choose it on the roster to see it on its own.
+        </p>
+        {projects.length > 0 && (
+          <table>
+            <thead><tr><th>{tw.one(T.project)}</th><th>Status</th><th>Dates</th><th>Manager</th><th className="num">Unfilled, next 7 days</th></tr></thead>
+            <tbody>
+              {projects.map(p => (
+                <tr key={p.id} style={{ opacity: p.status === 'archived' ? 0.6 : 1 }}>
+                  <td><Link href={`/projects/${p.id}`}><strong>{p.name}</strong></Link>{p.code && <span className="muted"> · {p.code}</span>}
+                    <div className="muted small">{tw.count(p.areaCount, T.area)}</div></td>
+                  <td><Badge label={statusBadge(p.status)} /></td>
+                  <td className="small">{p.dates ?? <span className="muted">—</span>}</td>
+                  <td className="small">{p.managerName ?? <span className="muted">—</span>}</td>
+                  <td className="num">{p.unfilledNext7 > 0 ? <span className="badge warn">{p.unfilledNext7}</span> : <span className="muted">0</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {canEdit && (
+          <details style={{ marginTop: 12 }} open={sp.newProject === '1'}>
+            <summary style={{ cursor: 'pointer' }}>+ New {tw.lower(T.project)} for {c.name}</summary>
+            <NewProjectForm from="client" clientId={c.id} clients={[{ id: c.id, name: c.name, status: c.status }]} people={people} offices={offices} country={home} />
+          </details>
+        )}
+      </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Contacts</h2>

@@ -136,6 +136,23 @@ describe('projects: API', () => {
     await http().get('/projects').set(as('worker')).expect(403);
   });
 
+  it('lists a client’s projects apart from its sites (David, 5 Nov)', async () => {
+    const client = (await http().post('/clients').set(as('admin')).send({ name: 'Example Homes' }).expect(201)).body.id as string;
+    await http().post('/facilities').set(as('admin')).send({ name: 'Example Homes office', clientId: client, state: 'VIC' }).expect(201);
+    for (const name of ['Beach Hut', 'Garden Shed']) {
+      await http().post('/facilities').set(as('admin')).send({ name, kind: 'project', clientId: client, state: 'VIC' }).expect(201);
+    }
+    const mine = (await http().get(`/projects?clientId=${client}`).set(as('alloc')).expect(200)).body as { name: string; clientId: string }[];
+    expect(mine.map(p => p.name)).toEqual(['Beach Hut', 'Garden Shed']);
+    expect(mine.every(p => p.clientId === client)).toBe(true);
+    expect(((await http().get('/projects?clientId=not-an-id').set(as('alloc')).expect(200)).body as unknown[]).length).toBeGreaterThan(2);
+    const row = ((await http().get('/clients').set(as('alloc')).expect(200)).body as { id: string; facilityCount: number; projectCount: number }[])
+      .find(c => c.id === client);
+    expect(row).toMatchObject({ facilityCount: 1, projectCount: 2 });
+    const detail = (await http().get(`/clients/${client}`).set(as('alloc')).expect(200)).body as { facilities: { name: string; kind: string }[] };
+    expect(detail.facilities.map(f => `${f.name}:${f.kind}`)).toEqual(['Beach Hut:project', 'Example Homes office:site', 'Garden Shed:project']);
+  });
+
   it('keeps a team separately from shifts, and puts it first among candidates', async () => {
     const m = (await http().post(`/facilities/${ids.smith}/team`).set(as('alloc'))
       .send({ workerId: ids.ben, teamRole: 'supervisor', areaId: ids['Level 1'], startsOn: ahead(-10) }).expect(201)).body;

@@ -3,15 +3,19 @@
 import { redirect } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { attempt, failTo as fail, str } from '../../../lib/actions';
-import { parseAreaList } from '../../../lib/projects';
+import { newProjectDone, newProjectFrom, newProjectRetry, parseAreaList } from '../../../lib/projects';
 import { T, words } from '../../../lib/terms';
 
 const page = (id: string, tab?: string) => `/projects/${id}${tab ? `?tab=${tab}` : ''}`;
 const opt = (f: FormData, k: string) => (f.has(k) ? { [k]: str(f, k) ?? null } : {});
 
-/** New project (a site of kind project) with its work areas, then its page. Owners and admins. */
+/**
+ * New project (a site of kind project) with its work areas. Owners and admins. From the roster it goes back to the
+ * roster with the new project on its own; from the Projects list or a client's page, to the project's page.
+ */
 export async function addProject(f: FormData) {
   let id: string | undefined;
+  const from = newProjectFrom(str(f, 'from'), str(f, 'week'), str(f, 'clientId'));
   const areas = parseAreaList(str(f, 'areas'));
   try {
     id = (await api<{ id: string }>('/facilities', {
@@ -26,10 +30,14 @@ export async function addProject(f: FormData) {
     })).id;
     for (const name of areas) await api(`/facilities/${id}/areas`, { method: 'POST', body: { name } });
   } catch (err) {
-    fail(id ? page(id, 'areas') : '/projects?new=1', err);
+    fail(id ? page(id, 'areas') : newProjectRetry(from), err);
   }
   const tw = await words();
-  redirect(`/projects/${id}?done=${encodeURIComponent(areas.length ? `${tw.one(T.project)} added with its ${tw.lower(T.area, true)}.` : `${tw.one(T.project)} added. Add its ${tw.lower(T.area, true)} next.`)}`);
+  const next = newProjectDone(from, id!);
+  if (from.from === 'roster') {
+    redirect(`${next}&done=${encodeURIComponent(`${tw.one(T.project)} added. It is shown on its own here; add its ${tw.lower(T.shift, true)} to this Draft week.`)}`);
+  }
+  redirect(`${next}?done=${encodeURIComponent(areas.length ? `${tw.one(T.project)} added with its ${tw.lower(T.area, true)}.` : `${tw.one(T.project)} added. Add its ${tw.lower(T.area, true)} next.`)}`);
 }
 
 export async function updateProject(id: string, f: FormData) {

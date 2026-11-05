@@ -56,7 +56,8 @@ export class ClientsController {
   @Get('clients')
   list(@Tenant() t: Membership) {
     return withTenant(this.pool, t.tenantId, async db => (await db.query(
-      `select ${COLS}, (select count(*)::int from facilities f where f.client_id = c.id and f.active) as "facilityCount"
+      `select ${COLS}, (select count(*)::int from facilities f where f.client_id = c.id and f.active and f.kind = 'site') as "facilityCount",
+              (select count(*)::int from facilities f where f.client_id = c.id and f.kind = 'project' and f.status <> 'archived') as "projectCount"
          from clients c order by c.status, c.name`,
     )).rows);
   }
@@ -83,7 +84,7 @@ export class ClientsController {
       const client = (await db.query(`select ${COLS} from clients c where c.id = $1`, [id])).rows[0];
       if (!client) throw new NotFoundException('client not found');
       const facilities = (await db.query(
-        `select f.id, f.name, f.suburb, f.state, f.timezone, f.active,
+        `select f.id, f.name, f.kind, f.suburb, f.state, f.timezone, f.active,
                 (select count(*)::int from areas a where a.facility_id = f.id and a.active) as "areaCount"
            from facilities f where f.client_id = $1 order by f.active desc, f.name`, [id],
       )).rows;
