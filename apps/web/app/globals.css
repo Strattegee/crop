@@ -225,6 +225,7 @@ label.inline input[type='checkbox'] { margin: 0; }
 .strip-row .nm { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-row .nm small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .strip-row .ty { display: inline-block; min-width: 14px; text-align: center; border-radius: 3px; font-size: 10px; margin-right: 2px; background: var(--surface-2); color: var(--muted); }
+.strip-row .team-tag { display: inline-block; border-radius: 3px; font-size: 10px; padding: 0 4px; margin-right: 4px; background: var(--hover); color: var(--text); font-weight: 600; }
 .strip-row .ty-bank, .strip-row .ty-casual { background: #fbe9c8; color: #7a4b0c; }
 .strip-row .num.over { color: var(--bad); font-weight: 600; }
 .strip-row .num.under { color: var(--warn); }

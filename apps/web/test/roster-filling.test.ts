@@ -1,31 +1,61 @@
 import { describe, expect, it } from 'vitest';
-import { bestPeople, multiAssignMessage, parseStripFilter, pickedInOrder, reasonFor, withStripFilter, type MenuCandidate } from '../app/(office)/roster/view';
+import { bestPeople, multiAssignMessage, parseStripFilter, pickedInOrder, reasonFor, teamDuring, withStripFilter, type MenuCandidate } from '../app/(office)/roster/view';
 
 describe('strip filters in the roster URL', () => {
   it('reads role and hours left', () => {
-    expect(parseStripFilter({ role: 'Barista', hours: 'left' })).toEqual({ role: 'Barista', hoursLeft: true });
-    expect(parseStripFilter({})).toEqual({ role: '', hoursLeft: false });
-    expect(parseStripFilter({ role: '  ', hours: 'yes' })).toEqual({ role: '', hoursLeft: false });
+    expect(parseStripFilter({ role: 'Barista', hours: 'left' })).toEqual({ role: 'Barista', hoursLeft: true, team: false });
+    expect(parseStripFilter({})).toEqual({ role: '', hoursLeft: false, team: false });
+    expect(parseStripFilter({ team: '1' }).team).toBe(true);
+    expect(parseStripFilter({ team: 'yes' }).team).toBe(false);
+    expect(parseStripFilter({ role: '  ', hours: 'yes' })).toEqual({ role: '', hoursLeft: false, team: false });
   });
 
   it('sets and clears them, keeping the rest of the view and dropping old messages', () => {
-    const u = withStripFilter('/roster?week=2026-11-02&view=area&shift=abc&done=Assigned', { role: 'Barista', hoursLeft: true });
+    const u = withStripFilter('/roster?week=2026-11-02&view=area&shift=abc&done=Assigned', { role: 'Barista', hoursLeft: true, team: false });
     const p = new URL(u, 'http://x').searchParams;
     expect(p.get('role')).toBe('Barista');
     expect(p.get('hours')).toBe('left');
     expect(p.get('week')).toBe('2026-11-02');
     expect(p.get('shift')).toBe('abc');
     expect(p.get('done')).toBeNull();
-    expect(withStripFilter(u, { role: '', hoursLeft: false })).toBe('/roster?week=2026-11-02&view=area&shift=abc');
+    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false })).toBe('/roster?week=2026-11-02&view=area&shift=abc');
   });
 
   it('keeps roles with spaces and ampersands intact', () => {
-    const u = withStripFilter('/roster', { role: 'Kitchen hand & porter', hoursLeft: false });
+    const u = withStripFilter('/roster', { role: 'Kitchen hand & porter', hoursLeft: false, team: false });
     expect(parseStripFilter({ role: new URL(u, 'http://x').searchParams.get('role') ?? undefined }).role).toBe('Kitchen hand & porter');
   });
 
   it('never leaves the roster', () => {
-    expect(withStripFilter('https://evil.example/x', { role: 'A', hoursLeft: false })).toBe('/roster?role=A');
+    expect(withStripFilter('https://evil.example/x', { role: 'A', hoursLeft: false, team: false })).toBe('/roster?role=A');
+  });
+});
+
+describe('the site team on the strip', () => {
+  it('keeps team=1 in the URL and drops it when cleared', () => {
+    const u = withStripFilter('/roster?week=2026-11-02&site=s1', { role: '', hoursLeft: false, team: true });
+    expect(new URL(u, 'http://x').searchParams.get('team')).toBe('1');
+    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false })).toBe('/roster?week=2026-11-02&site=s1');
+  });
+
+  it('counts people on the team at any time in the dates on screen', () => {
+    const t = teamDuring([
+      { workerId: 'a', teamRole: 'worker', from: '2026-10-01', to: null },
+      { workerId: 'b', teamRole: 'worker', from: '2026-11-08', to: null }, // starts on the Sunday
+      { workerId: 'c', teamRole: 'worker', from: '2026-09-01', to: '2026-11-01' }, // left the day before
+      { workerId: 'd', teamRole: 'worker', from: '2026-11-09', to: null }, // starts next week
+      { workerId: 'e', teamRole: 'supervisor', from: '2026-10-01', to: '2026-11-02' }, // last day is the Monday
+    ], '2026-11-02', '2026-11-08');
+    expect([...t.keys()].sort()).toEqual(['a', 'b', 'e']);
+    expect(t.get('e')).toBe('supervisor');
+  });
+
+  it('prefers supervisor when someone has two entries in the period', () => {
+    const t = teamDuring([
+      { workerId: 'a', teamRole: 'supervisor', from: '2026-11-01', to: '2026-11-03' },
+      { workerId: 'a', teamRole: 'worker', from: '2026-11-04', to: null },
+    ], '2026-11-02', '2026-11-08');
+    expect(t.get('a')).toBe('supervisor');
   });
 });
 

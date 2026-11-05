@@ -23,7 +23,7 @@ import { listQuery, parseListParams, stageClass } from '../../../lib/roster-list
 import { ListView } from './list-view';
 import {
   LOOKS, ROSTER_FULL_COOKIE, anchorForSwitch, addDays as addDaysV, anchorOf, barPosition, gapBars, gapsByDay, coveringChoices, dayWindow, tLines, usualChoices, requestsFor, type DayRequest, type UsualAway, daySummary, detailLines, lanes, mondayOf, monthCopyWeeks, parseLook, parseSpan, shiftItemChoices, simpleLine, rangeFor, tickLabel, weekStateLabel, weeksOf, type GapFacts, type Span,
-  addDaysIso, parseStripFilter, shiftMarkers,
+  addDaysIso, parseStripFilter, shiftMarkers, teamDuring, type TeamEntry,
 } from './view';
 
 export const dynamic = 'force-dynamic';
@@ -166,7 +166,7 @@ export default async function RosterPage({ searchParams }: {
   const url = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const merged = { ...at(span, range.anchor), site, view, look: look === 'cards' ? undefined : look, shift: sp.shift, log: sp.log === '1' ? '1' : undefined,
-      role: stripFilter.role || undefined, hours: stripFilter.hoursLeft ? 'left' : undefined, ...listQuery(listP), ...over };
+      role: stripFilter.role || undefined, hours: stripFilter.hoursLeft ? 'left' : undefined, team: stripFilter.team && site ? '1' : undefined, ...listQuery(listP), ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/roster?${p.toString()}`;
   };
@@ -181,7 +181,7 @@ export default async function RosterPage({ searchParams }: {
   // Needs attention starts closed with its counts showing (David, 29 Oct).
   const full = (await cookies()).get(ROSTER_FULL_COOKIE)?.value === '1';
   const monthWeeks = span === 'month' ? weeksOf(days) : [];
-  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, appRequests, fetchedGaps] = await Promise.all([
+  const [roster, facilities, codes, itemList, weekStates, changes, monthStates, templates, rosterSettings, changeRequests, attention, appRequests, fetchedGaps, teamEntries] = await Promise.all([
     api<Roster>(`/roster?from=${range.fetchFrom}&to=${range.fetchTo}&cancelled=true${site ? `&facilityId=${site}` : ''}`),
     api<Facility[]>('/facilities'),
     api<ShiftCode[]>('/shift-codes'),
@@ -199,7 +199,11 @@ export default async function RosterPage({ searchParams }: {
       : api<{ requests: AppRequest[] }>(`/day-requests?from=${week}&to=${addDaysV(week, 6)}${site ? `&facilityId=${site}` : ''}`).catch(() => null),
     span === 'month' ? Promise.resolve([] as CoverGap[])
       : api<CoverGap[]>(`/roster/cover-gaps?from=${span === 'day' ? addDaysV(days[0], -1) : days[0]}&to=${days[days.length - 1]}${site ? `&facilityId=${site}` : ''}`).catch(() => [] as CoverGap[]),
+    // The site's team (projects, 4 Nov): marked on the strip, with a "Team only" filter. One site only.
+    site && span !== 'month' ? api<TeamEntry[]>(`/facilities/${site}/team?all=true`).catch(() => [] as TeamEntry[]) : Promise.resolve([] as TeamEntry[]),
   ]);
+  // Who is on the team at some point in the dates on screen (day view: the whole week, like the strip's hours).
+  const team = teamDuring(teamEntries, span === 'day' ? week : days[0], span === 'day' ? addDaysV(week, 6) : days[days.length - 1]);
   // Cover gaps in this period (day view also fetched the day before, for a gap running past midnight).
   const dayGaps = span === 'day' ? gapBars(fetchedGaps, days[0], !site) : [];
   const coverGaps = fetchedGaps.filter(g => days.includes(g.localDate) || (span === 'day' && gapBars([g], days[0], false).length > 0));
@@ -349,7 +353,7 @@ export default async function RosterPage({ searchParams }: {
     id: p.id, name: p.name, roles: p.roles, role: p.roles[0] ?? 'No role',
     initials: p.name.split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase(),
     type: p.employmentType ?? 'none', typeLabel: { full_time: 'F', part_time: 'P', bank: 'B', casual: 'C' }[p.employmentType ?? ''] ?? '–',
-    hours: p.rosteredHours, contracted: p.contractedHours,
+    hours: p.rosteredHours, contracted: p.contractedHours, team: team.get(p.id),
     ...(selected && !selected.equipmentOnly && !selected.workerId ? fitOf(candidates.find(c => c.workerId === p.id)) : {}),
   }));
   const stripEquip: StripEquip[] = equipment.map(e => ({
@@ -990,8 +994,8 @@ export default async function RosterPage({ searchParams }: {
             refused={new Set(weekStates.filter(w => w.changeRefusal).map(w => w.facilityId))}
             stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)} />
         ) : (<>
-        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter}
-          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), sites: tw.many(T.site) }} />
+        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter} hasTeam={team.size > 0}
+          labels={{ people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), site: tw.one(T.site), sites: tw.many(T.site) }} />
         <DropZone back={here} labels={{ shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true), person: tw.lower(T.worker), people: tw.lower(T.worker, true) }}>
           <table className={`ribbon ${span === 'day' ? 'day' : ''} look-${cardLook}`}>
             <thead>
