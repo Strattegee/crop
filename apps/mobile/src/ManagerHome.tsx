@@ -14,6 +14,7 @@ import type { PersonRow } from './people';
 import type { ProjectRow } from './projects';
 import { ShiftScreen } from './ShiftScreen';
 import { AlertsScreen } from './AlertsScreen';
+import { AddShiftsScreen } from './AddShiftsScreen';
 import { styles } from './styles';
 
 type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
@@ -47,6 +48,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
   const [staff, setStaff] = useState<PersonRow[]>([]);
   const [openPerson, setOpenPerson] = useState<string | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const decider = canDecide(role);
   const can = managerCan(role);
 
@@ -144,6 +146,12 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
     return <AlertsScreen tenant={tenant} word={word} rosterWord={rosterWord} onBack={() => setAlertsOpen(false)} onSignedOut={onSignedOut} />;
   }
 
+  if (adding && rosterView) {
+    return <AddShiftsScreen tenant={tenant} weekStart={rosterView.weekStart} day={rosterView.day} facilityId={rosterView.facilityId} today={today}
+      word={word} siteWord={siteWord} onBack={() => setAdding(false)} onSignedOut={onSignedOut}
+      onAdded={site => { setAdding(false); if (rosterView.facilityId && rosterView.facilityId !== site) setRosterView({ ...rosterView, facilityId: site }); load(); }} />;
+  }
+
   if (openShift) {
     return <ShiftScreen tenant={tenant} shiftId={openShift} role={role} today={today} word={word} equipmentWord={equipmentWord} onSignedOut={onSignedOut}
       onBack={() => { setOpenShift(null); load(); }} />;
@@ -171,7 +179,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
       </View>
       {tab === 'roster' && rosterView ? (
         <RosterTab tenant={tenant} role={role} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
-          busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
+          busyOutside={busy} onOpen={setOpenShift} onAdd={can.add ? () => setAdding(true) : undefined} onSignedOut={onSignedOut} />
       ) : tab === 'people' ? (
         <PeopleTab tenant={tenant} today={today} people={people} word={word} credentialWord={credentialWord} busyOutside={busy} onReload={load}
           onOpenShift={setOpenShift} onSignedOut={onSignedOut} list={staff} openId={openPerson} setOpenId={setOpenPerson} />
