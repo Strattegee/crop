@@ -2,12 +2,15 @@ import 'reflect-metadata';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createTestDatabase } from '@crop/db/dist/testing.js';
-import { Client } from 'pg';
+import { withTenant } from '@crop/db';
+import { Client, Pool } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { attentionCounts, attentionItems, offerNote, startsIn, type AttentionShift } from '../src/roster/attention.js';
+import { eligibilityForPairs, pairKey } from '../src/roster/eligibility-batch.js';
+import { eligibilityForShift } from '../src/roster/eligibility-data.js';
 import { addDays, todayIn } from '../src/workforce/compliance.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -180,6 +183,49 @@ describe('needs attention: API', () => {
     const all = await http().get('/roster/attention?days=14').set(as('alloc')).expect(200);
     expect(all.body.items.map((i: { shiftId: string }) => i.shiftId)).toContain(nextFortnight);
     expect(all.body.items.filter((i: { shift: { facilityName: string } }) => i.shift.facilityName === 'Bay Cafe')).toHaveLength(1);
+  });
+
+  it('checks everyone at once with the same answers as one shift at a time', async () => {
+    const tenantId = (await owner.query<{ id: string }>(`select id from tenants where slug = 'cafe'`)).rows[0].id;
+    const at = (date: string, startTime: string, endTime: string, role = 'Chef') => shift(date, { startTime, endTime, role });
+    const s1 = await at(day(1), '09:00', '17:00');
+    const s2 = await at(day(1), '15:00', '23:00'); // overlaps s1
+    const s3 = await at(day(2), '08:30', '14:00'); // 9.5 hours after s2 ends
+    const s4 = await at(day(3), '10:00', '16:00', 'Bar Attendant'); // not their role, 18 and over
+    const s5 = await at(day(5), '20:00', '02:00'); // runs late at night, with a duty
+    const s6 = await at(day(9), '09:00', '17:00'); // another fortnight
+    await http().post(`/shifts/${s1}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
+    await http().post(`/shifts/${s3}/assign`).set(as('alloc')).send({ workerId: ana }).expect(200);
+    await http().post(`/shifts/${s2}/assign`).set(as('alloc')).send({ workerId: ben }).expect(200);
+    await http().post(`/workers/${ben}/leave`).set(as('admin')).send({ kind: 'annual', startsOn: day(5), endsOn: day(6) }).expect(201);
+    await owner.query(`insert into availability_dates(tenant_id, worker_id, on_date, periods) values ($1, $2, $3, '{pm}')`, [tenantId, cal, day(2)]);
+    await owner.query(`insert into availability_patterns(tenant_id, worker_id, weekday, periods) values ($1, $2, extract(isodow from $3::date), '{}')`, [tenantId, cal, day(9)]);
+    await owner.query(`insert into day_requests(tenant_id, worker_id, on_date, kind, at_time) values ($1, $2, $3, 'finish_by', '15:00')`, [tenantId, ana, day(1)]);
+    await owner.query(`update workers set date_of_birth = $2::date - interval '16 years' where id = $1`, [cal, day(0)]);
+    await owner.query(`insert into business_roles(tenant_id, name, adults_only) values ($1, 'Bar Attendant', true)`, [tenantId]);
+    const rsa = (await http().post('/credential-types').set(as('admin')).send({ name: 'RSA', category: 'licence', hasNumber: false, needsEvidence: false }).expect(201)).body.id;
+    const duty = (await http().post('/shift-duties').set(as('admin')).send({ name: 'Serves alcohol', requirements: [{ credentialTypeId: rsa, severity: 'hard' }] }).expect(201)).body.id;
+    await http().put(`/shifts/${s5}/duties`).set(as('alloc')).send({ dutyIds: [duty] }).expect(200);
+
+    const pool = new Pool({ connectionString: db.appUrl });
+    try {
+      const pairs = [s1, s2, s3, s4, s5, s6].flatMap(shiftId => [ana, ben, cal].map(workerId => ({ shiftId, workerId })));
+      const batch = await withTenant(pool, tenantId, db => eligibilityForPairs(db, tenantId, pairs));
+      expect(batch.size).toBe(pairs.length);
+      let differences = 0;
+      for (const p of pairs) {
+        const [one] = await withTenant(pool, tenantId, db => eligibilityForShift(db, tenantId, p.shiftId, [p.workerId]));
+        expect(batch.get(pairKey(p.shiftId, p.workerId))).toEqual({ eligible: one.eligible, blocks: one.blocks, warnings: one.warnings });
+        if (one.blocks.length || one.warnings.length) differences++;
+      }
+      // The situation exercises the checks (it isn't all clear).
+      expect(differences).toBeGreaterThan(8);
+      const codes = new Set([...batch.values()].flatMap(e => [...e.blocks, ...e.warnings].map(r => r.code)));
+      for (const code of ['double_booked', 'rest', 'role', 'leave', 'availability', 'request', 'age', 'credential']) expect(codes).toContain(code);
+      expect((await withTenant(pool, tenantId, db => eligibilityForPairs(db, tenantId, []))).size).toBe(0);
+    } finally {
+      await pool.end();
+    }
   });
 
   it('checks who asks and what they ask for', async () => {
