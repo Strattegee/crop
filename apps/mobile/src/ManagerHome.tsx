@@ -9,17 +9,20 @@ import {
 import { currentWeek, firstDay, termWord } from './roster';
 import { RosterTab, type RosterView } from './RosterTab';
 import { ProjectsTab } from './ProjectsTab';
+import { PeopleTab } from './PeopleTab';
+import type { PersonRow } from './people';
 import type { ProjectRow } from './projects';
 import { ShiftScreen } from './ShiftScreen';
 import { styles } from './styles';
 
-type Tab = 'today' | 'roster' | 'projects' | 'requests';
+type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
 
 /**
  * Manager mode (backlog item 9a, first slice): for owners, admins and allocators running the roster from a phone.
  * Today = Needs attention for the next 7 days (the same list as the web's roster and Dashboard); Requests = leave
  * and roster change requests waiting, which owners and admins approve or decline here. Everything goes through
- * the same endpoints and rules as the web. Projects (6 Nov) shows only when the person can see any (`ProjectsTab`).
+ * the same endpoints and rules as the web. Projects (6 Nov) shows only when the person can see any (`ProjectsTab`);
+ * People (6 Nov) lists who they can see (`PeopleTab`; a supervisor only their sites' people, in the API's limited view).
  */
 export function ManagerHome({ tenant, business, role, onMyShifts, switchable, onSwitch, onSignOut, onSignedOut }: {
   tenant: string; business: string; role: string; onMyShifts: (() => void) | null;
@@ -38,6 +41,8 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [rosterView, setRosterView] = useState<RosterView | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [openProject, setOpenProject] = useState<string | null>(null);
+  const [staff, setStaff] = useState<PersonRow[]>([]);
+  const [openPerson, setOpenPerson] = useState<string | null>(null);
   const decider = canDecide(role);
   const can = managerCan(role);
 
@@ -45,7 +50,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     setBusy(true);
     setError(null);
     try {
-      const [a, l, c, t, s, d, p] = await Promise.all([
+      const [a, l, c, t, s, d, p, w] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
         can.leave ? api<LeaveRequest[]>('/leave?status=requested', { tenant }) : Promise.resolve([] as LeaveRequest[]),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
@@ -53,7 +58,9 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         api<{ timezone?: string }>('/settings', { tenant }).catch(() => null),
         api<Dashboard>('/dashboard', { tenant }).catch(() => null),
         api<ProjectRow[]>('/projects', { tenant }).catch(() => [] as ProjectRow[]),
+        api<PersonRow[]>('/workers?status=active', { tenant }).catch(() => [] as PersonRow[]),
       ]);
+      setStaff(w);
       setProjects(p);
       setDash(d);
       setAttention(a);
@@ -85,8 +92,11 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const rosterWord = termWord(terms, 'roster', 'Roster', 'Rosters');
   const equipmentWord = termWord(terms, 'equipment', 'Equipment', 'Equipment');
   const projectWord = termWord(terms, 'project', 'Project', 'Projects');
-  const tabs: Tab[] = projects.length > 0 ? ['today', 'roster', 'projects', 'requests'] : ['today', 'roster', 'requests'];
-  const tabLabel = (t: Tab) => t === 'today' ? 'Needs attention' : t === 'roster' ? rosterWord.one : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length);
+  const credentialWord = termWord(terms, 'credential', 'Credential', 'Credentials');
+  const tabs: Tab[] = projects.length > 0 ? ['today', 'roster', 'people', 'projects', 'requests'] : ['today', 'roster', 'people', 'requests'];
+  // Five tabs don't fit "Needs attention" on a phone.
+  const tabLabel = (t: Tab) => t === 'today' ? (tabs.length > 4 ? 'Attention' : 'Needs attention') : t === 'roster' ? rosterWord.one
+    : t === 'people' ? people.many : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length);
   const rosterAt = (facilityId: string, day: string) => {
     const weekStart = currentWeek(day, day);
     setRosterView({ weekStart, day: firstDay(weekStart, day), facilityId });
@@ -143,6 +153,9 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       {tab === 'roster' && rosterView ? (
         <RosterTab tenant={tenant} role={role} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
           busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
+      ) : tab === 'people' ? (
+        <PeopleTab tenant={tenant} today={today} people={people} word={word} credentialWord={credentialWord} busyOutside={busy} onReload={load}
+          onOpenShift={setOpenShift} onSignedOut={onSignedOut} list={staff} openId={openPerson} setOpenId={setOpenPerson} />
       ) : tab === 'projects' && projects.length > 0 ? (
         <ProjectsTab tenant={tenant} projects={projects} openId={openProject} setOpenId={setOpenProject} word={word} equipmentWord={equipmentWord}
           projectWord={projectWord} busyOutside={busy} onReload={load} onOpenShift={setOpenShift} onRoster={rosterAt} onSignedOut={onSignedOut} />
