@@ -8,6 +8,7 @@ import {
   type RosterShift, type WeekRow,
 } from './roster';
 import { mondayOf, stageOf, usualLine } from './shift';
+import { managerCan } from './manager';
 import { styles } from './styles';
 
 type Word = { one: string; many: string; lower: string; lowerMany: string };
@@ -22,8 +23,8 @@ const TONE = { urgent: styles.badgeUrgent, waiting: styles.badgeWaiting, booked:
  * whole week, each shift with its stage in the roster's words; tap one to fill or change it. The week's Draft /
  * Live / History state per site and Publish (with or without telling staff), through the same endpoints as the web.
  */
-export function RosterTab({ tenant, today, view, setView, word, people, siteWord, equipmentWord, busyOutside, onOpen, onSignedOut }: {
-  tenant: string; today?: string; view: RosterView; setView: (v: RosterView) => void; word: Word; people: Word; siteWord: Word; equipmentWord?: Word;
+export function RosterTab({ tenant, role, today, view, setView, word, people, siteWord, equipmentWord, busyOutside, onOpen, onSignedOut }: {
+  tenant: string; role?: string | null; today?: string; view: RosterView; setView: (v: RosterView) => void; word: Word; people: Word; siteWord: Word; equipmentWord?: Word;
   busyOutside: boolean; onOpen: (shiftId: string) => void; onSignedOut: () => void;
 }) {
   const [shifts, setShifts] = useState<RosterShift[]>([]);
@@ -58,7 +59,7 @@ export function RosterTab({ tenant, today, view, setView, word, people, siteWord
 
   const goWeek = (start: string) => setView({ ...view, weekStart: start, day: day === 'week' ? 'week' : firstDay(start, today) });
   const shown = weekRowsShown(weeks, facilityId);
-  const label = publishLabel(shown);
+  const label = managerCan(role).publish ? publishLabel(shown) : null;
   const sites = weeks.map(w => ({ id: w.facilityId, name: w.facilityName }));
 
   const publish = () => {

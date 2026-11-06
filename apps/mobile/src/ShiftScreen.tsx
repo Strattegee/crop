@@ -7,6 +7,7 @@ import {
   coveringMessage, mondayOf, offerable, offeredMessage, pendingOffers, phoneLinks, REQUEST_SENT, requestKind, shiftWhen, stageOf,
   type Action, type Candidate, type CoveringChoice, type FillState, type LeaveLine,
 } from './shift';
+import { managerCan } from './manager';
 import { styles } from './styles';
 
 type Word = { one: string; lower: string };
@@ -17,8 +18,8 @@ type Word = { one: string; lower: string };
  * All through the office endpoints, so eligibility and the after-publishing rule apply as on the web; when that rule
  * stops this person making a change, each button asks an owner or admin instead (a change request).
  */
-export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBack, onSignedOut }: {
-  tenant: string; shiftId: string; today?: string; word: Word; equipmentWord?: Word; onBack: () => void; onSignedOut: () => void;
+export function ShiftScreen({ tenant, shiftId, role, today, word, equipmentWord, onBack, onSignedOut }: {
+  tenant: string; shiftId: string; role?: string | null; today?: string; word: Word; equipmentWord?: Word; onBack: () => void; onSignedOut: () => void;
 }) {
   const [state, setState] = useState<FillState | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -128,7 +129,8 @@ export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBac
 
   const s = state.shift;
   const stage = stageOf(s, equipmentWord);
-  const actions = actionsFor(s, !!refusal);
+  const allowed = managerCan(role);
+  const actions = actionsFor(s, !!refusal, allowed.cancel);
   const can = (a: Action) => actions.includes(a);
   const toOffer = offerable(state.candidates);
   const people = assignable(state.candidates);
@@ -266,7 +268,7 @@ export function ShiftScreen({ tenant, shiftId, today, word, equipmentWord, onBac
           </>
         )}
 
-        {canSetCovering(s, !!refusal) && (
+        {allowed.covering && canSetCovering(s, !!refusal) && (
           <>
             <Text style={styles.section}>Covering</Text>
             {covering === null ? (

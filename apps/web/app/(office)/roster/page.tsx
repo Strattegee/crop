@@ -12,6 +12,7 @@ import {
   clientConfirmed, undoClientConfirmed,
 } from './actions';
 import { clientConfirmLine } from '../../../lib/client-orders';
+import { genderRequestedLine, shiftPanelCan } from '../../../lib/access';
 import { CancelKindField } from '../../../lib/cancel-kinds';
 import { UNCHECKED, uncheckedNote } from '../../../lib/outside-agency';
 import { AttentionPanel } from './attention-panel';
@@ -181,6 +182,7 @@ export default async function RosterPage({ searchParams }: {
   // publish or copy weeks; the API refuses those anyway.
   const myRole = (await currentAgency())?.role;
   const supervisor = myRole === 'supervisor';
+  const panelCan = shiftPanelCan(myRole);
   // Projects under clients (David, 5 Nov): owners and admins add a project from the site picker ("+ New project"
   // posts site=__new), then come back with it shown on its own in a Draft week.
   const canAddProject = myRole === 'owner' || myRole === 'admin';
@@ -1222,10 +1224,10 @@ export default async function RosterPage({ searchParams }: {
                     return (
                       <div className="panel-row" style={{ marginTop: 4 }}>
                         <span className={cc.waiting ? 'notice small' : 'muted small'}>{cc.text}</span>
-                        <form action={(cc.waiting ? clientConfirmed : undoClientConfirmed).bind(null, selected.id)}>
+                        {panelCan.clientYes && <form action={(cc.waiting ? clientConfirmed : undoClientConfirmed).bind(null, selected.id)}>
                           <input type="hidden" name="back" value={here} />
                           <button className={cc.waiting ? 'btn small' : 'btn small secondary'}>{cc.waiting ? `${tw.one(T.client)} confirmed` : 'Undo'}</button>
-                        </form>
+                        </form>}
                       </div>
                     );
                   })()}
@@ -1307,7 +1309,7 @@ export default async function RosterPage({ searchParams }: {
               </section>
             )}
 
-            {selected.startsAt && new Date(selected.startsAt).getTime() > Date.now() && (
+            {panelCan.editDetails && selected.startsAt && new Date(selected.startsAt).getTime() > Date.now() && (
               <section>
                 <details>
                   <summary style={{ cursor: 'pointer' }}><h3 style={{ display: 'inline' }}>Change day, times, {tw.lower(T.role)} or {tw.lower(T.area)}</h3></summary>
@@ -1340,6 +1342,7 @@ export default async function RosterPage({ searchParams }: {
             {!selected.equipmentOnly && (
               <section>
                 <h3>Gender requested</h3>
+                {!panelCan.editDetails ? <p style={{ margin: 0 }}>{genderRequestedLine(selected.genderRequested)}</p> : <>
                 <form action={setGender.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input type="hidden" name="back" value={here} />
                   <label className="sr-only" htmlFor="genderRequested">Gender requested for this {tw.lower(T.shift)}</label>
@@ -1351,6 +1354,7 @@ export default async function RosterPage({ searchParams }: {
                   <button className="btn small secondary">Save</button>
                 </form>
                 <p className="muted small" style={{ margin: '4px 0 0' }}>When whoever asked for the {tw.lower(T.shift)} needs a particular gender. Anyone else gets a warning, not a block.</p>
+                </>}
               </section>
             )}
 
@@ -1362,6 +1366,7 @@ export default async function RosterPage({ searchParams }: {
                 <section>
                   <h3>Usual person</h3>
                   {line && <p className={`small tline tl-${line.tone}`} style={{ margin: '0 0 6px' }}>T {line.text}</p>}
+                  {!panelCan.editDetails ? (!line && <p className="muted" style={{ margin: 0 }}>Nobody in particular</p>) : <>
                   <form action={setUsual.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <input type="hidden" name="back" value={here} />
                     <label className="sr-only" htmlFor="usualWorkerId">Who usually works this {tw.lower(T.shift)}</label>
@@ -1372,6 +1377,7 @@ export default async function RosterPage({ searchParams }: {
                     <button className="btn small secondary">Save</button>
                   </form>
                   <p className="muted small" style={{ margin: '4px 0 0' }}>Shown on the card&apos;s T line, with &ldquo;On leave&rdquo; or &ldquo;Not available&rdquo; when they&apos;re away that day. It doesn&apos;t put anyone on the {tw.lower(T.shift)}.</p>
+                  </>}
                 </section>
               );
             })()}
@@ -1384,6 +1390,7 @@ export default async function RosterPage({ searchParams }: {
               return (
                 <section>
                   <h3>Covering</h3>
+                  {!panelCan.editDetails ? <p style={{ margin: 0 }}>{selected.coveringName ? `Covering ${selected.coveringName}` : 'Nobody'}</p> : <>
                   <form action={setCovering.bind(null, selected.id)} className="inline-form" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <input type="hidden" name="back" value={here} />
                     <label className="sr-only" htmlFor="coveringWorkerId">Who this {tw.lower(T.shift)} is covering</label>
@@ -1395,6 +1402,7 @@ export default async function RosterPage({ searchParams }: {
                     <button className="btn small secondary">Save</button>
                   </form>
                   <p className="muted small" style={{ margin: '4px 0 0' }}>Shown on the card as &ldquo;Covering &lt;name&gt;&rdquo;, never the reason they&apos;re away.</p>
+                  </>}
                 </section>
               );
             })()}
@@ -1402,6 +1410,7 @@ export default async function RosterPage({ searchParams }: {
             {(duties.some(d => d.active) || !!selected.duties?.length) && (
               <section>
                 <h3>Duties</h3>
+                {!panelCan.editDetails ? <p style={{ margin: 0 }}>{selected.duties?.length ? selected.duties.map(d => d.name).join(', ') : 'None'}</p> : (
                 <form action={setDuties.bind(null, selected.id)} className="duty-list">
                   <input type="hidden" name="back" value={here} />
                   {duties.filter(d => d.active || selected.duties?.some(x => x.id === d.id)).map(d => (
@@ -1411,7 +1420,7 @@ export default async function RosterPage({ searchParams }: {
                     </label>
                   ))}
                   <button className="btn small secondary">Save duties</button>
-                </form>
+                </form>)}
               </section>
             )}
 
@@ -1442,14 +1451,14 @@ export default async function RosterPage({ searchParams }: {
 
             {itemsSection}
 
-            <section>
+            {panelCan.cancel && <section>
               <form action={cancelShift.bind(null, selected.id)} className="form-row">
                 <input type="hidden" name="back" value={url({ shift: undefined })} />
                 <CancelKindField clientWord={tw.one(T.client)} forClient={Boolean(selected.clientId)} />
                 <label>Cancel {tw.lower(T.shift)}: reason<input name="reason" required maxLength={300} placeholder="e.g. Function cancelled" /></label>
                 <button className="btn small secondary">Cancel {tw.lower(T.shift)}</button>
               </form>
-            </section>
+            </section>}
             </>)}
             {shiftHistory.length > 0 && (
               <details className="shift-history">
