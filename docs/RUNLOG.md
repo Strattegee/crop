@@ -918,3 +918,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: helper tests in the app (names, wording, ordering, filters, search); every test passes; build and typecheck clean. The API is unchanged. Not checked on a phone (no local sign-in).
 - Next: issuing and counting stock for supervisors (an access change, to weigh carefully), a names-only people picker for limited people adding to a project team, or the next backlog item not waiting on David.
 - Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-06 9:10pm Melbourne (scheduled run): pick a team on the roster strip
+- Shipped: a "still to do" of standing teams. The roster's left-hand list of people has a team choice next to the role filter (the business's word for teams, e.g. "Any crew"). Choosing a team shows only its people who are on it during the dates on screen (someone joining next week appears from next week), at any site, with the role they fill in the team on their row, so a builder can roster "Demolition and make good" in a few drags. Like the other strip filters it stays in the page address, so it survives dropping people onto shifts. Supervisors and people limited to some sites don't see it (teams are business-wide).
+- Checked: helper tests (reading and keeping the filter, who is in the team in the dates, which teams are offered); every test passes; build and typecheck clean. The API is unchanged. Not checked in a browser (no local sign-in in this run).
+- Next: maybe the same team choice on the allocation queue's best people, issuing and counting stock for supervisors (an access change, to weigh carefully), or the next backlog item not waiting on David.
+- Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
