@@ -13,6 +13,8 @@ import { availabilityOf, clearDate, leaveById, recordLeave, saveDate, savePatter
 import { addDays, todayIn } from '../workforce/compliance.js';
 import { loadSettings } from '../workforce/settings.js';
 import { requireLinked } from './worker-app.controller.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { leavePush } from '../notifications/manager-alerts.js';
 import { tellOffice } from './tell-office.js';
 import { appLeaveEmail, myDateRefusal, myLeaveCancelRefusal, myLeaveRefusal } from './worker-app.js';
 import { wordsFor } from '../terms/words.js';
@@ -105,6 +107,12 @@ export class MyAvailabilityController {
       // Owners and admins decide it, so they hear about it straight away (never the kind or the note).
       const m = appLeaveEmail({ name: w.name, workerId: w.id, startsOn, endsOn, shiftsDuring: rostered.length }, process.env.APP_URL ?? '', await wordsFor(db));
       await tellOffice(db, t.tenantId, { ...m, template: 'app_leave_request', dedupeKey: `app-leave:${leave.id}`, createdBy: auth.userId, exceptEmail: auth.email });
+      // And their phones, if they have the app (held through their quiet hours).
+      await alertOffice(db, t.tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.leave, holdThroughQuiet: true,
+        ...leavePush({ name: w.name, startsOn, endsOn, shiftsDuring: rostered.length }, await wordsFor(db)),
+        dedupeKey: `app-leave:${leave.id}`, exceptUserId: auth.userId, createdBy: auth.userId,
+      });
       // Only how many: the shifts themselves may be in weeks not yet published.
       return { ...mine(leave), shiftsDuring: rostered.length };
     });

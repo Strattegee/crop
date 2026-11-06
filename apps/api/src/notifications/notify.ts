@@ -13,6 +13,8 @@ export interface NewNotification {
   workerId?: string | null;
   dedupeKey?: string | null;
   createdBy?: string | null;
+  /** Hold the message until then (an office person's quiet hours); null or left out = send now. */
+  notBefore?: Date | null;
 }
 
 /** Reserved example domains (RFC 2606): invented demo people use these, and they can never receive mail. */
@@ -68,11 +70,11 @@ export async function queueNotification(db: PoolClient, tenantId: string, n: New
     }
   }
   const row = (await db.query<{ id: string }>(
-    `insert into notifications(tenant_id, channel, to_address, template, dedupe_key, subject, body, worker_id, status, last_error, created_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, coalesce($11::uuid, ${WHO_ACTED}))
+    `insert into notifications(tenant_id, channel, to_address, template, dedupe_key, subject, body, worker_id, status, last_error, created_by, next_attempt_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, coalesce($11::uuid, ${WHO_ACTED}), coalesce($12::timestamptz, now()))
      on conflict (tenant_id, dedupe_key) where dedupe_key is not null do nothing
      returning id`,
-    [tenantId, n.channel, to, n.template, n.dedupeKey ?? null, n.subject ?? null, n.channel === 'sms' ? smsText(n.body) : n.body, n.workerId ?? null, status, reason, n.createdBy ?? null],
+    [tenantId, n.channel, to, n.template, n.dedupeKey ?? null, n.subject ?? null, n.channel === 'sms' ? smsText(n.body) : n.body, n.workerId ?? null, status, reason, n.createdBy ?? null, n.notBefore ?? null],
   )).rows[0];
   if (!row) return { id: null, status: 'duplicate' };
   return reason ? { id: row.id, status, reason } : { id: row.id, status };

@@ -31,8 +31,11 @@ export function pushText(title: string, body: string) {
 /** Why a queued push is logged as skipped rather than sent. */
 export const PUSH_OFF = 'Push notifications are not switched on yet';
 
-/** Screens of the worker app a tapped notification can open (the app's tabs). */
-export const PUSH_SCREENS = ['shifts', 'offers', 'availability', 'credentials', 'details'] as const;
+/**
+ * Screens of the app a tapped notification can open: the worker side's tabs, and (office alerts, 6 Nov) the manager
+ * side's Needs attention (`attention`) and Requests (`requests`) tabs.
+ */
+export const PUSH_SCREENS = ['shifts', 'offers', 'availability', 'credentials', 'details', 'attention', 'requests'] as const;
 export type PushScreen = (typeof PUSH_SCREENS)[number];
 
 /** Which screen a message's template opens; null = the app opens as usual. */
@@ -47,6 +50,10 @@ const SCREEN_FOR: Record<string, PushScreen> = {
   credential_expiry: 'credentials',
   day_request_answered: 'availability',
   detail_change_decided: 'details',
+  office_shift_at_risk: 'attention',
+  office_pulled_out: 'attention',
+  office_leave_to_approve: 'requests',
+  office_change_to_approve: 'requests',
 };
 
 export function pushScreen(template: string): PushScreen | null {

@@ -9,7 +9,9 @@ import { APP_POOL } from '../database/database.module.js';
 import { todayIn } from '../workforce/compliance.js';
 import { queueNotification } from '../notifications/notify.js';
 import { wordsFor, type Words } from '../terms/words.js';
-import { CHANGE_REQUEST_KINDS, requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary, type ChangeRequestKind, type ChangeRequestStatus, type RequestForEmail } from './change-requests.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { changeRequestPush } from '../notifications/manager-alerts.js';
+import { CHANGE_REQUEST_KINDS, requestArrivedEmail, requestDecidedEmail, requestProblem, requestSummary, shiftLine, type ChangeRequestKind, type ChangeRequestStatus, type RequestForEmail } from './change-requests.js';
 import { eligibilityForShift } from './eligibility-data.js';
 import { rosterChangeRefusal } from './offers-data.js';
 import { actorOf, mondayOf, weekState } from './publishing.js';
@@ -137,6 +139,11 @@ export class ChangeRequestsController {
             createdBy: auth.userId, dedupeKey: `change-request:${newId}:arrived:${o.email.trim().toLowerCase()}`,
           });
         }
+        await alertOffice(db, t.tenantId, {
+          kind: 'decisions', deciders: true, facilityId: s.facility_id, template: OFFICE_ALERT_TEMPLATES.changeRequest, holdThroughQuiet: true,
+          ...changeRequestPush({ who: r.requestedByName, summary: r.summary, facilityName: r.facilityName, shiftLine: shiftLine(r) }, words),
+          dedupeKey: `change-request:${newId}:arrived`, exceptUserId: auth.userId, createdBy: auth.userId,
+        });
         return present((await db.query<Row>(`select ${COLS} from ${FROM} where r.id = $1`, [newId])).rows, auth, await wordsFor(db))[0];
       } catch (e) {
         if ((e as { code?: string }).code === '23505') throw new ConflictException('A change to this {shift} is already waiting for approval');

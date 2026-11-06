@@ -55,7 +55,7 @@ todo=[
 ("UIDES","ext","Overall look: key screens",14,[],"UI designer","2026-11-09"),
 ("MIG","c1","Import C4U's staff, clients and templates",6,["INFO"],"Claude + you",None),
 ("CPORT","c6","Ordering for clients not on CROP (public request page and one-step order from it done 5 Nov; client sign-in portal next)",5,["INFO"],"Claude",None),
-("PUSH","c4","Push alerts in the app: built 3 Nov, tap opens the right screen 4 Nov; switch on and try on phones",1,["STORE"],"Claude",None),
+("PUSH","c4","Push alerts in the app: built 3 Nov, tap opens the right screen 4 Nov, office alerts with quiet hours 7 Nov; switch on and try on phones",1,["STORE"],"Claude",None),
 ("OPS","c1","Production setup, backups, restore drill, monitoring",4,["INFO"],"Claude + you",None),
 ("LOOK","c2","Apply the new logo, colours and look (colours and dark mode on the web 2 Nov, in the app 4 Nov)",10,["LOGO","UIDES"],"Claude",None),
 ("FC","ms","Release 1 built: roster, allocations, credentialing",0,["APPLY","MIG","CPORT","PUSH","OPS"],"Milestone",None),

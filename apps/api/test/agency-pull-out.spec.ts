@@ -136,6 +136,10 @@ describe('agency pull out and placement emails: API', () => {
   it('the agency pulls Ana out: the shift opens again, shown as pulled out, and the employer is emailed', async () => {
     const s = await newShift(30);
     const inboxId = await placed(s);
+    // The employer's office has the app (phone alerts, no quiet hours).
+    const phone = 'ExponentPushToken[employer000000000000000]';
+    await http().post('/push-devices').set(as('emp')).send({ token: phone, platform: 'ios' }).expect(204);
+    await http().put('/alerts').set(as('emp')).send({ quietFrom: null, quietUntil: null }).expect(200);
     // Not from a worker's sign-in, not another business, not a stranger request.
     await http().post(`/agency-requests/${inboxId}/pull-out`).set(as('agw')).send({}).expect(403);
     await http().post(`/agency-requests/${inboxId}/pull-out`).set(as('metro')).send({}).expect(404);
@@ -153,6 +157,11 @@ describe('agency pull out and placement emails: API', () => {
       tenant_id: ids.bayside, to_address: 'emp@x.com', subject: expect.stringMatching(/^Caring For You pulled Ana Example out: Nurse on /),
       body: expect.stringContaining('Reason from Caring For You: Booked twice by mistake'),
     })]);
+    // And their phone, without the agency's reason.
+    const alerts = await mail('office_pulled_out');
+    expect(alerts).toEqual([expect.objectContaining({ tenant_id: ids.bayside, to_address: phone, subject: 'Caring For You pulled Ana Example out' })]);
+    expect(alerts[0].body).toMatch(/^Nurse, .* The shift is open again\. Open CROP to fill it\.$/);
+    expect(alerts[0].body).not.toContain('Booked twice');
     // The agency made the change itself, so it isn't emailed about it.
     await timer.runOnce();
     expect(await mail('agency_placement_changed')).toEqual([]);
