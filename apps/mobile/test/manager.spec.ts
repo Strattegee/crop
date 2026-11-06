@@ -85,8 +85,8 @@ describe('kindLabel', () => {
 
 describe('supervisors in manager mode (6 Nov)', () => {
   it('leaves out what the API keeps for the office', () => {
-    expect(managerCan('supervisor')).toEqual({ leave: false, publish: false, cancel: false, covering: false });
-    for (const r of ['owner', 'admin', 'allocator']) expect(managerCan(r)).toEqual({ leave: true, publish: true, cancel: true, covering: true });
+    expect(managerCan('supervisor')).toEqual({ leave: false, publish: false, cancel: false, covering: false, add: false });
+    for (const r of ['owner', 'admin', 'allocator']) expect(managerCan(r)).toEqual({ leave: true, publish: true, cancel: true, covering: true, add: true });
   });
   it('says a supervisor runs their own sites', () => {
     expect(managerLine('supervisor', { lower: 'roster' })).toBe('Running the roster at your sites');

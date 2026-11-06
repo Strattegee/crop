@@ -20,11 +20,12 @@ export function canDecide(role: string | null | undefined): boolean {
 /**
  * What manager mode offers for a role (6 Nov), in step with the API: supervisors (SITE_ROLES) run the roster at their
  * sites (put people on, offer, confirm, take off, ask for changes) but leave requests, publishing, cancelling and the
- * covering line are OFFICE_ROLES, so the app doesn't load or show them for supervisors.
+ * covering line are OFFICE_ROLES, so the app doesn't load or show them for supervisors. Adding shifts (7 Nov,
+ * `POST /shifts`) is OFFICE_ROLES too.
  */
-export function managerCan(role: string | null | undefined): { leave: boolean; publish: boolean; cancel: boolean; covering: boolean } {
+export function managerCan(role: string | null | undefined): { leave: boolean; publish: boolean; cancel: boolean; covering: boolean; add: boolean } {
   const office = role === 'owner' || role === 'admin' || role === 'allocator';
-  return { leave: office, publish: office, cancel: office, covering: office };
+  return { leave: office, publish: office, cancel: office, covering: office, add: office };
 }
 
 /** The header line under the business's name: supervisors only see their own sites. */

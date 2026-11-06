@@ -9,6 +9,7 @@ import {
 } from './roster';
 import { mondayOf, stageOf, usualLine } from './shift';
 import { managerCan } from './manager';
+import { weekIsOver } from './add-shifts';
 import { styles } from './styles';
 
 type Word = { one: string; many: string; lower: string; lowerMany: string };
@@ -23,9 +24,9 @@ const TONE = { urgent: styles.badgeUrgent, waiting: styles.badgeWaiting, booked:
  * whole week, each shift with its stage in the roster's words; tap one to fill or change it. The week's Draft /
  * Live / History state per site and Publish (with or without telling staff), through the same endpoints as the web.
  */
-export function RosterTab({ tenant, role, today, view, setView, word, people, siteWord, equipmentWord, busyOutside, onOpen, onSignedOut }: {
+export function RosterTab({ tenant, role, today, view, setView, word, people, siteWord, equipmentWord, busyOutside, onOpen, onAdd, onSignedOut }: {
   tenant: string; role?: string | null; today?: string; view: RosterView; setView: (v: RosterView) => void; word: Word; people: Word; siteWord: Word; equipmentWord?: Word;
-  busyOutside: boolean; onOpen: (shiftId: string) => void; onSignedOut: () => void;
+  busyOutside: boolean; onOpen: (shiftId: string) => void; onAdd?: () => void; onSignedOut: () => void;
 }) {
   const [shifts, setShifts] = useState<RosterShift[]>([]);
   const [weeks, setWeeks] = useState<WeekRow[]>([]);
@@ -60,6 +61,7 @@ export function RosterTab({ tenant, role, today, view, setView, word, people, si
   const goWeek = (start: string) => setView({ ...view, weekStart: start, day: day === 'week' ? 'week' : firstDay(start, today) });
   const shown = weekRowsShown(weeks, facilityId);
   const label = managerCan(role).publish ? publishLabel(shown) : null;
+  const canAdd = Boolean(onAdd) && managerCan(role).add && !weekIsOver(weekStart, today);
   const sites = weeks.map(w => ({ id: w.facilityId, name: w.facilityName }));
 
   const publish = () => {
@@ -160,7 +162,14 @@ export function RosterTab({ tenant, role, today, view, setView, word, people, si
         })}
       </ScrollView>
 
-      <Text style={[styles.muted, { marginBottom: 8 }]}>{summaryLine(list, word)}</Text>
+      <View style={[styles.row, { marginTop: 0, marginBottom: 8, alignItems: 'center' }]}>
+        <Text style={[styles.muted, styles.grow]}>{summaryLine(list, word)}</Text>
+        {canAdd && (
+          <Pressable style={[styles.button, styles.secondary, { marginTop: 0, paddingHorizontal: 14, paddingVertical: 8 }]} onPress={onAdd} accessibilityRole="button" accessibilityHint={`Adds open ${word.lowerMany} to this week`}>
+            <Text style={styles.secondaryText}>+ Add {word.lowerMany}</Text>
+          </Pressable>
+        )}
+      </View>
       {day === 'week'
         ? dates.map(d => {
           const on = shifts.filter(s => s.localDate === d);
@@ -173,7 +182,9 @@ export function RosterTab({ tenant, role, today, view, setView, word, people, si
           );
         })
         : list.map(card)}
-      {!busy && list.length === 0 && <Text style={styles.muted}>Add {word.lowerMany} on the web roster (Add {word.lowerMany}, or Templates and copying).</Text>}
+      {!busy && list.length === 0 && (
+        <Text style={styles.muted}>{canAdd ? `Nothing here yet. Use + Add ${word.lowerMany}, or Templates and copying on the web roster.` : `Add ${word.lowerMany} on the web roster (Add ${word.lowerMany}, or Templates and copying).`}</Text>
+      )}
     </ScrollView>
   );
 }
