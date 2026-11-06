@@ -17,6 +17,21 @@ export function canDecide(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+/**
+ * What manager mode offers for a role (6 Nov), in step with the API: supervisors (SITE_ROLES) run the roster at their
+ * sites (put people on, offer, confirm, take off, ask for changes) but leave requests, publishing, cancelling and the
+ * covering line are OFFICE_ROLES, so the app doesn't load or show them for supervisors.
+ */
+export function managerCan(role: string | null | undefined): { leave: boolean; publish: boolean; cancel: boolean; covering: boolean } {
+  const office = role === 'owner' || role === 'admin' || role === 'allocator';
+  return { leave: office, publish: office, cancel: office, covering: office };
+}
+
+/** The header line under the business's name: supervisors only see their own sites. */
+export function managerLine(role: string | null | undefined, roster: { lower: string }): string {
+  return role === 'supervisor' ? `Running the ${roster.lower} at your sites` : `Running the ${roster.lower}`;
+}
+
 /** The view to open first for someone's role in a business. */
 export function startMode(role: string | null | undefined): Mode {
   return isManager(role) ? 'manager' : 'worker';
@@ -90,7 +105,7 @@ export function approvedLeaveMessage(rostered: number, word: { lower: string; lo
 }
 
 export interface ChangeRequest {
-  id: string; summary: string; requestedByName: string | null; reason: string | null; canDecide: boolean;
+  id: string; summary: string; requestedByName: string | null; reason: string | null; canDecide: boolean; canWithdraw?: boolean;
   facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; localEnd: string;
 }
 

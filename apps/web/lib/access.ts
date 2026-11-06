@@ -26,3 +26,19 @@ export function limitLine(sites: string[] | null | undefined, names: string[], s
   const words = list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
   return `You see ${sites.length === 1 ? `1 ${siteWord.one}` : `${sites.length} ${siteWord.many}`}${words ? `: ${words}` : ''}`;
 }
+
+/**
+ * Which parts of the roster's shift panel someone can change (6 Nov). Supervisors put people on, offer, confirm, take
+ * off and book equipment (SITE_ROLES); the day, times, role, area, gender requested, usual person, covering line,
+ * duties, items, the client's yes and cancelling are OFFICE_ROLES endpoints, so they see those as plain lines instead
+ * of forms that would only be refused. Asking for a change (after publishing) stays open to them.
+ */
+export function shiftPanelCan(role: string | null | undefined): { editDetails: boolean; cancel: boolean; clientYes: boolean } {
+  const office = !isSupervisor(role);
+  return { editDetails: office, cancel: office, clientYes: office };
+}
+
+/** A read-only line for a shift-panel setting a supervisor can't change ("Female (F)", "Nobody"). */
+export function genderRequestedLine(g: 'F' | 'M' | null | undefined): string {
+  return g === 'F' ? 'Female (F)' : g === 'M' ? 'Male (M)' : 'No preference';
+}

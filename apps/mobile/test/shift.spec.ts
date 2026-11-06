@@ -77,6 +77,9 @@ describe('a shift in manager mode', () => {
     expect(actionsFor({ ...on, status: 'booked', assignmentStatus: 'confirmed' }, false)).toEqual(['remove', 'pulled_out', 'cancel']);
     expect(actionsFor({ ...shift, equipmentOnly: true }, false)).toEqual(['cancel']);
     expect(actionsFor({ ...shift, status: 'cancelled' }, false)).toEqual([]);
+    // Supervisors (6 Nov) can't cancel; they can only ask to once changes need approval.
+    expect(actionsFor(shift, false, false)).toEqual(['assign', 'offer']);
+    expect(actionsFor(shift, true, false)).toEqual(['assign', 'cancel']);
     expect(requestKind('pulled_out')).toBe('pulled_out');
     expect(requestKind('offer')).toBeNull();
     expect(confirmLabel({ agencyName: null, workerName: 'Sam' })).toBe('Mark as confirmed');

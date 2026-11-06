@@ -3,7 +3,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native
 import { Text } from './ui';
 import { api, ApiError, SignedOut } from './api';
 import {
-  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, kindLabel, kpiNote, kpiOrder, kpiValue, leaveRequestLine, requestsTab, shiftWhere, shiftWord, todayIn,
+  approvedLeaveMessage, attentionHeading, canDecide, changeRequestShift, kindLabel, kpiNote, kpiOrder, kpiValue, leaveRequestLine, managerCan, managerLine, requestsTab, shiftWhere, shiftWord, todayIn,
   type Attention, type ChangeRequest, type Dashboard, type LeaveRequest, type Term,
 } from './manager';
 import { currentWeek, firstDay, termWord } from './roster';
@@ -35,6 +35,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [openShift, setOpenShift] = useState<string | null>(null);
   const [rosterView, setRosterView] = useState<RosterView | null>(null);
   const decider = canDecide(role);
+  const can = managerCan(role);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -42,7 +43,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     try {
       const [a, l, c, t, s, d] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
-        api<LeaveRequest[]>('/leave?status=requested', { tenant }),
+        can.leave ? api<LeaveRequest[]>('/leave?status=requested', { tenant }) : Promise.resolve([] as LeaveRequest[]),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
         api<Term[]>('/terms', { tenant }).catch(() => null),
         api<{ timezone?: string }>('/settings', { tenant }).catch(() => null),
@@ -66,7 +67,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     } finally {
       setBusy(false);
     }
-  }, [tenant, onSignedOut]);
+  }, [tenant, onSignedOut, can.leave]);
 
   useEffect(() => {
     load();
@@ -102,7 +103,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     Alert.alert(title, undefined, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', onPress: run }]);
 
   if (openShift) {
-    return <ShiftScreen tenant={tenant} shiftId={openShift} today={today} word={word} equipmentWord={equipmentWord} onSignedOut={onSignedOut}
+    return <ShiftScreen tenant={tenant} shiftId={openShift} role={role} today={today} word={word} equipmentWord={equipmentWord} onSignedOut={onSignedOut}
       onBack={() => { setOpenShift(null); load(); }} />;
   }
 
@@ -111,7 +112,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.heading}>{business}</Text>
-          <Text style={styles.muted}>Running the {rosterWord.lower}</Text>
+          <Text style={styles.muted}>{managerLine(role, rosterWord)}</Text>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {onMyShifts && <Pressable onPress={onMyShifts}><Text style={styles.link}>My {word.lowerMany}</Text></Pressable>}
@@ -126,7 +127,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         ))}
       </View>
       {tab === 'roster' && rosterView ? (
-        <RosterTab tenant={tenant} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
+        <RosterTab tenant={tenant} role={role} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
           busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
@@ -171,8 +172,8 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
 
         {tab === 'requests' && (
           <>
-            <Text style={styles.section}>Leave waiting for a decision</Text>
-            {leave.length === 0 ? <Text style={styles.muted}>None waiting.</Text> : leave.map(l => (
+            {can.leave && <Text style={styles.section}>Leave waiting for a decision</Text>}
+            {!can.leave ? null : leave.length === 0 ? <Text style={styles.muted}>None waiting.</Text> : leave.map(l => (
               <View key={l.id} style={styles.card}>
                 <Text style={styles.cardTitle}>{leaveRequestLine(l)}</Text>
                 {!!l.note && <Text style={[styles.muted, styles.small]}>{l.note}</Text>}
@@ -205,6 +206,11 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
                     </Pressable>
                   </View>
                 ) : <Text style={[styles.muted, styles.small]}>An owner or admin decides.</Text>}
+                {r.canWithdraw && (
+                  <Pressable disabled={busy} onPress={() => confirm('Withdraw this request?', () => act(`/change-requests/${r.id}/withdraw`, () => 'Withdrawn.'))}>
+                    <Text style={[styles.link, styles.small, { marginTop: 6 }]}>Withdraw</Text>
+                  </Pressable>
+                )}
               </View>
             ))}
           </>

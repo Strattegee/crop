@@ -122,8 +122,11 @@ export function pendingOffers(offers: Offer[]): Offer[] {
 
 export type Action = 'assign' | 'confirm' | 'remove' | 'pulled_out' | 'cancel' | 'offer';
 
-/** What can be done to the shift as it is now. Offers wait for the after-publishing rule like any change. */
-export function actionsFor(s: ShiftDetail, refused: boolean): Action[] {
+/**
+ * What can be done to the shift as it is now. Offers wait for the after-publishing rule like any change. Without
+ * `cancelling` (supervisors, 6 Nov: cancelling is an office endpoint) cancel is only offered as a change request.
+ */
+export function actionsFor(s: ShiftDetail, refused: boolean, cancelling = true): Action[] {
   if (s.status === 'cancelled') return [];
   const out: Action[] = [];
   if (!s.equipmentOnly) {
@@ -132,7 +135,7 @@ export function actionsFor(s: ShiftDetail, refused: boolean): Action[] {
     if (s.workerId && s.assignmentStatus === 'assigned') out.push('confirm');
     if (s.workerId) out.push('remove', 'pulled_out');
   }
-  out.push('cancel');
+  if (cancelling || refused) out.push('cancel');
   return out;
 }
 
