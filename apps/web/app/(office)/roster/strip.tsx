@@ -10,11 +10,13 @@ export type StripPerson = {
   hours: number; contracted: number | null; fit?: 'ready' | 'warn' | 'blocked'; fitNote?: string;
   /** On the chosen site's team during the dates on screen (projects, 4 Nov). */
   team?: 'supervisor' | 'worker';
+  /** In the standing team chosen in the strip (6 Nov): the role they fill in it. */
+  crew?: string;
 };
 export type StripEquip = { id: string; name: string; typeName: string; status: string; hours: number; fit?: 'ready' | 'warn' | 'blocked'; fitNote?: string };
 export type StripItem = { id: string; name: string; category: string; unit: string; onHand: number | null; low: boolean };
 /** The business's words (Settings → Words we use), passed from the server page. */
-type Labels = { people: string; equipment: string; items: string; person: string; role: string; roles: string; shift: string; shifts: string; site: string; sites: string };
+type Labels = { team: string; teams: string; people: string; equipment: string; items: string; person: string; role: string; roles: string; shift: string; shifts: string; site: string; sites: string };
 
 const fmt = (n: number) => (Math.round(n * 10) / 10).toString();
 const DRAG = 'application/x-crop-resource';
@@ -25,12 +27,14 @@ const SEARCH_KEY = 'crop.roster.stripSearch';
  * The left-hand strip of Steve's ribbon roster: everyone who can be rostered, with type, hours and balance
  * against contract. Drag a person onto an open shift (or equipment onto any shift) to put them on it.
  */
-export function RibbonStrip({ people, equipment, items, labels, selectedShift, canDrag, filter, hasTeam }: {
+export function RibbonStrip({ people, equipment, items, labels, selectedShift, canDrag, filter, hasTeam, crews = [] }: {
   people: StripPerson[]; equipment: StripEquip[]; items: StripItem[]; labels: Labels; selectedShift?: string | null; canDrag: boolean;
   /** Role and "Has hours left" from the roster URL (David, 2 Nov: the filter used to reset after every drop). */
   filter: StripFilter;
   /** One site is chosen and it has a team in these dates: offer "Team only" and team people first in each group. */
   hasTeam: boolean;
+  /** The business's standing teams (Workers › Teams) to filter by; empty = no team filter. */
+  crews?: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<'people' | 'equipment' | 'items'>('people');
@@ -38,21 +42,25 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
   const [role, setRoleState] = useState(filter.role);
   const [available, setAvailableState] = useState(filter.hoursLeft);
   const [teamOnly, setTeamOnlyState] = useState(filter.team);
+  const [crew, setCrewState] = useState(filter.crew);
   const roles = useMemo(() => [...new Set(people.map(p => p.role))].sort(), [people]);
   // Follow the URL when it changes (back button, a link that carries other filters).
-  useEffect(() => { setRoleState(filter.role); setAvailableState(filter.hoursLeft); setTeamOnlyState(filter.team); }, [filter.role, filter.hoursLeft, filter.team]);
+  useEffect(() => { setRoleState(filter.role); setAvailableState(filter.hoursLeft); setTeamOnlyState(filter.team); setCrewState(filter.crew); }, [filter.role, filter.hoursLeft, filter.team, filter.crew]);
   useEffect(() => { try { setQ(sessionStorage.getItem(SEARCH_KEY) ?? ''); } catch { /* storage blocked: start empty */ } }, []);
   const search = (v: string) => { setQ(v); try { sessionStorage.setItem(SEARCH_KEY, v); } catch { /* not kept */ } };
   // Filters go into the URL, so `back` on every form and drop carries them and the redirect keeps them.
   const keep = (f: StripFilter) => router.replace(withStripFilter(`${window.location.pathname}${window.location.search}`, f), { scroll: false });
-  const setRole = (v: string) => { setRoleState(v); keep({ role: v, hoursLeft: available, team: teamOnly }); };
-  const setAvailable = (v: boolean) => { setAvailableState(v); keep({ role, hoursLeft: v, team: teamOnly }); };
-  const setTeamOnly = (v: boolean) => { setTeamOnlyState(v); keep({ role, hoursLeft: available, team: v }); };
+  const setRole = (v: string) => { setRoleState(v); keep({ role: v, hoursLeft: available, team: teamOnly, crew }); };
+  const setAvailable = (v: boolean) => { setAvailableState(v); keep({ role, hoursLeft: v, team: teamOnly, crew }); };
+  const setTeamOnly = (v: boolean) => { setTeamOnlyState(v); keep({ role, hoursLeft: available, team: v, crew }); };
+  const setCrew = (v: string) => { setCrewState(v); keep({ role, hoursLeft: available, team: teamOnly, crew: v }); };
+  // A team that's gone (put away, or the link was old) filters nothing.
+  const crewShown = crews.some(c => c.id === crew) ? crew : '';
   const match = (s: string) => !q || s.toLowerCase().includes(q.trim().toLowerCase());
 
   const roleShown = roles.includes(role) || people.some(p => p.roles.includes(role)) ? role : '';
   const shownPeople = people.filter(p => match(p.name) && (!roleShown || p.roles.includes(roleShown))
-    && (!available || p.contracted == null || p.contracted - p.hours > 0) && (!hasTeam || !teamOnly || !!p.team));
+    && (!available || p.contracted == null || p.contracted - p.hours > 0) && (!hasTeam || !teamOnly || !!p.team) && (!crewShown || !!p.crew));
   const groups = new Map<string, StripPerson[]>();
   // The site's team first in each group (never a block; everyone else stays in today's order after them).
   for (const p of hasTeam ? [...shownPeople.filter(x => x.team), ...shownPeople.filter(x => !x.team)] : shownPeople) {
@@ -84,6 +92,12 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
               {roleShown && !roles.includes(roleShown) && <option value={roleShown}>{roleShown}</option>}
             </select>
             <label className="inline small"><input type="checkbox" checked={available} onChange={e => setAvailable(e.target.checked)} />Has hours left</label>
+            {crews.length > 0 && (
+              <select value={crewShown} onChange={e => setCrew(e.target.value)} aria-label={`Filter by ${labels.team.toLowerCase()}`}>
+                <option value="">Any {labels.team.toLowerCase()}</option>
+                {crews.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            )}
             {hasTeam && <label className="inline small" title={`Only ${labels.people.toLowerCase()} on this ${labels.site.toLowerCase()}’s team in these dates`}><input type="checkbox" checked={teamOnly} onChange={e => setTeamOnly(e.target.checked)} />Team only</label>}
           </div>
           <div className="strip-head" aria-hidden="true"><span /><span>{labels.person}</span><span title="Hours rostered this week">Hrs</span><span title="Contracted hours minus hours rostered">Bal</span></div>
@@ -97,7 +111,7 @@ export function RibbonStrip({ people, equipment, items, labels, selectedShift, c
                     <div key={p.id} className={`strip-row ${p.fit ?? ''}`} draggable={canDrag} onDragStart={drag('person', p.id, { name: p.name, unit: '' })} onDragEnd={end}
                       title={p.fitNote ?? (canDrag ? 'Drag onto an open shift' : undefined)}>
                       <span className="av" aria-hidden="true">{p.initials}</span>
-                      <span className="nm">{p.name}<small><b className={`ty ty-${p.type}`}>{p.typeLabel}</b>{p.team && <b className="team-tag" title={p.team === 'supervisor' ? 'On this team as a supervisor' : 'On this team'}>{p.team === 'supervisor' ? 'Team · sup' : 'Team'}</b>}{p.roles.length > 1 ? ` · ${p.roles.length} roles` : ''}{p.fit === 'warn' ? ' · warning' : ''}</small></span>
+                      <span className="nm">{p.name}<small><b className={`ty ty-${p.type}`}>{p.typeLabel}</b>{p.team && <b className="team-tag" title={p.team === 'supervisor' ? 'On this team as a supervisor' : 'On this team'}>{p.team === 'supervisor' ? 'Team · sup' : 'Team'}</b>}{p.crew && crewShown ? ` · ${p.crew}` : ''}{p.roles.length > 1 ? ` · ${p.roles.length} roles` : ''}{p.fit === 'warn' ? ' · warning' : ''}</small></span>
                       <span className="num">{fmt(p.hours)}</span>
                       <span className={`num ${bal == null ? 'muted' : bal < 0 ? 'over' : bal === 0 ? 'even' : 'under'}`}>{bal == null ? '–' : fmt(bal)}</span>
                     </div>

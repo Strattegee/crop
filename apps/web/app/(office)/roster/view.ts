@@ -500,11 +500,14 @@ export function shiftMarkers(s: MarkerShift, letters: MarkerLetters = DEFAULT_MA
  * The strip's filters (David, 2 Nov): kept in the roster URL (`role`, `hours=left`, `team=1`) like the rest of the roster's
  * state, so they survive dropping someone onto a shift (the server action returns to `back`) and picking another shift.
  * `team` (projects, 4 Nov) shows only the site's team; it only applies when one site is chosen.
+ * `crew` (6 Nov) is a standing team's id (Workers › Teams): only its people in the dates on screen, at any site.
  */
-export type StripFilter = { role: string; hoursLeft: boolean; team: boolean };
-export function parseStripFilter(sp: { role?: string; hours?: string; team?: string }): StripFilter {
+export type StripFilter = { role: string; hoursLeft: boolean; team: boolean; crew: string };
+const CREW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function parseStripFilter(sp: { role?: string; hours?: string; team?: string; crew?: string }): StripFilter {
   const role = (sp.role ?? '').trim().slice(0, 100);
-  return { role, hoursLeft: sp.hours === 'left', team: sp.team === '1' };
+  const crew = (sp.crew ?? '').trim();
+  return { role, hoursLeft: sp.hours === 'left', team: sp.team === '1', crew: CREW_ID.test(crew) ? crew.toLowerCase() : '' };
 }
 
 /** The current roster URL with new strip filters; everything else kept, old messages dropped. */
@@ -513,6 +516,7 @@ export function withStripFilter(current: string, f: StripFilter): string {
   if (f.role) u.searchParams.set('role', f.role); else u.searchParams.delete('role');
   if (f.hoursLeft) u.searchParams.set('hours', 'left'); else u.searchParams.delete('hours');
   if (f.team) u.searchParams.set('team', '1'); else u.searchParams.delete('team');
+  if (f.crew) u.searchParams.set('crew', f.crew); else u.searchParams.delete('crew');
   u.searchParams.delete('done');
   u.searchParams.delete('error');
   return `${u.pathname}${u.search}`;
@@ -534,6 +538,29 @@ export function teamDuring(entries: TeamEntry[], from: string, to: string): Map<
     if (out.get(e.workerId) !== 'supervisor') out.set(e.workerId, role);
   }
   return out;
+}
+
+/** A standing team as `GET /teams` gives it, only what the strip needs. */
+export type CrewTeam = { id: string; name: string; members: { workerId: string; role: string; startsOn: string; endsOn: string | null }[] };
+
+/**
+ * A standing team's people during the dates on screen (`from`..`to`, local dates), with the role they fill in it.
+ * Someone who left before, or joins after, the period isn't in it for this roster; an unknown team = nobody.
+ */
+export function crewDuring(teams: CrewTeam[], crewId: string, from: string, to: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const t = teams.find(x => x.id === crewId);
+  if (!t) return out;
+  for (const m of t.members) {
+    if (m.startsOn > to || (m.endsOn !== null && m.endsOn < from)) continue;
+    if (!out.has(m.workerId)) out.set(m.workerId, m.role);
+  }
+  return out;
+}
+
+/** The strip's team choices: the business's standing teams with anyone in them, by name. */
+export function crewChoices(teams: CrewTeam[]): { id: string; label: string }[] {
+  return teams.filter(t => t.members.length > 0).sort((a, b) => a.name.localeCompare(b.name)).map(t => ({ id: t.id, label: t.name }));
 }
 
 /** A shift picked for assigning several at once (David, 2 Nov): its local date and start time. */

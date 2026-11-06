@@ -1,41 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { bestPeople, multiAssignMessage, parseStripFilter, pickedInOrder, reasonFor, teamDuring, withStripFilter, type MenuCandidate } from '../app/(office)/roster/view';
+import { bestPeople, crewChoices, crewDuring, multiAssignMessage, parseStripFilter, pickedInOrder, reasonFor, teamDuring, withStripFilter, type MenuCandidate } from '../app/(office)/roster/view';
 
 describe('strip filters in the roster URL', () => {
   it('reads role and hours left', () => {
-    expect(parseStripFilter({ role: 'Barista', hours: 'left' })).toEqual({ role: 'Barista', hoursLeft: true, team: false });
-    expect(parseStripFilter({})).toEqual({ role: '', hoursLeft: false, team: false });
+    expect(parseStripFilter({ role: 'Barista', hours: 'left' })).toEqual({ role: 'Barista', hoursLeft: true, team: false, crew: '' });
+    expect(parseStripFilter({})).toEqual({ role: '', hoursLeft: false, team: false, crew: '' });
     expect(parseStripFilter({ team: '1' }).team).toBe(true);
     expect(parseStripFilter({ team: 'yes' }).team).toBe(false);
-    expect(parseStripFilter({ role: '  ', hours: 'yes' })).toEqual({ role: '', hoursLeft: false, team: false });
+    expect(parseStripFilter({ role: '  ', hours: 'yes' })).toEqual({ role: '', hoursLeft: false, team: false, crew: '' });
   });
 
   it('sets and clears them, keeping the rest of the view and dropping old messages', () => {
-    const u = withStripFilter('/roster?week=2026-11-02&view=area&shift=abc&done=Assigned', { role: 'Barista', hoursLeft: true, team: false });
+    const u = withStripFilter('/roster?week=2026-11-02&view=area&shift=abc&done=Assigned', { role: 'Barista', hoursLeft: true, team: false, crew: '' });
     const p = new URL(u, 'http://x').searchParams;
     expect(p.get('role')).toBe('Barista');
     expect(p.get('hours')).toBe('left');
     expect(p.get('week')).toBe('2026-11-02');
     expect(p.get('shift')).toBe('abc');
     expect(p.get('done')).toBeNull();
-    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false })).toBe('/roster?week=2026-11-02&view=area&shift=abc');
+    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false, crew: '' })).toBe('/roster?week=2026-11-02&view=area&shift=abc');
   });
 
   it('keeps roles with spaces and ampersands intact', () => {
-    const u = withStripFilter('/roster', { role: 'Kitchen hand & porter', hoursLeft: false, team: false });
+    const u = withStripFilter('/roster', { role: 'Kitchen hand & porter', hoursLeft: false, team: false, crew: '' });
     expect(parseStripFilter({ role: new URL(u, 'http://x').searchParams.get('role') ?? undefined }).role).toBe('Kitchen hand & porter');
   });
 
   it('never leaves the roster', () => {
-    expect(withStripFilter('https://evil.example/x', { role: 'A', hoursLeft: false, team: false })).toBe('/roster?role=A');
+    expect(withStripFilter('https://evil.example/x', { role: 'A', hoursLeft: false, team: false, crew: '' })).toBe('/roster?role=A');
   });
 });
 
 describe('the site team on the strip', () => {
   it('keeps team=1 in the URL and drops it when cleared', () => {
-    const u = withStripFilter('/roster?week=2026-11-02&site=s1', { role: '', hoursLeft: false, team: true });
+    const u = withStripFilter('/roster?week=2026-11-02&site=s1', { role: '', hoursLeft: false, team: true, crew: '' });
     expect(new URL(u, 'http://x').searchParams.get('team')).toBe('1');
-    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false })).toBe('/roster?week=2026-11-02&site=s1');
+    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false, crew: '' })).toBe('/roster?week=2026-11-02&site=s1');
   });
 
   it('counts people on the team at any time in the dates on screen', () => {
@@ -142,5 +142,35 @@ describe('best people for the right-click menu', () => {
     const a = { ...c('a', 2), siteHistory: { shiftsHere: 0, lastHere: null } };
     const b = { ...c('b', 9), siteHistory: { shiftsHere: 5, lastHere: '2026-10-30' } };
     expect(bestPeople([[a, b]], 5, 3, { today: '2026-11-02', site: 'site' }).map(p => p.workerId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('standing team filter on the strip (6 Nov)', () => {
+  const id = '0b1c2d3e-4f50-4a1b-8c2d-3e4f5a6b7c8d';
+  it('reads a team id from the URL and keeps it in strip URLs', () => {
+    expect(parseStripFilter({ crew: id.toUpperCase() }).crew).toBe(id);
+    expect(parseStripFilter({ crew: 'build' }).crew).toBe('');
+    const u = withStripFilter('/roster?week=2026-11-02&done=Saved', { role: '', hoursLeft: false, team: false, crew: id });
+    expect(u).toBe(`/roster?week=2026-11-02&crew=${id}`);
+    expect(withStripFilter(u, { role: '', hoursLeft: false, team: false, crew: '' })).toBe('/roster?week=2026-11-02');
+  });
+  const teams = [
+    { id, name: 'Build', members: [
+      { workerId: 'a', role: 'Carpenter', startsOn: '2026-10-01', endsOn: null },
+      { workerId: 'b', role: 'Plasterer', startsOn: '2026-11-09', endsOn: null },
+      { workerId: 'c', role: 'Painter', startsOn: '2026-09-01', endsOn: '2026-11-01' },
+      { workerId: 'd', role: 'Labourer', startsOn: '2026-09-01', endsOn: '2026-11-03' },
+    ] },
+    { id: 'x', name: 'Cleaning', members: [] },
+    { id: 'y', name: 'Assembly', members: [{ workerId: 'a', role: 'Carpenter', startsOn: '2026-01-01', endsOn: null }] },
+  ];
+  it('gives the team\'s people in the dates on screen with their role in it', () => {
+    const m = crewDuring(teams, id, '2026-11-02', '2026-11-08');
+    expect([...m.entries()]).toEqual([['a', 'Carpenter'], ['d', 'Labourer']]);
+    expect(crewDuring(teams, id, '2026-11-09', '2026-11-15').has('b')).toBe(true);
+    expect(crewDuring(teams, 'nope', '2026-11-02', '2026-11-08').size).toBe(0);
+  });
+  it('offers teams with people in them, by name', () => {
+    expect(crewChoices(teams)).toEqual([{ id: 'y', label: 'Assembly' }, { id, label: 'Build' }]);
   });
 });
