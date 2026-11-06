@@ -7,7 +7,7 @@ import { Roles, Tenant } from '../auth/decorators.js';
 import { APP_POOL } from '../database/database.module.js';
 import { attentionCounts, attentionItems, type AttentionShift } from './attention.js';
 import { coverGapsBetween } from './cover-data.js';
-import { eligibilityForShift } from './eligibility-data.js';
+import { eligibilityForPairs, pairKey } from './eligibility-batch.js';
 import { equipmentForShift } from './equipment-data.js';
 import { SHIFT_COLS, SHIFT_FROM } from './roster.controller.js';
 import { fillWords, wordsFor } from '../terms/words.js';
@@ -64,14 +64,14 @@ export class AttentionController {
       const truncated = rows.length > MAX_SHIFTS;
       const list = rows.slice(0, MAX_SHIFTS);
 
+      // Everyone on these shifts checked at once. The agency checked its people against this business's
+      // requirements; they hold no records here (migration 0042).
+      const checks = await eligibilityForPairs(db, t.tenantId,
+        list.filter(r => r.workerId && !r.agencyName).map(r => ({ shiftId: r.id, workerId: r.workerId! })));
       const facts: AttentionShift[] = [];
       for (const r of list) {
-        let personBlocks: string[] = [];
-        // The agency checked its people against this business's requirements; they hold no records here (migration 0042).
-        if (r.workerId && !r.agencyName) {
-          const [c] = await eligibilityForShift(db, t.tenantId, r.id, [r.workerId]);
-          personBlocks = c ? c.blocks.map(b => b.message) : [];
-        }
+        const c = r.workerId ? checks.get(pairKey(r.id, r.workerId)) : undefined;
+        const personBlocks = c ? c.blocks.map(b => b.message) : [];
         let equipmentBlocks: AttentionShift['equipmentBlocks'] = [];
         if (r.equipment.length) {
           equipmentBlocks = (await equipmentForShift(db, t.tenantId, r.id, r.equipment.map(e => e.id)))
