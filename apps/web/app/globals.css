@@ -849,6 +849,8 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-sort { margin-left: auto; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--text); text-decoration: none; white-space: nowrap; }
 .q-sort:hover { background: var(--hover); }
 .q-sort.on { background: var(--sel-bg); color: var(--sel-text); border-color: var(--sel-bg); }
+.q-teams { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.q-teams .q-sort { margin-left: 0; }
 .q-person-btns { display: flex; gap: 4px; }
 .q-person-btns form, .q-actions form, .q-big-actions form { margin: 0; }
 .q-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }

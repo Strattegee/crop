@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, nearHereLine, nearestFirst, initials, officeChipList, parseQueueParams, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
+  BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, nearHereLine, nearestFirst, initials, officeChipList, parseQueueParams, inTeam, teamChoicesOn, teamOn, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
 } from '../lib/allocation-queue';
 
 const NOW = Date.parse('2026-11-02T08:00:00Z');
@@ -45,8 +45,8 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('keeps the screen’s state in the URL, short', () => {
     const id = '6f1c1f8e-0b6a-4a51-9a51-1b2c3d4e5f60';
     const p = parseQueueParams({ stage: 'released', region: 'VIC', days: '7', shift: id, clientId: 'nope', view: 'odd' });
-    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null, near: false });
-    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null, near: false });
+    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null, near: false, crew: null });
+    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null, near: false, crew: null });
     expect(parseQueueParams({ office: 'ALL' }).office).toBe('all');
     expect(parseQueueParams({ office: id }).office).toBe(id);
     expect(parseQueueParams({ office: 'Melbourne' }).office).toBeNull();
@@ -185,5 +185,46 @@ describe('distance from home on the fill panel (David, 4 Nov)', () => {
     expect(q.near).toBe(true);
     expect(queueHref(q)).toContain('near=1');
     expect(queueHref(q, { near: false })).not.toContain('near');
+  });
+});
+
+describe('best people from one standing team (6 Nov)', () => {
+  const A = 'aaaaaaaa-0000-4000-8000-000000000001', B = 'bbbbbbbb-0000-4000-8000-000000000002';
+  const teams = [
+    { id: A, name: 'Demolition', members: [
+      { workerId: 'w1', role: 'Carpenter', startsOn: '2026-11-01', endsOn: null },
+      { workerId: 'w2', role: 'Labourer', startsOn: '2026-11-10', endsOn: null },
+      { workerId: 'w3', role: 'Painter', startsOn: '2026-10-01', endsOn: '2026-11-05' },
+    ] },
+    { id: B, name: 'Build', members: [{ workerId: 'w4', role: 'Plasterer', startsOn: '2026-12-01', endsOn: null }] },
+  ];
+
+  it('keeps the team in the URL', () => {
+    const p = parseQueueParams({ shift: A, crew: A.toUpperCase() });
+    expect(p.crew).toBe(A);
+    expect(queueHref(p)).toContain(`crew=${A}`);
+    expect(queueHref(p, { crew: null })).not.toContain('crew');
+    expect(parseQueueParams({ crew: 'nope' }).crew).toBeNull();
+  });
+
+  it('finds who is on the team on the shift’s date', () => {
+    expect([...teamOn(teams, A, '2026-11-06')!]).toEqual([['w1', 'Carpenter']]);
+    expect([...teamOn(teams, A, '2026-11-05')!.keys()]).toEqual(['w1', 'w3']);
+    expect([...teamOn(teams, A, '2026-11-10')!.keys()]).toEqual(['w1', 'w2']);
+    expect(teamOn(teams, null, '2026-11-06')).toBeNull();
+    expect(teamOn(teams, 'gone', '2026-11-06')).toBeNull();
+  });
+
+  it('offers teams with people that day, keeping the chosen one', () => {
+    expect(teamChoicesOn(teams, '2026-11-06', null)).toEqual([{ id: A, label: 'Demolition', count: 1 }]);
+    expect(teamChoicesOn(teams, '2026-11-06', B).map(t => t.label)).toEqual(['Build', 'Demolition']);
+    expect(teamChoicesOn(teams, '2026-12-01', null).map(t => t.label)).toEqual(['Build', 'Demolition']);
+  });
+
+  it('narrows the candidates only when a team is chosen', () => {
+    const cands = [{ workerId: 'w1' }, { workerId: 'w9' }];
+    expect(inTeam(cands, null)).toEqual(cands);
+    expect(inTeam(cands, teamOn(teams, A, '2026-11-06'))).toEqual([{ workerId: 'w1' }]);
+    expect(inTeam(cands, teamOn(teams, B, '2026-11-06'))).toEqual([]);
   });
 });

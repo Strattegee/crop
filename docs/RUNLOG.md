@@ -924,3 +924,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: helper tests (reading and keeping the filter, who is in the team in the dates, which teams are offered); every test passes; build and typecheck clean. The API is unchanged. Not checked in a browser (no local sign-in in this run).
 - Next: maybe the same team choice on the allocation queue's best people, issuing and counting stock for supervisors (an access change, to weigh carefully), or the next backlog item not waiting on David.
 - Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-07 12:15am Melbourne (scheduled run): pick a team on the allocation queue
+- Shipped: the last "still to do" of standing teams. On Allocations, an open shift's "Best people" now offers the business's teams that have people on that day (Anyone · Demolition · Build …). Choosing one shows only that team's people who can work the shift, each with the role they fill in the team; "Offer to the top 5" then offers to that team's top five ("Release to the bank" is still everyone). The choice stays while moving from shift to shift, so one team can be put through a run of a client's shifts quickly. People limited to some sites don't see it (teams are business-wide).
+- Checked: helper tests (reading and keeping the choice, who is on the team on the shift's date, which teams are offered, narrowing the list); every test passes; build and typecheck clean. The API is unchanged. Not checked in a browser (no local sign-in in this run).
+- Next: issuing and counting stock for supervisors (an access change, to weigh carefully), a names-only people picker for limited people adding to a project team, or the next backlog item not waiting on David.
+- Waiting on David: unchanged (the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).

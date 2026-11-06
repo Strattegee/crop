@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { T, type Words } from '../../../lib/terms';
 import {
-  OUTCOME_TABS, QUEUE_BANDS, officeChipList, bandTitle, bestPeople, dayGroups, dayHeading, isOutcomeStage, periodChoices, releasableRows, hereLine, nearHereLine, initials, personLine, queueHref,
+  OUTCOME_TABS, QUEUE_BANDS, officeChipList, bandTitle, bestPeople, inTeam, teamChoicesOn, teamOn, dayGroups, dayHeading, isOutcomeStage, periodChoices, releasableRows, hereLine, nearHereLine, initials, personLine, queueHref,
   showMore, stagePill, startsIn, tabLabel, tabsFor, waitingFor,
-  type DayTotals, type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueWords,
+  type DayTotals, type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueTeam, type QueueWords,
 } from '../../../lib/allocation-queue';
 import { cancelKindChoices } from '../../../lib/cancel-kinds';
 import { clientConfirmLine, dayLabel, findStaffHref, rankChip } from '../../../lib/client-orders';
@@ -50,6 +50,8 @@ export type HistoryRow = { id: string; summary: string; actorName: string | null
 export type Panel = {
   shift: PanelShift; row: QueueRow | null; candidates: PanelCandidate[]; offers: PanelOffer[]; agency: AgencyFillState | null; calls?: CallRow[]; today?: string;
   done?: boolean; history?: HistoryRow[];
+  /** The business's standing teams, for the best people's team choice (empty for people limited to some sites). */
+  teams?: QueueTeam[];
 };
 
 const GENDER = { F: 'Female requested', M: 'Male requested' } as const;
@@ -188,7 +190,8 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         </section>
         {panel && (panel.done
           ? <OutcomePanel tw={tw} qw={qw} panel={panel} closeHref={href({ shift: null })} when={when} />
-          : <FillPanel tw={tw} qw={qw} panel={panel} here={here} closeHref={href({ shift: null })} nearHref={href({ near: !p.near })} near={!!p.near} now={now} when={when} />)}
+          : <FillPanel tw={tw} qw={qw} panel={panel} here={here} closeHref={href({ shift: null })} nearHref={href({ near: !p.near })} near={!!p.near} now={now} when={when}
+            crew={p.crew ?? null} crewHref={(crew: string | null) => href({ crew })} />)}
       </div>
     </div>
   );
@@ -215,15 +218,21 @@ function BulkRelease({ tw, qw, rows, here, title }: { tw: Words; qw: QueueWords;
   );
 }
 
-function FillPanel({ tw, qw, panel, here, closeHref, nearHref, near, now, when }: {
+function FillPanel({ tw, qw, panel, here, closeHref, nearHref, near, now, when, crew, crewHref }: {
   tw: Words; qw: QueueWords; panel: Panel; here: string; closeHref: string; nearHref: string; near: boolean; now: number; when: (iso: string) => string;
+  crew: string | null; crewHref: (crew: string | null) => string;
 }) {
   const { shift: s, row: r } = panel;
   const shift = tw.lower(T.shift), client = tw.lower(T.client);
   const st = startsIn(s.startsAt, now, { dayLabel: r?.dayLabel ?? '', localStart: s.localStart });
   const meta = [r?.clientReference ? `ref ${r.clientReference}` : null, r?.channelWords ? `asked by ${r.channelWords.toLowerCase()}${r.requestedByName ? ` (${r.requestedByName})` : ''}` : null,
     r?.clientRank ? `rank ${r.clientRank} ${client}` : null, s.clientConfirms ? 'confirms each booking' : null].filter(Boolean).join(' · ');
-  const best = bestPeople(panel.candidates, 5, s.status === 'open' ? s.pulledOutName : null, near);
+  // A standing team chosen (`crew=`, 6 Nov): only its people on the shift's date, with the role they fill in it.
+  const teams = panel.teams ?? [];
+  const members = teamOn(teams, crew, s.localDate);
+  const teamName = members ? teams.find(t => t.id === crew)?.name ?? '' : '';
+  const teamChoices = teamChoicesOn(teams, s.localDate, crew);
+  const best = bestPeople(inTeam(panel.candidates, members), 5, s.status === 'open' ? s.pulledOutName : null, near);
   const anyDistance = panel.candidates.some(c => c.distanceKm != null);
   const canWork = bestPeople(panel.candidates, 50, s.pulledOutName).length;
   const pending = panel.offers.filter(o => o.status === 'pending');
@@ -290,12 +299,24 @@ function FillPanel({ tw, qw, panel, here, closeHref, nearHref, near, now, when }
           <div className="q-section">
             <div className="q-section-head"><h3>Best people for this {shift}</h3><span className="muted small">checked for {tw.lower(T.role)}, {tw.lower(T.credential, true)}, availability, hours</span>
               {(anyDistance || near) && <Link href={nearHref} scroll={false} replace className={`q-sort small${near ? ' on' : ''}`} aria-pressed={near} title={DISTANCE_TITLE}>{near ? 'Nearest first ✓' : 'Nearest first'}</Link>}</div>
-            {best.length === 0 && <p className="muted small" style={{ margin: '4px 0' }}>Nobody else can work it right now{pending.length ? ' (the people offered it are below)' : ''}.</p>}
+            {teamChoices.length > 0 && (
+              <div className="q-teams small" aria-label={`Best people from one ${tw.lower(T.team)}`}>
+                <span className="muted">{tw.one(T.team)}:</span>
+                <Link href={crewHref(null)} scroll={false} replace className={`q-sort small${members ? '' : ' on'}`} aria-pressed={!members}>Anyone</Link>
+                {teamChoices.map(t => (
+                  <Link key={t.id} href={crewHref(t.id === crew ? null : t.id)} scroll={false} replace className={`q-sort small${t.id === crew ? ' on' : ''}`} aria-pressed={t.id === crew}
+                    title={`${t.count} on it on ${dayLabel(s.localDate)}`}>{t.label}</Link>
+                ))}
+              </div>
+            )}
+            {best.length === 0 && <p className="muted small" style={{ margin: '4px 0' }}>{members
+              ? <>Nobody in {teamName} can work it right now. <Link href={crewHref(null)} scroll={false} replace>Show everyone</Link></>
+              : <>Nobody else can work it right now{pending.length ? ' (the people offered it are below)' : ''}.</>}</p>}
             {best.map((c, i) => (
               <div key={c.workerId} className="q-person">
                 <span className="q-av">{initials(c.name)}</span>
                 <div style={{ minWidth: 0 }}>
-                  <div className="q-name">{c.name}{c.team && <span className="badge neutral" style={{ marginLeft: 6 }} title="On this team">{c.team.teamRole === 'supervisor' ? 'Team supervisor' : 'Team'}</span>}</div>
+                  <div className="q-name">{c.name}{members?.get(c.workerId) && <span className="badge neutral" style={{ marginLeft: 6 }} title={`Their place in ${teamName}`}>{members.get(c.workerId)}</span>}{c.team && <span className="badge neutral" style={{ marginLeft: 6 }} title="On this team">{c.team.teamRole === 'supervisor' ? 'Team supervisor' : 'Team'}</span>}</div>
                   <div className={`small cut ${c.warnings.length ? 'warnline' : 'muted'}`} title={c.warnings.map(w => w.message).join('. ')}>{personLine(c)}</div>
                   <div className={`small cut ${c.siteHistory?.shiftsHere ? 'q-here' : 'muted'}`} title={c.distanceKm != null ? DISTANCE_TITLE : undefined}>{nearHereLine(c.distanceKm, hereLine(c.siteHistory, s.localDate, tw.lower(T.site)))}</div>
                 </div>
@@ -308,8 +329,8 @@ function FillPanel({ tw, qw, panel, here, closeHref, nearHref, near, now, when }
             ))}
           </div>
           <div className="q-big-actions">
-            <form action={offerFromQueue.bind(null, s.id, 'top')}>{back}{near && <input type="hidden" name="near" value="1" />}
-              <button className="btn secondary q-wide" data-key="o" disabled={best.length === 0}>Offer to the top {Math.min(5, best.length) || 5} <span className="muted">first to accept is booked</span></button>
+            <form action={offerFromQueue.bind(null, s.id, 'top')}>{back}{near && <input type="hidden" name="near" value="1" />}{members && crew && <input type="hidden" name="crew" value={crew} />}
+              <button className="btn secondary q-wide" data-key="o" disabled={best.length === 0}>Offer to the top {Math.min(5, best.length) || 5}{members ? ` in ${teamName}` : ''} <span className="muted">first to accept is booked</span></button>
             </form>
             <form action={offerFromQueue.bind(null, s.id, 'release')}>{back}
               <button className="btn secondary q-wide" data-key="r" disabled={canWork === 0}>Release to the {qw.bank} <span className="muted">{canWork} can work it</span></button>

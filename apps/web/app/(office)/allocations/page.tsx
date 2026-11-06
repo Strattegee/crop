@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { api } from '../../../lib/api';
 import { businessZone, todayIn, whenIn } from '../../../lib/business';
 import { orderPlaces, type ClientContact } from '../../../lib/client-orders';
-import { parseQueueParams, queueHref, queueQuery, type QueueParams } from '../../../lib/allocation-queue';
+import { parseQueueParams, queueHref, queueQuery, type QueueParams, type QueueTeam } from '../../../lib/allocation-queue';
+import { currentAgency } from '../../../lib/current-user';
 import { NewOrderForm, RecentOrders, type ClientOrder } from './client-shifts';
 import { QueueScreen, type HistoryRow, type Panel, type PanelCandidate, type PanelOffer, type PanelShift, type Queue, type QueueRow } from './queue';
 import type { AgencyFillState } from '../roster/agency-fill-section';
@@ -120,30 +121,42 @@ async function ClientQueue({ tw, p, when, today }: { tw: Words; p: QueueParams; 
       ]);
       panel = { shift: facts, row, candidates: [], offers, agency: null, calls, today, done: true, history };
     } else if (facts) {
-      const [fill, agency] = await Promise.all([
+      const [fill, agency, teams] = await Promise.all([
         api<{ shift: PanelShift; candidates: PanelCandidate[]; offers: PanelOffer[] }>(`/shifts/${p.shift}/bank-fill?everyone=true`).catch(() => null),
         api<AgencyFillState>(`/shifts/${p.shift}/agency-fill`).catch(() => null),
+        standingTeams(),
       ]);
-      panel = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today } : null;
+      panel = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today, teams } : null;
     }
     return (
       <QueueScreen tw={tw} p={p} q={q} clients={clients.filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name))}
         panel={panel} now={Date.now()} when={when} />
     );
   }
-  const [q, clients, fill, agency, calls] = await Promise.all([
+  const [q, clients, fill, agency, calls, teams] = await Promise.all([
     api<Queue>(`/allocations/queue?${qs}`).catch(() => null),
     api<{ id: string; name: string; status: string }[]>('/clients').catch(() => []),
     p.shift ? api<{ shift: PanelShift; candidates: PanelCandidate[]; offers: PanelOffer[] }>(`/shifts/${p.shift}/bank-fill?everyone=true`).catch(() => null) : Promise.resolve(null),
     p.shift ? api<AgencyFillState>(`/shifts/${p.shift}/agency-fill`).catch(() => null) : Promise.resolve(null),
     p.shift ? api<CallRow[]>(`/calls?shiftId=${p.shift}&days=14`).catch(() => [] as CallRow[]) : Promise.resolve([] as CallRow[]),
+    p.shift ? standingTeams() : Promise.resolve([] as QueueTeam[]),
   ]);
   const row: QueueRow | null = q?.shifts.find(r => r.id === p.shift) ?? null;
-  const panel: Panel | null = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today } : null;
+  const panel: Panel | null = fill ? { shift: fill.shift, row, candidates: fill.candidates, offers: fill.offers, agency, calls, today, teams } : null;
   return (
     <QueueScreen tw={tw} p={p} q={q} clients={clients.filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name))}
       panel={panel} now={Date.now()} when={when} />
   );
+}
+
+/**
+ * The business's standing teams (Workers › Teams) for the fill panel's team choice. Teams are business-wide, so the API
+ * refuses them to anyone limited to some sites; they simply get no choice.
+ */
+async function standingTeams(): Promise<QueueTeam[]> {
+  const me = await currentAgency();
+  if (!me || me.role === 'supervisor' || me.sites != null) return [];
+  return api<{ teams: QueueTeam[] }>('/teams').then(r => r.teams).catch(() => [] as QueueTeam[]);
 }
 
 /** "+ New order": the order form, with every client site and area as one choice. */

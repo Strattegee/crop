@@ -167,6 +167,8 @@ export type QueueParams = {
   limit?: number | null;
   /** The fill panel's best people nearest first (`near=1`). */
   near?: boolean;
+  /** The fill panel's best people from one standing team only (`crew=<team id>`, 6 Nov). */
+  crew?: string | null;
 };
 
 /** `?office=`: all, mine, none or an office id; anything else is left to the default. */
@@ -219,6 +221,7 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
     period,
     limit: period && Number.isInteger(limit) && limit > PAGE_ROWS ? Math.min(limit, 5000) : null,
     near: one('near') === '1',
+    crew: id(one('crew'))?.toLowerCase() ?? null,
   };
 }
 
@@ -237,6 +240,7 @@ export function queueHref(p: QueueParams, change: Partial<QueueParams> = {}): st
   if (period && n.limit) q.set('limit', String(n.limit));
   if (n.shift) q.set('shift', n.shift);
   if (n.near) q.set('near', '1');
+  if (n.crew) q.set('crew', n.crew);
   const s = q.toString();
   return s ? `/allocations?${s}` : '/allocations';
 }
@@ -326,6 +330,40 @@ export function releasePick<C extends { workerId: string; name: string; eligible
   cands: C[], how: 'top' | 'release', pulledOutName: string | null, near = false,
 ): string[] {
   return bestPeople(cands, how === 'top' ? 5 : RELEASE_MAX, pulledOutName, near).map(c => c.workerId);
+}
+
+/** A standing team as `GET /teams` gives it (Workers › Teams), only what the fill panel needs. */
+export type QueueTeam = { id: string; name: string; members: { workerId: string; role: string; startsOn: string; endsOn: string | null }[] };
+
+/**
+ * A standing team's people on the shift's local date (`date`, YYYY-MM-DD), with the role each fills in it; null when no
+ * team is chosen or the team isn't one of the business's live teams (the panel then shows everyone).
+ */
+export function teamOn(teams: QueueTeam[], crewId: string | null | undefined, date: string): Map<string, string> | null {
+  const t = crewId ? teams.find(x => x.id === crewId) : undefined;
+  if (!t) return null;
+  const out = new Map<string, string>();
+  for (const m of t.members) {
+    if (m.startsOn > date || (m.endsOn !== null && m.endsOn < date)) continue;
+    if (!out.has(m.workerId)) out.set(m.workerId, m.role);
+  }
+  return out;
+}
+
+/**
+ * The fill panel's team choices: the business's standing teams with anyone on them on the shift's date, by name, with
+ * how many. The chosen team stays in the list even when nobody is on it that day, so it can be switched off.
+ */
+export function teamChoicesOn(teams: QueueTeam[], date: string, chosen: string | null | undefined): { id: string; label: string; count: number }[] {
+  return teams
+    .map(t => ({ id: t.id, label: t.name, count: teamOn(teams, t.id, date)!.size }))
+    .filter(t => t.count > 0 || t.id === chosen)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Only the candidates on the chosen team that day (everyone when no team is chosen). */
+export function inTeam<C extends { workerId: string }>(cands: C[], members: Map<string, string> | null): C[] {
+  return members ? cands.filter(c => members.has(c.workerId)) : cands;
 }
 
 /** The rows a band can release in one go: still New (nobody on it, nothing offered), in queue order, at most BULK_MAX. */
