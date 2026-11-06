@@ -24,9 +24,17 @@ export class Registered {
   }
 }
 
-/** The worker app's tabs a tapped notification can open (CROP's `PUSH_SCREENS`). */
-export type PushScreen = 'shifts' | 'offers' | 'availability' | 'credentials' | 'details';
-const SCREENS: readonly string[] = ['shifts', 'offers', 'availability', 'credentials', 'details'];
+/**
+ * The app's tabs a tapped notification can open (CROP's `PUSH_SCREENS`): the worker side's, and the manager side's
+ * Needs attention and Requests (office phone alerts, 6 Nov).
+ */
+export type PushScreen = 'shifts' | 'offers' | 'availability' | 'credentials' | 'details' | 'attention' | 'requests';
+const SCREENS: readonly string[] = ['shifts', 'offers', 'availability', 'credentials', 'details', 'attention', 'requests'];
+
+/** The manager side's tab for a tapped office alert, or null for the person's own side. */
+export function managerTab(screen: PushScreen | null): 'today' | 'requests' | null {
+  return screen === 'attention' ? 'today' : screen === 'requests' ? 'requests' : null;
+}
 
 /** Where a tapped notification should go: which business and tab, or null to just open the app. */
 export type PushTap = { tenant: string; screen: PushScreen | null };

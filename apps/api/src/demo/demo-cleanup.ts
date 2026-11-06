@@ -49,6 +49,7 @@ export const PARTIAL: Record<string, string> = {
   site_cover_rules: 'facility_id is not null',
   memberships: 'user_id = any($2::uuid[])',
   member_focus: 'user_id = any($2::uuid[])',
+  member_alerts: 'user_id = any($2::uuid[])',
 };
 /** Set-up and sign-ins: kept as they are. */
 export const KEEP_TABLES = [

@@ -19,7 +19,7 @@ export const TABLE_LABEL: Record<string, string> = {
   agency_connections: 'Agency link', agency_credential_maps: 'Agency credential match', agency_invitations: 'Agency invitation',
   agency_requests: 'Agency request', agency_request_rounds: 'Agency request round', agency_inbox: 'Request from an employer',
   agency_placements: 'Agency placement', agency_offers: 'Agency offer', outside_agencies: 'Agency not on CROP',
-  client_orders: 'Client order', client_contacts: 'Client contact', customer_requests: 'Customer request', job_applications: 'Job application', worker_documents: 'Document', apply_forms: 'Application form', shift_swaps: 'Shift swap', offices: 'Office', member_offices: 'Office person', member_sites: 'Team access',
+  client_orders: 'Client order', client_contacts: 'Client contact', customer_requests: 'Customer request', job_applications: 'Job application', worker_documents: 'Document', apply_forms: 'Application form', shift_swaps: 'Shift swap', offices: 'Office', member_offices: 'Office person', member_sites: 'Team access', member_alerts: 'Phone alerts',
   worker_addresses: 'Address', field_access: 'Who sees and changes a detail',
   detail_change_requests: 'Change asked for in the app',
 };

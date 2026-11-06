@@ -13,7 +13,7 @@ import { CredentialsTab } from './src/CredentialsTab';
 import { DetailsScreen } from './src/DetailsScreen';
 import { ManagerHome } from './src/ManagerHome';
 import { forgetPush, onPushTap, registerForPush } from './src/push';
-import { tapTarget, type PushTap } from './src/push-rules';
+import { managerTab, tapTarget, type PushTap } from './src/push-rules';
 import { SwapPicker, SwapsList } from './src/SwapsSection';
 import { canSwap, type MySwap, type SwapMode } from './src/swaps';
 import { roleOf, startMode, type Mode } from './src/manager';
@@ -166,13 +166,17 @@ function Ready({ tenant, me, open, onSwitch, onSignOut, onSignedOut }: {
     api('/my', { tenant }).then(() => setLinked(true), () => setLinked(false));
   }, [tenant, mode]);
 
-  // Notifications are about the person's own shifts, offers and credentials: a manager who taps one sees their own side.
+  // Office alerts open the manager side at their tab; the rest are about the person's own shifts, offers and
+  // credentials, so a manager who taps one sees their own side.
+  const officeTab = open ? managerTab(open.screen) : null;
   useEffect(() => {
-    if (open?.screen) setMode('worker');
-  }, [open]);
+    if (!open?.screen) return;
+    setMode(managerTab(open.screen) && startMode(role) === 'manager' ? 'manager' : 'worker');
+  }, [open, role]);
 
   if (mode === 'manager' && role) {
-    return <ManagerHome tenant={tenant} business={business} role={role} onMyShifts={linked ? () => setMode('worker') : null}
+    return <ManagerHome tenant={tenant} business={business} role={role} openTab={officeTab && open ? { tab: officeTab, n: open.n } : null}
+      onMyShifts={linked ? () => setMode('worker') : null}
       switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut} />;
   }
   return <Home tenant={tenant} open={open} switchable={switchable} onSwitch={onSwitch} onSignOut={onSignOut} onSignedOut={onSignedOut}
@@ -231,7 +235,7 @@ function Home({ tenant, open, switchable, onSwitch, onSignOut, onSignedOut, onMa
   // A tapped notification: show its tab with fresh data (the offer or booking it is about may be new).
   useEffect(() => {
     if (!open) return;
-    if (open.screen) setTab(open.screen);
+    if (open.screen && !managerTab(open.screen)) setTab(open.screen as 'shifts' | 'offers' | 'availability' | 'credentials' | 'details');
     void load();
   }, [open, load]);
 

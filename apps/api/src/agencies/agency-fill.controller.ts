@@ -1,5 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnApplicationShutdown, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { pulledOutPush } from '../notifications/manager-alerts.js';
 import { withTenant } from '@crop/db';
 import type { Pool, PoolClient } from 'pg';
 import { OFFICE_ROLES, type AuthContext, type Membership } from '../auth/auth.types.js';
@@ -80,9 +82,9 @@ export async function tellEmployer(pool: Pool, employerTenantId: string, placeme
 async function tellEmployerPulledOut(pool: Pool, employerTenantId: string, placementId: string) {
   await withTenant(pool, employerTenantId, async db => {
     const p = (await db.query<{ agencyName: string; personName: string; role: string; siteName: string; areaName: string | null; startsAt: Date; endsAt: Date;
-      siteTimezone: string; reason: string | null; shiftId: string; weekStart: string }>(
+      siteTimezone: string; reason: string | null; shiftId: string; weekStart: string; facilityId: string }>(
       `select p.agency_name as "agencyName", coalesce(w.preferred_name, w.first_name) || ' ' || w.last_name as "personName", s.role, f.name as "siteName",
-              a.name as "areaName", s.starts_at as "startsAt", s.ends_at as "endsAt", f.timezone as "siteTimezone", p.pulled_out_reason as reason,
+              a.name as "areaName", s.starts_at as "startsAt", s.ends_at as "endsAt", f.timezone as "siteTimezone", p.pulled_out_reason as reason, s.facility_id as "facilityId",
               s.id as "shiftId", to_char(date_trunc('week', s.starts_at at time zone f.timezone), 'YYYY-MM-DD') as "weekStart"
          from agency_placements p join workers w on w.id = p.worker_id join shifts s on s.id = p.shift_id
          join facilities f on f.id = s.facility_id left join areas a on a.id = s.area_id
@@ -94,6 +96,12 @@ async function tellEmployerPulledOut(pool: Pool, employerTenantId: string, place
     for (const e of emails) {
       await queueNotification(db, employerTenantId, { channel: 'email', to: e.email, template: 'agency_pulled_out', subject, body, dedupeKey: `agency-pulled-out:${placementId}:${e.email.toLowerCase()}` });
     }
+    // The phones of the office people who see that site (backlog item 9a): never the agency's reason.
+    await alertOffice(db, employerTenantId, {
+      kind: 'at_risk', facilityId: p.facilityId, template: OFFICE_ALERT_TEMPLATES.pulledOut, holdThroughQuiet: true,
+      ...pulledOutPush({ agencyName: p.agencyName, personName: p.personName, role: p.role, siteName: p.siteName, when: localWhen(p) }, w),
+      dedupeKey: `agency-pulled-out:${placementId}`,
+    });
   });
 }
 

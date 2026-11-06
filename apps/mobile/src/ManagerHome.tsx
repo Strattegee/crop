@@ -13,6 +13,7 @@ import { PeopleTab } from './PeopleTab';
 import type { PersonRow } from './people';
 import type { ProjectRow } from './projects';
 import { ShiftScreen } from './ShiftScreen';
+import { AlertsScreen } from './AlertsScreen';
 import { styles } from './styles';
 
 type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
@@ -24,8 +25,10 @@ type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
  * the same endpoints and rules as the web. Projects (6 Nov) shows only when the person can see any (`ProjectsTab`);
  * People (6 Nov) lists who they can see (`PeopleTab`; a supervisor only their sites' people, in the API's limited view).
  */
-export function ManagerHome({ tenant, business, role, onMyShifts, switchable, onSwitch, onSignOut, onSignedOut }: {
+export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switchable, onSwitch, onSignOut, onSignedOut }: {
   tenant: string; business: string; role: string; onMyShifts: (() => void) | null;
+  /** A tapped office alert: the tab to open (`n` changes with every tap). */
+  openTab?: { tab: 'today' | 'requests'; n: number } | null;
   switchable: boolean; onSwitch: () => void; onSignOut: () => void; onSignedOut: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('today');
@@ -43,6 +46,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [openProject, setOpenProject] = useState<string | null>(null);
   const [staff, setStaff] = useState<PersonRow[]>([]);
   const [openPerson, setOpenPerson] = useState<string | null>(null);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const decider = canDecide(role);
   const can = managerCan(role);
 
@@ -86,6 +90,16 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     load();
   }, [load]);
 
+  // A tapped alert opens its tab, fresh.
+  useEffect(() => {
+    if (!openTab) return;
+    setOpenShift(null);
+    setAlertsOpen(false);
+    setTab(openTab.tab);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTab?.n, openTab?.tab]);
+
   const word = shiftWord(terms);
   const people = termWord(terms, 'worker', 'Worker', 'Workers');
   const siteWord = termWord(terms, 'site', 'Site', 'Sites');
@@ -126,6 +140,10 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const confirm = (title: string, run: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', onPress: run }]);
 
+  if (alertsOpen) {
+    return <AlertsScreen tenant={tenant} word={word} rosterWord={rosterWord} onBack={() => setAlertsOpen(false)} onSignedOut={onSignedOut} />;
+  }
+
   if (openShift) {
     return <ShiftScreen tenant={tenant} shiftId={openShift} role={role} today={today} word={word} equipmentWord={equipmentWord} onSignedOut={onSignedOut}
       onBack={() => { setOpenShift(null); load(); }} />;
@@ -141,6 +159,7 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {onMyShifts && <Pressable onPress={onMyShifts}><Text style={styles.link}>My {word.lowerMany}</Text></Pressable>}
           {switchable && <Pressable onPress={onSwitch}><Text style={styles.link}>Switch</Text></Pressable>}
+          <Pressable onPress={() => setAlertsOpen(true)} accessibilityRole="button"><Text style={styles.link}>Alerts</Text></Pressable>
         </View>
       </View>
       <View style={styles.tabs}>
