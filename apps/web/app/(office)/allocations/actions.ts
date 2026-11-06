@@ -2,7 +2,7 @@
 
 import { api, ApiError } from '../../../lib/api';
 import { attempt, str } from '../../../lib/actions';
-import { BULK_MAX, bulkReleaseMessage, releasePick, type BulkResult } from '../../../lib/allocation-queue';
+import { BULK_MAX, bulkReleaseMessage, inTeam, releasePick, teamOn, type BulkResult, type QueueTeam } from '../../../lib/allocation-queue';
 import { contactSavedNote, dayLabel, parsePlace } from '../../../lib/client-orders';
 import { T, words } from '../../../lib/terms';
 import { addShiftsDates, addShiftsUntil, addShiftsWhen } from '../roster/view';
@@ -103,9 +103,13 @@ export async function offerFromQueue(shiftId: string, how: 'top' | 'release', f:
   const tw = await words();
   let offered = 0;
   await attempt(backTo(f), async () => {
-    const { shift, candidates } = await api<{ shift: { pulledOutName: string | null }; candidates: BankCandidate[] }>(`/shifts/${shiftId}/bank-fill?everyone=true`);
+    const { shift, candidates } = await api<{ shift: { pulledOutName: string | null; localDate: string }; candidates: BankCandidate[] }>(`/shifts/${shiftId}/bank-fill?everyone=true`);
+    // The top five from one standing team when the panel shows one (`crew`); releasing to the bank is always everyone.
+    const crew = how === 'top' ? str(f, 'crew') : undefined;
+    const members = crew && /^[0-9a-f-]{36}$/i.test(crew)
+      ? teamOn([await api<QueueTeam>(`/teams/${crew}`)], crew.toLowerCase(), shift.localDate) : null;
     // Never the person who just pulled out of it; with "Nearest first" on, the top five are the nearest (as the panel shows them).
-    const pick = releasePick(candidates, how, shift.pulledOutName, f.get('near') === '1');
+    const pick = releasePick(inTeam(candidates, members), how, shift.pulledOutName, f.get('near') === '1');
     if (!pick.length) throw new ApiError(409, `Nobody else can work this ${tw.lower(T.shift)} right now. Try ${tw.lower(T.agency, true)}, or open it in the ${tw.lower(T.roster)} to see why.`);
     await api(`/shifts/${shiftId}/offers`, { method: 'POST', body: { workerIds: pick } });
     offered = pick.length;
