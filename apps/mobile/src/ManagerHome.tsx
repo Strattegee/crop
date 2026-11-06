@@ -8,16 +8,18 @@ import {
 } from './manager';
 import { currentWeek, firstDay, termWord } from './roster';
 import { RosterTab, type RosterView } from './RosterTab';
+import { ProjectsTab } from './ProjectsTab';
+import type { ProjectRow } from './projects';
 import { ShiftScreen } from './ShiftScreen';
 import { styles } from './styles';
 
-type Tab = 'today' | 'roster' | 'requests';
+type Tab = 'today' | 'roster' | 'projects' | 'requests';
 
 /**
  * Manager mode (backlog item 9a, first slice): for owners, admins and allocators running the roster from a phone.
  * Today = Needs attention for the next 7 days (the same list as the web's roster and Dashboard); Requests = leave
  * and roster change requests waiting, which owners and admins approve or decline here. Everything goes through
- * the same endpoints and rules as the web.
+ * the same endpoints and rules as the web. Projects (6 Nov) shows only when the person can see any (`ProjectsTab`).
  */
 export function ManagerHome({ tenant, business, role, onMyShifts, switchable, onSwitch, onSignOut, onSignedOut }: {
   tenant: string; business: string; role: string; onMyShifts: (() => void) | null;
@@ -34,6 +36,8 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const [busy, setBusy] = useState(false);
   const [openShift, setOpenShift] = useState<string | null>(null);
   const [rosterView, setRosterView] = useState<RosterView | null>(null);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [openProject, setOpenProject] = useState<string | null>(null);
   const decider = canDecide(role);
   const can = managerCan(role);
 
@@ -41,14 +45,16 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
     setBusy(true);
     setError(null);
     try {
-      const [a, l, c, t, s, d] = await Promise.all([
+      const [a, l, c, t, s, d, p] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
         can.leave ? api<LeaveRequest[]>('/leave?status=requested', { tenant }) : Promise.resolve([] as LeaveRequest[]),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
         api<Term[]>('/terms', { tenant }).catch(() => null),
         api<{ timezone?: string }>('/settings', { tenant }).catch(() => null),
         api<Dashboard>('/dashboard', { tenant }).catch(() => null),
+        api<ProjectRow[]>('/projects', { tenant }).catch(() => [] as ProjectRow[]),
       ]);
+      setProjects(p);
       setDash(d);
       setAttention(a);
       setLeave(l);
@@ -78,6 +84,14 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
   const siteWord = termWord(terms, 'site', 'Site', 'Sites');
   const rosterWord = termWord(terms, 'roster', 'Roster', 'Rosters');
   const equipmentWord = termWord(terms, 'equipment', 'Equipment', 'Equipment');
+  const projectWord = termWord(terms, 'project', 'Project', 'Projects');
+  const tabs: Tab[] = projects.length > 0 ? ['today', 'roster', 'projects', 'requests'] : ['today', 'roster', 'requests'];
+  const tabLabel = (t: Tab) => t === 'today' ? 'Needs attention' : t === 'roster' ? rosterWord.one : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length);
+  const rosterAt = (facilityId: string, day: string) => {
+    const weekStart = currentWeek(day, day);
+    setRosterView({ weekStart, day: firstDay(weekStart, day), facilityId });
+    setTab('roster');
+  };
 
   const act = async (path: string, done: (result: unknown) => string) => {
     setBusy(true);
@@ -120,15 +134,18 @@ export function ManagerHome({ tenant, business, role, onMyShifts, switchable, on
         </View>
       </View>
       <View style={styles.tabs}>
-        {(['today', 'roster', 'requests'] as const).map(t => (
+        {tabs.map(t => (
           <Pressable key={t} style={[styles.tab, tab === t && styles.tabOn]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'today' ? 'Needs attention' : t === 'roster' ? rosterWord.one : requestsTab(leave.length, changes.length)}</Text>
+            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{tabLabel(t)}</Text>
           </Pressable>
         ))}
       </View>
       {tab === 'roster' && rosterView ? (
         <RosterTab tenant={tenant} role={role} today={today} view={rosterView} setView={setRosterView} word={word} people={people} siteWord={siteWord} equipmentWord={equipmentWord}
           busyOutside={busy} onOpen={setOpenShift} onSignedOut={onSignedOut} />
+      ) : tab === 'projects' && projects.length > 0 ? (
+        <ProjectsTab tenant={tenant} projects={projects} openId={openProject} setOpenId={setOpenProject} word={word} equipmentWord={equipmentWord}
+          projectWord={projectWord} busyOutside={busy} onReload={load} onOpenShift={setOpenShift} onRoster={rosterAt} onSignedOut={onSignedOut} />
       ) : (
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
         {error && <Text style={styles.error}>{error}</Text>}
