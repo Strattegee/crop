@@ -461,3 +461,27 @@ export function bulkMessage(done: string, results: BulkOutcome[], count: (n: num
   if (!ok) return { error: `Nothing changed.${notLine ? ` ${notLine}` : ''}` };
   return { done: `${done} ${count(ok)}.${notLine ? ` ${notLine}` : ''}` };
 }
+
+/**
+ * Inline changes on a List row (7 Nov, "next if wanted" of the List view): day and times, role and area, the same
+ * forms as the shift panel's "Change day, times, role or area". Offered only to people who may change a shift's details
+ * (`shiftPanelCan(role).editDetails`), on a live shift that hasn't started, in a week whose changes they may make
+ * (after publishing, the panel asks for the change instead). The API still checks everything.
+ */
+export function rowEditable(s: { status: string; startsAt?: string | null; facilityId: string }, now: number, o: { canEdit: boolean; refused: Set<string> }): boolean {
+  if (!o.canEdit || s.status === 'cancelled' || o.refused.has(s.facilityId) || !s.startsAt) return false;
+  const t = new Date(s.startsAt).getTime();
+  return Number.isFinite(t) && t > now;
+}
+
+/** Which column carries the role and area change: the Role column, or the Area column when grouping by role hides it. */
+export function roleEditColumn(group: ListGroupBy): 'role' | 'area' {
+  return group === 'role' ? 'area' : 'role';
+}
+
+/** The area choices for a row: the site's live areas, plus the row's own area if it isn't among them, so saving never drops it. */
+export function areaChoices(areas: { id: string; name: string; active?: boolean }[] | undefined, current: { areaId?: string | null; areaName?: string | null }): { id: string; name: string }[] {
+  const list = (areas ?? []).filter(a => a.active !== false || a.id === current.areaId).map(a => ({ id: a.id, name: a.name }));
+  if (current.areaId && !list.some(a => a.id === current.areaId)) list.push({ id: current.areaId, name: current.areaName ?? 'Current' });
+  return list;
+}

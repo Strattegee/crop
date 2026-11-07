@@ -4,16 +4,16 @@ import { T, type Words } from '../../../lib/terms';
 import type { MarkerLetters } from '../../../lib/marker-letters';
 import {
   BANDS, BAND_WORDS, FILTER_KEYS, GROUP_BYS, LENGTHS, LENGTH_WORDS, LIST_MAX, LIST_PAGE, PERIODS, PERIOD_WORDS, STAGE_ORDER, STAGE_WORDS, TLINES, TLINE_WORDS,
-  WARNS, WARN_WORDS, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, offAll, pageGroups, pickValue, sortMark, sortOver, splitList,
+  WARNS, WARN_WORDS, areaChoices, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, offAll, pageGroups, pickValue, roleEditColumn, rowEditable, sortMark, sortOver, splitList,
   stageClass, stageTally, type ListGroupBy, type ListParams, type ListShift, type ListSort, type MarkFilter, type RowFacts, type StageCls,
 } from '../../../lib/roster-list';
 import { UNCHECKED } from '../../../lib/outside-agency';
-import { confirm } from './actions';
+import { confirm, setRole, setTimes } from './actions';
 import { BULK_FORM, LIST_FILTERS, ListTools } from './list-tools';
 import { projectStageLine, requestsFor, shiftMarkers, tLines, type DayRequest, type MarkerShift, type ProjectStageShift } from './view';
 
 /** A roster shift as the list needs it (`GET /roster` rows). */
-export type ListRowShift = ListShift & MarkerShift & ProjectStageShift & { breakMinutes?: number; agencyUnchecked?: boolean; clientId?: string | null; equipment?: { name: string; vehicle?: boolean }[] };
+export type ListRowShift = ListShift & MarkerShift & ProjectStageShift & { breakMinutes?: number; startsAt?: string; areaId?: string | null; agencyUnchecked?: boolean; clientId?: string | null; equipment?: { name: string; vehicle?: boolean }[] };
 
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 const shortDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)).replace(',', '');
@@ -23,7 +23,7 @@ const longDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'long
  * The roster's List view (David and Steve, 4 Nov): the same shifts as the cards, one compact row each, grouped and
  * filtered from the URL, with tick boxes for acting on several at once. A row opens the same shift panel as a card.
  */
-export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here, selectedId, allSites, weekDays, people, duties, blocked, gaps, refused, stageLabel, letterCol, closeHref }: {
+export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here, selectedId, allSites, weekDays, people, duties, blocked, gaps, refused, stageLabel, letterCol, closeHref, edit }: {
   shifts: ListRowShift[]; p: ListParams; role: string; tw: Words; letters: MarkerLetters; dayRequests: DayRequest[];
   url: (over: Record<string, string | undefined>) => string; here: string; selectedId: string | null; allSites: boolean;
   /** The week's days in week view (the Time column's day choices); null in day view. */
@@ -36,6 +36,11 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
   /** Sites whose week this person can't change (after-publishing rule): no quick actions there, the panel asks instead. */
   refused: Set<string>;
   stageLabel: (s: ListRowShift) => string; letterCol: (s: ListRowShift) => ReactNode; closeHref: string | null;
+  /**
+   * Inline changes of day, times, role and area (7 Nov): whether this person may change a shift's details, the time to
+   * compare starts with, each site's areas. Left out = no inline changes.
+   */
+  edit?: { canEdit: boolean; now: number; areas: Map<string, { id: string; name: string; active?: boolean }[]> };
 }) {
   const shiftWord = tw.lower(T.shift), shiftsWord = tw.lower(T.shift, true);
   const count = (n: number) => tw.count(n, T.shift);
@@ -80,7 +85,7 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
   const cols = {
     date: p.group !== 'date', site: allSites && p.group !== 'site' && p.group !== 'area', area: p.group !== 'area', role: p.group !== 'role', person: p.group !== 'person',
   };
-  const template = ['30px', cols.date && '88px', '108px', cols.site && 'minmax(100px, 1fr)', cols.area && 'minmax(96px, 0.9fr)', cols.role && 'minmax(100px, 1fr)',
+  const template = ['30px', cols.date && '88px', '124px', cols.site && 'minmax(100px, 1fr)', cols.area && 'minmax(96px, 0.9fr)', cols.role && 'minmax(100px, 1fr)',
     cols.person && 'minmax(120px, 1.3fr)', '118px', '64px', '96px', 'minmax(100px, 1fr)', 'minmax(96px, 0.8fr)', '84px'].filter(Boolean).join(' ');
 
   const nOn = filterCount(lp, chosenRoles);
@@ -189,6 +194,35 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
     ...(!cols.person ? [{ label: tw.one(T.worker), node: personF }] : []),
   ];
 
+  const roleIn = roleEditColumn(p.group);
+  const shiftW = tw.lower(T.shift);
+  /** Day, times and break, like the shift panel's form; the API refuses what the person or equipment on it can't do. */
+  const timesForm = (s: ListRowShift, label: string) => editPop(`lst-t-${s.id}`, 'day and times', label, (
+    <form action={setTimes.bind(null, s.id)} className="lst-edform">
+      <input type="hidden" name="back" value={here} />
+      <label>Day<input type="date" name="date" defaultValue={s.localDate} required /></label>
+      <label>Start<input type="time" name="startTime" defaultValue={s.localStart} required /></label>
+      <label>End<input type="time" name="endTime" defaultValue={s.localEnd} required /></label>
+      <label>Break (min)<input type="number" name="breakMinutes" min={0} max={240} step={5} defaultValue={s.breakMinutes ?? 0} /></label>
+      <button className="btn small">Save</button>
+      <span className="muted small">An end before the start runs overnight. Whoever is on the {shiftW} must still be able to work the new times.</span>
+    </form>
+  ));
+  const roleForm = (s: ListRowShift, label: string) => editPop(`lst-r-${s.id}`, `${tw.lower(T.role)} or ${tw.lower(T.area)}`, label, (
+    <form action={setRole.bind(null, s.id)} className="lst-edform">
+      <input type="hidden" name="back" value={here} />
+      <label>{tw.one(T.role)}<input name="role" defaultValue={s.role} maxLength={60} list="known-roles" required /></label>
+      <label>{tw.one(T.area)}
+        <select name="areaId" defaultValue={s.areaId ?? ''}>
+          <option value="">No {tw.lower(T.area)}</option>
+          {areaChoices(edit?.areas.get(s.facilityId), s).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </label>
+      <button className="btn small">Save</button>
+      {s.workerId && <span className="muted small">Refused if the person on it can&apos;t work the new {tw.lower(T.role)}.</span>}
+    </form>
+  ));
+
   return (
     <div className="lst">
       <div className="lst-filters">
@@ -295,6 +329,8 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
     const waiting = !cancelled && s.status === 'assigned' && !!s.workerId;
     const canAct = !refused.has(s.facilityId);
     const label = `${shortDay(s.localDate)} ${s.localStart}–${s.localEnd} ${s.role}`;
+    const editable = !!edit && rowEditable(s, edit.now, { canEdit: edit.canEdit, refused });
+    const editRole = editable && !s.equipmentOnly;
     return (
       <div key={s.id} className={`lst-row st-${st}${sel ? ' sel' : ''}`} role="row" data-lrowbox
         // A drop target like the cards (7 Nov): a person from the strip onto an open row, equipment or an item onto any live one.
@@ -310,10 +346,15 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
         {cols.date && <span role="cell" className="lst-date">{shortDay(s.localDate)}</span>}
         <span role="cell" className="lst-time">
           <a href={url({ shift: s.id })} data-lrow aria-current={sel ? 'true' : undefined} title={`Open ${label}`}>{s.localStart}–{s.localEnd}</a>
+          {editable && timesForm(s, label)}
         </span>
         {cols.site && <span role="cell" className="cut">{s.facilityName}</span>}
-        {cols.area && <span role="cell" className="cut">{s.areaName ?? <span className="muted">–</span>}</span>}
-        {cols.role && <span role="cell" className="cut">{s.role}</span>}
+        {cols.area && (editRole && roleIn === 'area'
+          ? <span role="cell" className="lst-edcell"><span className="cut">{s.areaName ?? <span className="muted">–</span>}</span>{roleForm(s, label)}</span>
+          : <span role="cell" className="cut">{s.areaName ?? <span className="muted">–</span>}</span>)}
+        {cols.role && (editRole && roleIn === 'role'
+          ? <span role="cell" className="lst-edcell"><span className="cut">{s.role}</span>{roleForm(s, label)}</span>
+          : <span role="cell" className="cut">{s.role}</span>)}
         {cols.person && (
           <span role="cell" className={`cut${s.workerName ? '' : ' muted'}`}>
             {s.equipmentOnly ? `${tw.one(T.equipment)} only` : s.workerName ?? (s.pulledOutName ? `Unfilled (${s.pulledOutName} pulled out)` : 'Unfilled')}
@@ -341,6 +382,23 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
       </div>
     );
   }
+}
+
+/**
+ * A small dialog for an inline change. It uses the browser's popover (top layer), so it isn't cut off by the list's
+ * scrolling box; Esc or a click outside closes it.
+ */
+function editPop(id: string, what: string, label: string, body: ReactNode) {
+  return (
+    <>
+      <button type="button" className="lst-edbtn" popoverTarget={id} aria-label={`Change ${what} of ${label}`} title={`Change ${what}`}><span aria-hidden="true">✎</span></button>
+      <div popover="auto" id={id} className="lst-edpop" role="dialog" aria-label={`Change ${what}`}>
+        <b>Change {what}</b>
+        <span className="muted small">{label}</span>
+        {body}
+      </div>
+    </>
+  );
 }
 
 const needsPerson = (s: ListRowShift) => s.status === 'open' && !s.equipmentOnly;
