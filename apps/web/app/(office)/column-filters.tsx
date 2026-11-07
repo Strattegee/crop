@@ -10,26 +10,33 @@ import type { ReactNode } from 'react';
 export type Choice = { value: string; label: string; group?: string };
 
 /** A drop-down with fields of its own and an Apply button. */
-export function ColumnPop({ summary, on, label, children }: { summary: string; on: boolean; label: string; children: ReactNode }) {
+export function ColumnPop({ summary, on, label, children, form, className }: { summary: string; on: boolean; label: string; children: ReactNode; form?: string; className?: string }) {
   return (
-    <details className="lst-pop rl-f" data-hold>
+    <details className={`lst-pop rl-f${className ? ` ${className}` : ''}`} data-hold>
       <summary className={`rl-fsum${on ? ' on' : ''}`} aria-label={`${label}: ${summary}`}>{summary}</summary>
       <div className="lst-pop-body rl-fbody">
         {children}
-        <button className="btn small">Apply</button>
+        <button className="btn small" form={form}>Apply</button>
       </div>
     </details>
   );
 }
 
 /** Tick boxes (under optional group headings), as part of a `ColumnPop` or on their own. */
-export function ChoiceList({ name, chosen, options, empty = 'Nothing to choose from yet.' }: { name: string; chosen: string[]; options: Choice[]; empty?: string }) {
+export function ChoiceList({ name, chosen, options, empty = 'Nothing to choose from yet.', form, title }: {
+  name: string; chosen: string[]; options: Choice[]; empty?: string;
+  /** The form's id when the tick boxes sit outside it. */
+  form?: string;
+  /** A heading over this list (when a drop-down holds several). */
+  title?: string;
+}) {
   return (
     <div className="rl-checks">
+      {title && <b className="rl-group">{title}</b>}
       {options.map((o, i) => (
         <span key={o.value} style={{ display: 'contents' }}>
           {o.group && o.group !== options[i - 1]?.group && <b className="rl-group">{o.group}</b>}
-          <label className="rl-check"><input type="checkbox" name={name} value={o.value} defaultChecked={chosen.includes(o.value)} /> {o.label}</label>
+          <label className="rl-check"><input type="checkbox" form={form} name={name} value={o.value} defaultChecked={chosen.includes(o.value)} /> {o.label}</label>
         </span>
       ))}
       {options.length === 0 && <span className="muted small">{empty}</span>}
@@ -45,11 +52,16 @@ export function multiSummary(chosen: string[], options: Choice[], any = 'Any'): 
 }
 
 /** A multi-select: "Any" (or `any`), one name, or "3 chosen". */
-export function ColumnMulti({ name, label, chosen, options, any }: { name: string; label: string; chosen: string[]; options: Choice[]; any?: string }) {
+export function ColumnMulti({ name, label, chosen, options, any, form, className, empty, note }: {
+  name: string; label: string; chosen: string[]; options: Choice[]; any?: string; form?: string; className?: string; empty?: string;
+  /** A line above the tick boxes. */
+  note?: ReactNode;
+}) {
   const summary = multiSummary(chosen, options, any);
   return (
-    <ColumnPop summary={summary} on={chosen.length > 0} label={label}>
-      <ChoiceList name={name} chosen={chosen} options={options} />
+    <ColumnPop summary={summary} on={chosen.length > 0} label={label} form={form} className={className}>
+      {note}
+      <ChoiceList name={name} chosen={chosen} options={options} form={form} empty={empty} />
     </ColumnPop>
   );
 }

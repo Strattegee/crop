@@ -8,6 +8,8 @@ import {
   stageClass, stageTally, type ListGroupBy, type ListParams, type ListShift, type ListSort, type MarkFilter, type RowFacts, type StageCls,
 } from '../../../lib/roster-list';
 import { UNCHECKED } from '../../../lib/outside-agency';
+import { ChoiceList, ColumnPop } from '../column-filters';
+import { ColumnFilterForm } from '../column-filter-form';
 import { confirm, setRole, setTimes } from './actions';
 import { BULK_FORM, LIST_FILTERS, ListTools } from './list-tools';
 import { projectStageLine, requestsFor, shiftMarkers, tLines, type DayRequest, type MarkerShift, type ProjectStageShift } from './view';
@@ -103,24 +105,14 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
     );
   };
   type Opt = { value: string; label: string };
-  /** A heading's drop-down of tick boxes, in one or more groups; Apply (or Enter) filters. */
+  /** A heading's drop-down of tick boxes, in one or more groups; Apply (or Enter) filters. Shared parts (`column-filters.tsx`). */
   const pop = (label: string, summary: string | null, groups: { name: string; title?: string; options: Opt[]; chosen: string[] }[], extra?: ReactNode) => (
-    <details className="lst-pop rl-f lst-hf">
-      <summary className={`rl-fsum${summary ? ' on' : ''}`} aria-label={`Filter ${label.toLowerCase()}`}>{summary ?? 'Any'}</summary>
-      <div className="lst-pop-body rl-fbody">
-        {extra}
-        {groups.map(g => (
-          <div key={g.name + (g.title ?? '')} className="rl-checks">
-            {g.title && <b className="rl-group">{g.title}</b>}
-            {g.options.map(o => (
-              <label key={o.value} className="rl-check"><input type="checkbox" form={F} name={g.name} value={o.value} defaultChecked={g.chosen.includes(o.value)} /> {o.label}</label>
-            ))}
-            {g.options.length === 0 && <span className="muted small">Nothing to choose from this period.</span>}
-          </div>
-        ))}
-        <button className="btn small" form={F}>Apply</button>
-      </div>
-    </details>
+    <ColumnPop summary={summary ?? 'Any'} on={summary !== null} label={label} form={F} className="lst-hf">
+      {extra}
+      {groups.map(g => (
+        <ChoiceList key={g.name + (g.title ?? '')} name={g.name} title={g.title} options={g.options} chosen={g.chosen} form={F} empty="Nothing to choose from this period." />
+      ))}
+    </ColumnPop>
   );
   const chosen = (values: string[], options: Opt[]) => !values.length ? null : values.length === 1 ? options.find(o => o.value === values[0])?.label ?? values[0]! : `${values.length} chosen`;
   const head = (label: string, sort: ListSort | null, filter: ReactNode, extraCls = '') => (
@@ -151,18 +143,14 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
   ];
   const personSummary = [p.who && `“${p.who}”`, p.person && (personOpts.find(o => o.value === p.person)?.label ?? persons.get(p.person) ?? 'One person')].filter(Boolean).join(' · ') || null;
   const personF = (
-    <details className="lst-pop rl-f lst-hf">
-      <summary className={`rl-fsum${personSummary ? ' on' : ''}`} aria-label={`Filter ${tw.lower(T.worker)}`}>{personSummary ?? 'Any'}</summary>
-      <div className="lst-pop-body rl-fbody">
+    <ColumnPop summary={personSummary ?? 'Any'} on={personSummary !== null} label={tw.one(T.worker)} form={F} className="lst-hf">
         <label>Name<input type="search" form={F} name="who" defaultValue={p.who} maxLength={80} placeholder="Part of a name" /></label>
         <label>Show
           <select form={F} name="person" defaultValue={p.person}>
             {personOpts.map(o => <option key={o.value || 'any'} value={o.value}>{o.label}</option>)}
           </select>
         </label>
-        <button className="btn small" form={F}>Apply</button>
-      </div>
-    </details>
+    </ColumnPop>
   );
   const stageOpts = STAGE_ORDER.map(c => ({ value: c, label: STAGE_WORDS[c] }));
   const stageF = pop('Stage', p.stages.length ? chosen(p.stages, stageOpts) : null, [{ name: 'stage', options: stageOpts, chosen: p.stages }],
@@ -226,12 +214,12 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
   return (
     <div className="lst">
       <div className="lst-filters">
-        <form id={F} method="get" action="/roster" className="q-selects" role="search">
+        <ColumnFilterForm id={F} action="/roster" className="q-selects" label={`Filter the ${tw.lower(T.shift, true)}`}>
           {[...state.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="sr-only" htmlFor="lst-q">Search</label>
           <input id="lst-q" name="q" type="search" defaultValue={p.q} placeholder={`Search names, ${tw.lower(T.role, true)}, ${tw.lower(T.area, true)}…`} className="lst-search" />
           <button className="btn small secondary">Search</button>
-        </form>
+        </ColumnFilterForm>
         {barFilters.map(f => <span key={f.label} className="lst-barf"><span className="muted small">{f.label}</span>{f.node}</span>)}
         {nOn > 0 && <Link href={cleared} className="small" scroll={false}>Clear filters</Link>}
         <nav className="q-chips lst-groupby" aria-label="Group by">

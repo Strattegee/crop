@@ -1004,3 +1004,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: render test of the list's headings (form, summaries, the State group); every test passes; build and typecheck clean. Not clicked through in a browser (no local sign-in).
 - Next: the Roster List's headings on the same parts, or the next backlog item not waiting on David.
 - Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-08 morning Melbourne (scheduled run): the roster List's filters on the shared parts
+- Shipped: the roster List's heading filters now use the same parts as Allocations and the Recruitment list (`(office)/column-filters.tsx`, `column-filter-form.tsx`), which gained a `form` setting for controls that sit outside the form. Same filters and words; a choice (e.g. Staff member › Show) now applies at once and the list changes without reloading the whole page; an open drop-down closes as it applies.
+- Checked: render test of the headings (shared parts, every control joined to the form); every test passes; build and typecheck clean. Not clicked through in a browser (no local sign-in).
+- Next: the next backlog item not waiting on David.
+- Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
