@@ -40,5 +40,12 @@ describe('recruitment list view', () => {
     expect(html).toContain('Needs action');
     expect(html).toContain('Geelong VIC 3220');
     expect(html.match(/name="pick"/g)).toHaveLength(2);
+    // The shared heading parts (7 Nov): one filter form, summaries in the recruitment list's words.
+    expect(html).toContain('id="rl-filters"');
+    expect(html).toContain('>Carer</summary>');
+    expect(html).toContain('Any position</summary>');
+    expect(html).toContain('Anywhere</summary>');
+    expect(html).toContain('<b class="rl-group">State</b>');
+    expect(html).toContain('aria-label="Region: Anywhere"');
   });
 });
