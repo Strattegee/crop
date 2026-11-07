@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FILTER_KEYS, LIST_KEYS, LIST_MAX, LIST_PAGE, bandOf, bulkMessage, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, lengthOf, listQuery,
+  FILTER_KEYS, LIST_KEYS, ROSTER_LAYOUT_COOKIE, layoutOf, rememberedLayout, LIST_MAX, LIST_PAGE, bandOf, bulkMessage, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, lengthOf, listQuery,
   matchesSearch, offAll, pageGroups, parseListParams, parsePicks, periodOf, pickValue, sortMark, sortOver, splitList, stageClass, stageParam, stageTally, tlineOf,
   type ListParams, type ListShift, type RowFacts,
 } from '../lib/roster-list';
@@ -264,5 +264,24 @@ describe('roster list: bulk actions', () => {
     expect(bulkMessage('Cancelled', [{ label: 'Wed 4 Nov', ok: false, message: 'gone' }], count).error).toBe('Nothing changed. Not done (1): Wed 4 Nov (gone).');
     const many = Array.from({ length: 10 }, (_, i) => ({ label: `S${i}`, ok: false, message: 'no' }));
     expect(bulkMessage('Confirmed', many, count).error).toContain('; and 2 more.');
+  });
+});
+
+describe('remembered layout (7 Nov)', () => {
+  it('the URL wins, then what this browser chose, then Cards', () => {
+    expect(layoutOf('list', undefined)).toBe('list');
+    expect(layoutOf('cards', 'list')).toBe('cards');
+    expect(layoutOf(['list', 'cards'], undefined)).toBe('list');
+    expect(layoutOf(undefined, 'list')).toBe('list');
+    expect(layoutOf('', 'list')).toBe('list');
+    expect(layoutOf('grid', 'list')).toBe('list');
+    expect(layoutOf(undefined, 'something')).toBe('cards');
+    expect(layoutOf(undefined, undefined)).toBe('cards');
+  });
+  it('only List is remembered', () => {
+    expect(rememberedLayout('list')).toBe('list');
+    expect(rememberedLayout('cards')).toBeNull();
+    expect(rememberedLayout('x')).toBeNull();
+    expect(ROSTER_LAYOUT_COOKIE).toMatch(/^crop_/);
   });
 });

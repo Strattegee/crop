@@ -7,7 +7,7 @@ import { Notices } from '../notices';
 import { T, words, type Words } from '../../../lib/terms';
 import { businessSettings, businessZone, todayIn, whenIn } from '../../../lib/business';
 import {
-  outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
+  outsideAgencyEmail, outsideAgencyPerson, applyTemplate, archiveTemplate, assign, setFullView, setLayout, bookEquipment, cancelShift, confirm, copyMonth, copyWeek, createShifts, decideChange, fillWeekDemo, loadDemoWeek, offer, publishWeek,
   recordReply, removeEquipment, requestChange, returnItem, saveTemplate, setCovering, setDuties, setUsual, answerRequest, setGender, setRole, setTimes, unassign, useItem,
   clientConfirmed, undoClientConfirmed,
 } from './actions';
@@ -20,7 +20,7 @@ import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import { lettersOf } from '../../../lib/marker-letters';
-import { LIST_KEYS, listQuery, offAll, parseListParams, stageClass } from '../../../lib/roster-list';
+import { LIST_KEYS, ROSTER_LAYOUT_COOKIE, layoutOf, listQuery, offAll, parseListParams, stageClass } from '../../../lib/roster-list';
 import { ListView } from './list-view';
 import { NEW_PROJECT, siteChoices } from '../../../lib/projects';
 import { NewProjectForm } from '../projects/new-project-form';
@@ -166,7 +166,8 @@ export default async function RosterPage({ searchParams }: {
   // The List's Role column ticks several roles: they come back as repeated `role`s and ride along as a comma list.
   const stripFilter = parseStripFilter({ ...sp, role: Array.isArray(sp.role) ? sp.role.join(',') : sp.role });
   // Cards or List (David and Steve, 4 Nov): the list's grouping and filters live in the URL too (week and day only).
-  const listP = parseListParams(sp);
+  // The layout last chosen in View › Layout is remembered per browser (7 Nov); `layout=` in a shared link still wins.
+  const listP = { ...parseListParams(sp), layout: layoutOf(sp.layout, (await cookies()).get(ROSTER_LAYOUT_COOKIE)?.value) };
   const listMode = listP.layout === 'list' && span !== 'month';
   const at = (s: Span, anchor: string) => s === 'week' ? { span: undefined, date: undefined, week: anchor } : { span: s, date: anchor, week: undefined };
   const url = (over: Record<string, string | undefined>) => {
@@ -902,8 +903,15 @@ export default async function RosterPage({ searchParams }: {
               ))}
               {span !== 'month' && <>
                 <div className="tool-menu-title">Layout</div>
-                <Link href={url({ ...offAll(LIST_KEYS), role: stripFilter.role.includes(',') && !roleNames.has(stripFilter.role) ? undefined : stripFilter.role || undefined })} aria-current={!listMode ? 'true' : undefined}>Cards</Link>
-                <Link href={url({ layout: 'list' })} aria-current={listMode ? 'true' : undefined} title={`Every ${tw.lower(T.shift)} as a row: group, filter and act on several at once`}>List</Link>
+                {/* A form, not a link, so the choice is remembered for this browser (the next roster opens the same way). */}
+                <form action={setLayout.bind(null, 'cards')} className="tool-menu-form">
+                  <input type="hidden" name="back" value={url({ ...offAll(LIST_KEYS), role: stripFilter.role.includes(',') && !roleNames.has(stripFilter.role) ? undefined : stripFilter.role || undefined })} />
+                  <button aria-current={!listMode ? 'true' : undefined}>Cards</button>
+                </form>
+                <form action={setLayout.bind(null, 'list')} className="tool-menu-form">
+                  <input type="hidden" name="back" value={url({ layout: 'list' })} />
+                  <button aria-current={listMode ? 'true' : undefined} title={`Every ${tw.lower(T.shift)} as a row: group, filter and act on several at once`}>List</button>
+                </form>
               </>}
               {span !== 'month' && !listMode && <>
                 <div className="tool-menu-title">Rows</div>

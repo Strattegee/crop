@@ -13,6 +13,7 @@ import {
   ROSTER_FULL_COOKIE, addShiftsDates, addShiftsUntil, addShiftsWhen, bestPeople, itemDrop, itemDropMessage, multiAssignMessage, pickedInOrder, withShift,
   type AssignOutcome, type BestPerson, type MenuCandidate, type PickedShift,
 } from './view';
+import { ROSTER_LAYOUT_COOKIE, rememberedLayout } from '../../../lib/roster-list';
 
 /** Every roster form carries `back`, the roster URL to return to (week, site, view, selected shift). */
 /** Where a form returns to: the roster, or Allocations (its fill panel reuses these actions). */
@@ -392,5 +393,13 @@ export async function setFullView(on: boolean, f: FormData) {
   const jar = await cookies();
   if (on) jar.set(ROSTER_FULL_COOKIE, '1', { path: '/', maxAge: 31536000, sameSite: 'lax' });
   else jar.delete(ROSTER_FULL_COOKIE);
+  redirect(back(f));
+}
+
+/** Cards or List from View › Layout (7 Nov): remembered for this browser, then back to the same roster view. */
+export async function setLayout(layout: string, f: FormData) {
+  const jar = await cookies();
+  if (rememberedLayout(layout)) jar.set(ROSTER_LAYOUT_COOKIE, 'list', { path: '/', maxAge: 31536000, sameSite: 'lax' });
+  else jar.delete(ROSTER_LAYOUT_COOKIE);
   redirect(back(f));
 }

@@ -413,6 +413,10 @@ table.compact td { padding: 4px 8px 4px 0; font-size: 14px; }
 .tool-menu-body a { padding: 6px 10px 6px 26px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; position: relative; }
 .tool-menu-body a:hover { background: var(--hover); }
 .tool-menu-body a[aria-current='true']::before { content: '✓'; position: absolute; left: 9px; color: var(--brand); font-weight: 700; }
+.tool-menu-form { margin: 0; display: flex; flex-direction: column; }
+.tool-menu-form button { padding: 6px 10px 6px 26px; border-radius: 6px; color: var(--text); background: none; border: 0; font: inherit; font-size: 14px; text-align: left; cursor: pointer; position: relative; }
+.tool-menu-form button:hover { background: var(--hover); }
+.tool-menu-form button[aria-current='true']::before { content: '✓'; position: absolute; left: 9px; color: var(--brand); font-weight: 700; }
 .tool-menu-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 10px 2px; }
 .att-more > summary { cursor: pointer; color: var(--accent); font-size: 14px; padding: 6px 0; }
 
