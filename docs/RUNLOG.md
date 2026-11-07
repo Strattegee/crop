@@ -954,3 +954,8 @@ Newest first. One entry per working session or scheduled run.
 - Checked: wording tests (shorter push text so it isn't cut off), API tests (only owners' and admins' phones get them, never the values), app helper tests; every test passes; build and typecheck clean. Not checked on a phone (no local sign-in).
 - Next: the next backlog item not waiting on David (alerts for credentials to check would need somewhere in the app to check them; drag from the strip onto the roster's List rows).
 - Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-07 (session with David): filters in the roster List's headings
+- Shipped: David asked for filters in the roster List's column headings like the recruitment list. Every heading now has a small drop-down (Time: day, start band, A/P/N; Site; Area; Role; Staff member: name, unfilled only, agency people; Stage; Hours; Letters incl. ringed; T line incl. project stage; Warnings). Headings sort within groups. Role is still the strip's filter (several roles allowed in the list); the stage chips are presets of the Stage column; Clear filters turns everything off. Phone: behind a Filters button. Filtering is pure in `lib/roster-list.ts`, done on the week's rows the page already reads.
+- Checked: unit tests for every filter, the URL and sorting, a render test of the list; typecheck, web tests and build clean. Not clicked through in a browser (no local sign-in).
+- Next: drag from the strip onto List rows, if wanted.
