@@ -3,12 +3,13 @@ import type { ReactNode } from 'react';
 import { T, type Words } from '../../../lib/terms';
 import type { MarkerLetters } from '../../../lib/marker-letters';
 import {
-  GROUP_BYS, LIST_MAX, LIST_PAGE, STAGE_ORDER, STAGE_WORDS, filterShifts, groupLine, groupShifts, pageGroups, pickValue, stageClass, stageTally,
-  type ListGroupBy, type ListParams, type ListShift, type StageFilter,
+  BANDS, BAND_WORDS, FILTER_KEYS, GROUP_BYS, LENGTHS, LENGTH_WORDS, LIST_MAX, LIST_PAGE, PERIODS, PERIOD_WORDS, STAGE_ORDER, STAGE_WORDS, TLINES, TLINE_WORDS,
+  WARNS, WARN_WORDS, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, offAll, pageGroups, pickValue, sortMark, sortOver, splitList,
+  stageClass, stageTally, type ListGroupBy, type ListParams, type ListShift, type ListSort, type MarkFilter, type RowFacts, type StageCls,
 } from '../../../lib/roster-list';
 import { UNCHECKED } from '../../../lib/outside-agency';
 import { confirm } from './actions';
-import { AutoSelect, BULK_FORM, ListTools } from './list-tools';
+import { BULK_FORM, LIST_FILTERS, ListTools } from './list-tools';
 import { projectStageLine, requestsFor, shiftMarkers, tLines, type DayRequest, type MarkerShift, type ProjectStageShift } from './view';
 
 /** A roster shift as the list needs it (`GET /roster` rows). */
@@ -22,9 +23,11 @@ const longDay = (d: string) => new Intl.DateTimeFormat('en-AU', { weekday: 'long
  * The roster's List view (David and Steve, 4 Nov): the same shifts as the cards, one compact row each, grouped and
  * filtered from the URL, with tick boxes for acting on several at once. A row opens the same shift panel as a card.
  */
-export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here, selectedId, allSites, people, duties, blocked, gaps, refused, stageLabel, letterCol, closeHref }: {
+export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here, selectedId, allSites, weekDays, people, duties, blocked, gaps, refused, stageLabel, letterCol, closeHref }: {
   shifts: ListRowShift[]; p: ListParams; role: string; tw: Words; letters: MarkerLetters; dayRequests: DayRequest[];
   url: (over: Record<string, string | undefined>) => string; here: string; selectedId: string | null; allSites: boolean;
+  /** The week's days in week view (the Time column's day choices); null in day view. */
+  weekDays: string[] | null;
   people: { id: string; name: string }[]; duties: { id: string; name: string }[];
   /** Hard blocks for the person or equipment on a shift (Needs attention, next 7 days), by shift. */
   blocked: Map<string, string>;
@@ -36,51 +39,167 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
 }) {
   const shiftWord = tw.lower(T.shift), shiftsWord = tw.lower(T.shift, true);
   const count = (n: number) => tw.count(n, T.shift);
-  // Chips count what the other filters leave; the rows also apply the stage.
-  const beforeStage = filterShifts(shifts, p, role, 'stage');
-  const tally = stageTally(beforeStage);
-  const rows = filterShifts(beforeStage, p, '', undefined);
-  const groups = groupShifts(rows, p.group, { dateLabel: longDay, noArea: `No ${tw.lower(T.area)}`, unfilled: 'Unfilled', allSites });
-  const paged = pageGroups(groups, p.limit);
-  const cols = {
-    date: p.group !== 'date', site: allSites && p.group !== 'site' && p.group !== 'area', area: p.group !== 'area', role: p.group !== 'role', person: p.group !== 'person',
-  };
-  const template = ['30px', cols.date && '88px', '92px', cols.site && 'minmax(90px, 1fr)', cols.area && 'minmax(80px, 0.9fr)', cols.role && 'minmax(90px, 1fr)',
-    cols.person && 'minmax(110px, 1.3fr)', '112px', '42px', '92px', 'minmax(90px, 1fr)', 'minmax(80px, 0.8fr)', '84px'].filter(Boolean).join(' ');
 
   // Choices for the filters, from the period's shifts (so a contractor's "Work areas" list stays theirs).
   const roles = [...new Set(shifts.filter(s => !s.equipmentOnly).map(s => s.role))].sort();
   const areas = [...new Set(shifts.map(s => s.areaName ?? '-'))].sort((a, b) => (a === '-' ? 1 : b === '-' ? -1 : a.localeCompare(b)));
   const persons = new Map<string, string>();
   for (const s of shifts) if (s.workerId && s.workerName) persons.set(s.workerId, s.workerName);
-  const keep = { layout: 'list', group: p.group === 'date' ? undefined : p.group };
-  const anyFilter = !!(p.q || p.stage || p.area || p.person || role);
-  const hidden = (k: string, v: string | undefined) => v ? <input type="hidden" name={k} value={v} /> : null;
-  // The URL's other state, for the filter form (week or day, site, grouping).
-  const state = new URL(url({ ...keep, q: undefined, area: undefined, person: undefined, role: undefined, limit: undefined, shift: undefined }), 'http://x').searchParams;
+  const sites = new Map<string, string>();
+  for (const s of shifts) sites.set(s.facilityId, s.facilityName);
+  const pstages = new Map<string, string>();
+  for (const s of shifts) if (s.projectStageId && s.projectStageName) pstages.set(s.projectStageId, s.projectStageName);
+  // The Role column writes the strip's `role` (several = a comma list); names with commas come back whole.
+  const chosenRoles = joinKnown(splitList(role), roles);
+  const chosenAreas = joinKnown(p.areas, areas);
+  const lp = { ...p, areas: chosenAreas };
 
-  const chip = (f: StageFilter, label: string, n: number, dot?: string) => (
-    <Link key={f || 'all'} className={`q-tab${p.stage === f ? ' on' : ''}`} href={url({ stage: f || undefined, limit: undefined })} scroll={false} aria-current={p.stage === f ? 'page' : undefined}>
-      {dot && <i className={`rb ${dot}`} aria-hidden="true" />}{label} <b>{n}</b>
-    </Link>
+  // Markers, blocks and gaps per row, worked out once (filters and the Warnings cell read them).
+  const facts = new Map<string, RowFacts & { marksList: ReturnType<typeof shiftMarkers> }>();
+  for (const s of shifts) {
+    const cancelled = s.status === 'cancelled';
+    const marksList = cancelled ? [] : shiftMarkers({ ...s, requests: requestsFor(s, dayRequests) }, letters);
+    const kinds = new Set<MarkFilter>();
+    if (s.genderRequested && !cancelled) kinds.add('gender');
+    for (const m of marksList) {
+      const k = ({ v: 'vehicle', e: 'equipment', i: 'items', d: 'duty', t: 'template', r: 'request' } as Record<string, MarkFilter>)[m.key];
+      if (k) kinds.add(k);
+    }
+    facts.set(s.id, {
+      marksList, marks: [...kinds], ringed: marksList.some(m => m.cls.includes('warn')),
+      blocked: !cancelled && blocked.has(s.id), gap: !cancelled && gaps.has(s.id),
+    });
+  }
+  const opts = { roles: chosenRoles, facts: (s: ListRowShift) => facts.get(s.id)!, weekDays, allSites };
+  // Chips count what the other filters leave; the rows also apply the stage.
+  const beforeStage = filterShifts(shifts, lp, { ...opts, except: 'stage' });
+  const tally = stageTally(beforeStage);
+  const rows = filterShifts(beforeStage, lp, opts);
+  const groups = groupShifts(rows, p.group, { dateLabel: longDay, noArea: `No ${tw.lower(T.area)}`, unfilled: 'Unfilled', allSites }, { key: p.sort, desc: p.desc });
+  const paged = pageGroups(groups, p.limit);
+  const cols = {
+    date: p.group !== 'date', site: allSites && p.group !== 'site' && p.group !== 'area', area: p.group !== 'area', role: p.group !== 'role', person: p.group !== 'person',
+  };
+  const template = ['30px', cols.date && '88px', '108px', cols.site && 'minmax(100px, 1fr)', cols.area && 'minmax(96px, 0.9fr)', cols.role && 'minmax(100px, 1fr)',
+    cols.person && 'minmax(120px, 1.3fr)', '118px', '64px', '96px', 'minmax(100px, 1fr)', 'minmax(96px, 0.8fr)', '84px'].filter(Boolean).join(' ');
+
+  const nOn = filterCount(lp, chosenRoles);
+  const cleared = url({ ...offAll(FILTER_KEYS) });
+  // The URL's other state for the filter form (week or day, site, grouping, sort, the strip's other filters).
+  const state = new URL(url({ ...offAll(FILTER_KEYS), shift: undefined }), 'http://x').searchParams;
+  const F = LIST_FILTERS;
+
+  const chip = (f: '' | 'open' | StageCls, label: string, n: number, dot?: string) => {
+    const on = chipOn(p, f);
+    return (
+      <Link key={f || 'all'} className={`q-tab${on ? ' on' : ''}`} href={url({ stage: f || undefined, limit: undefined })} scroll={false} aria-current={on ? 'page' : undefined}>
+        {dot && <i className={`rb ${dot}`} aria-hidden="true" />}{label} <b>{n}</b>
+      </Link>
+    );
+  };
+  type Opt = { value: string; label: string };
+  /** A heading's drop-down of tick boxes, in one or more groups; Apply (or Enter) filters. */
+  const pop = (label: string, summary: string | null, groups: { name: string; title?: string; options: Opt[]; chosen: string[] }[], extra?: ReactNode) => (
+    <details className="lst-pop rl-f lst-hf">
+      <summary className={`rl-fsum${summary ? ' on' : ''}`} aria-label={`Filter ${label.toLowerCase()}`}>{summary ?? 'Any'}</summary>
+      <div className="lst-pop-body rl-fbody">
+        {extra}
+        {groups.map(g => (
+          <div key={g.name + (g.title ?? '')} className="rl-checks">
+            {g.title && <b className="rl-group">{g.title}</b>}
+            {g.options.map(o => (
+              <label key={o.value} className="rl-check"><input type="checkbox" form={F} name={g.name} value={o.value} defaultChecked={g.chosen.includes(o.value)} /> {o.label}</label>
+            ))}
+            {g.options.length === 0 && <span className="muted small">Nothing to choose from this period.</span>}
+          </div>
+        ))}
+        <button className="btn small" form={F}>Apply</button>
+      </div>
+    </details>
   );
+  const chosen = (values: string[], options: Opt[]) => !values.length ? null : values.length === 1 ? options.find(o => o.value === values[0])?.label ?? values[0]! : `${values.length} chosen`;
+  const head = (label: string, sort: ListSort | null, filter: ReactNode, extraCls = '') => (
+    <span role="columnheader" className={`lst-h${extraCls}`}>
+      {sort ? <Link href={url(sortOver(p, sort))} scroll={false} className="rl-sort" aria-label={`Sort by ${label.toLowerCase()}`}>{label}{sortMark(p, sort)}</Link> : <span className="rl-sort">{label}</span>}
+      {filter}
+    </span>
+  );
+
+  const dayOpts = (weekDays ?? []).map(d => ({ value: d, label: shortDay(d) }));
+  const bandOpts = BANDS.map(b => ({ value: b, label: BAND_WORDS[b] }));
+  const periodOpts = PERIODS.map(x => ({ value: x, label: PERIOD_WORDS[x] }));
+  const timeChosen = (weekDays ? p.days.filter(d => weekDays.includes(d)).length : 0) + p.bands.length + p.periods.length;
+  const timeF = pop('Time', timeChosen ? (timeChosen === 1 ? chosen([...p.days, ...p.bands, ...p.periods], [...dayOpts, ...bandOpts, ...periodOpts]) : `${timeChosen} chosen`) : null, [
+    ...(weekDays ? [{ name: 'day', title: 'Day', options: dayOpts, chosen: p.days }] : []),
+    { name: 'band', title: 'Starts', options: bandOpts, chosen: p.bands },
+    { name: 'ap', title: 'Card letter', options: periodOpts, chosen: p.periods },
+  ]);
+  const siteOpts = [...sites.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label }));
+  const siteF = pop(tw.one(T.site), chosen(p.sites, siteOpts), [{ name: 'fac', options: siteOpts, chosen: p.sites }]);
+  const areaOpts = [...areas, ...chosenAreas.filter(a => !areas.includes(a))].map(a => ({ value: a, label: a === '-' ? `No ${tw.lower(T.area)}` : a }));
+  const areaF = pop(tw.one(T.area), chosen(chosenAreas, areaOpts), [{ name: 'area', options: areaOpts, chosen: chosenAreas }]);
+  const roleOpts = [...roles, ...chosenRoles.filter(r => !roles.includes(r))].map(r => ({ value: r, label: r }));
+  const roleF = pop(tw.one(T.role), chosen(chosenRoles, roleOpts), [{ name: 'role', options: roleOpts, chosen: chosenRoles }]);
+  const personOpts: Opt[] = [
+    { value: '', label: 'Anyone' }, { value: 'none', label: 'Unfilled only' }, { value: 'agency', label: `${tw.one(T.agency)} people` },
+    ...[...persons.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ value: id, label: name })),
+  ];
+  const personSummary = [p.who && `“${p.who}”`, p.person && (personOpts.find(o => o.value === p.person)?.label ?? persons.get(p.person) ?? 'One person')].filter(Boolean).join(' · ') || null;
+  const personF = (
+    <details className="lst-pop rl-f lst-hf">
+      <summary className={`rl-fsum${personSummary ? ' on' : ''}`} aria-label={`Filter ${tw.lower(T.worker)}`}>{personSummary ?? 'Any'}</summary>
+      <div className="lst-pop-body rl-fbody">
+        <label>Name<input type="search" form={F} name="who" defaultValue={p.who} maxLength={80} placeholder="Part of a name" /></label>
+        <label>Show
+          <select form={F} name="person" defaultValue={p.person}>
+            {personOpts.map(o => <option key={o.value || 'any'} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+        <button className="btn small" form={F}>Apply</button>
+      </div>
+    </details>
+  );
+  const stageOpts = STAGE_ORDER.map(c => ({ value: c, label: STAGE_WORDS[c] }));
+  const stageF = pop('Stage', p.stages.length ? chosen(p.stages, stageOpts) : null, [{ name: 'stage', options: stageOpts, chosen: p.stages }],
+    <span className="muted small">None ticked = everything but cancelled.</span>);
+  const lenOpts = LENGTHS.map(x => ({ value: x, label: LENGTH_WORDS[x] }));
+  const hoursF = pop('Hours', chosen(p.lengths, lenOpts), [{ name: 'len', options: lenOpts, chosen: p.lengths }]);
+  const markOpts: Opt[] = [
+    { value: 'gender', label: 'Gender requested (F/M)' }, { value: 'vehicle', label: `Vehicle (${letters.vehicle})` },
+    { value: 'equipment', label: `${tw.one(T.equipment)} (${letters.equipment})` }, { value: 'items', label: `${tw.many(T.item)} (${letters.items})` },
+    { value: 'duty', label: `Duties (${letters.duty})` }, { value: 'template', label: `Usual person (${letters.template})` },
+    { value: 'request', label: `Request (${letters.request})` }, { value: 'ringed', label: 'Ringed: doesn’t fit' },
+  ];
+  const lettersF = pop('Letters', chosen(p.marks, markOpts), [{ name: 'mk', options: markOpts, chosen: p.marks }]);
+  const tlOpts = TLINES.map(x => ({ value: x, label: TLINE_WORDS[x] }));
+  const pstOpts = pstages.size || p.pstages.length
+    ? [...[...pstages.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label })), { value: 'none', label: 'Not from a stage' }]
+    : [];
+  const tlineF = pop(`${letters.template} line`, (p.tlines.length + p.pstages.length) > 1 ? `${p.tlines.length + p.pstages.length} chosen` : chosen([...p.tlines, ...p.pstages], [...tlOpts, ...pstOpts]), [
+    { name: 'tl', title: pstOpts.length ? 'Usual person' : undefined, options: tlOpts, chosen: p.tlines },
+    ...(pstOpts.length ? [{ name: 'pst', title: 'Project stage', options: pstOpts, chosen: p.pstages }] : []),
+  ]);
+  const warnOpts = WARNS.map(x => ({ value: x, label: WARN_WORDS[x] }));
+  const warnF = pop('Warnings', chosen(p.warns, warnOpts), [{ name: 'warn', options: warnOpts, chosen: p.warns }]);
+  // A column hidden by the grouping keeps its filter on the bar above.
+  const barFilters: { label: string; node: ReactNode }[] = [
+    ...(!cols.site && allSites ? [{ label: tw.one(T.site), node: siteF }] : []),
+    ...(!cols.area ? [{ label: tw.one(T.area), node: areaF }] : []),
+    ...(!cols.role ? [{ label: tw.one(T.role), node: roleF }] : []),
+    ...(!cols.person ? [{ label: tw.one(T.worker), node: personF }] : []),
+  ];
 
   return (
     <div className="lst">
       <div className="lst-filters">
-        <form method="get" action="/roster" className="q-selects" role="search">
-          {[...state.entries()].map(([k, v]) => <span key={k}>{hidden(k, v)}</span>)}
+        <form id={F} method="get" action="/roster" className="q-selects" role="search">
+          {[...state.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="sr-only" htmlFor="lst-q">Search</label>
           <input id="lst-q" name="q" type="search" defaultValue={p.q} placeholder={`Search names, ${tw.lower(T.role, true)}, ${tw.lower(T.area, true)}…`} className="lst-search" />
-          <AutoSelect name="role" value={role} label={tw.one(T.role)} options={[{ value: '', label: `Every ${tw.lower(T.role)}` }, ...(role && !roles.includes(role) ? [role] : roles).map(r => ({ value: r, label: r }))]} />
-          <AutoSelect name="area" value={p.area} label={tw.one(T.area)} options={[{ value: '', label: `Every ${tw.lower(T.area)}` }, ...areas.map(a => ({ value: a, label: a === '-' ? `No ${tw.lower(T.area)}` : a }))]} />
-          <AutoSelect name="person" value={p.person} label={tw.one(T.worker)} options={[
-            { value: '', label: `Every ${tw.lower(T.worker)}` }, { value: 'none', label: 'Nobody on it yet' },
-            ...[...persons.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ value: id, label: name })),
-          ]} />
           <button className="btn small secondary">Search</button>
-          {anyFilter && <Link href={url({ q: undefined, stage: undefined, area: undefined, person: undefined, role: undefined, limit: undefined })} className="small" scroll={false}>Clear filters</Link>}
         </form>
+        {barFilters.map(f => <span key={f.label} className="lst-barf"><span className="muted small">{f.label}</span>{f.node}</span>)}
+        {nOn > 0 && <Link href={cleared} className="small" scroll={false}>Clear filters</Link>}
         <nav className="q-chips lst-groupby" aria-label="Group by">
           <span className="muted small">Group by</span>
           {GROUP_BYS.map(g => (
@@ -98,27 +217,32 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
 
       <ListTools back={here} closeHref={closeHref} people={people} duties={duties}
         labels={{ shift: shiftWord, shifts: shiftsWord, person: tw.lower(T.worker), people: tw.lower(T.worker, true), bank: tw.lower(T.bank), client: tw.one(T.client) }}>
+        <input type="checkbox" id="lst-ftoggle" className="lst-ftoggle sr-only" />
+        <div className="lst-fbar">
+          <label htmlFor="lst-ftoggle" className="btn small secondary">Filters{nOn ? ` (${nOn})` : ''}</label>
+          {nOn > 0 && <Link href={cleared} className="small" scroll={false}>Clear filters</Link>}
+        </div>
         <section className="q-list lst-list" aria-label={tw.many(T.shift)}>
           <div className="q-scroll lst-scroll">
             <div className="lst-table" role="table" style={{ ['--lst-cols' as string]: template }}>
               <div className="lst-row lst-head" role="row">
                 <span role="columnheader"><span className="sr-only">Tick</span></span>
-                {cols.date && <span role="columnheader">Date</span>}
-                <span role="columnheader">Time</span>
-                {cols.site && <span role="columnheader">{tw.one(T.site)}</span>}
-                {cols.area && <span role="columnheader">{tw.one(T.area)}</span>}
-                {cols.role && <span role="columnheader">{tw.one(T.role)}</span>}
-                {cols.person && <span role="columnheader">{tw.one(T.worker)}</span>}
-                <span role="columnheader">Stage</span>
-                <span role="columnheader" className="num">Hours</span>
-                <span role="columnheader">Letters</span>
-                <span role="columnheader" title="Who usually works it, or who it covers">{letters.template} line</span>
-                <span role="columnheader">Warnings</span>
+                {cols.date && head('Date', 'time', null)}
+                {head('Time', 'time', timeF)}
+                {cols.site && head(tw.one(T.site), 'site', siteF)}
+                {cols.area && head(tw.one(T.area), 'area', areaF)}
+                {cols.role && head(tw.one(T.role), 'role', roleF)}
+                {cols.person && head(tw.one(T.worker), 'person', personF)}
+                {head('Stage', 'stage', stageF)}
+                {head('Hours', 'hours', hoursF, ' num')}
+                {head('Letters', null, lettersF)}
+                {head(`${letters.template} line`, null, tlineF)}
+                {head('Warnings', null, warnF)}
                 <span role="columnheader"><span className="sr-only">Actions</span></span>
               </div>
               {groups.length === 0 && (
                 <p className="q-empty">{shifts.length === 0 ? `No ${shiftsWord} this period. Use Add ${shiftsWord} above.` : `No ${shiftsWord} match. `}
-                  {shifts.length > 0 && <Link href={url({ q: undefined, stage: undefined, area: undefined, person: undefined, role: undefined })} scroll={false}>Clear filters</Link>}</p>
+                  {shifts.length > 0 && <Link href={cleared} scroll={false}>Clear filters</Link>}</p>
               )}
               {paged.groups.map(g => (
                 <div key={g.key} className="lst-group" data-group={`${p.group}:${g.key}`} role="rowgroup">
@@ -152,7 +276,7 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
     const st = stageClass(s);
     const sel = s.id === selectedId;
     const cancelled = st === 'cancelled';
-    const marks = cancelled ? [] : shiftMarkers({ ...s, requests: requestsFor(s, dayRequests) }, letters);
+    const marks = facts.get(s.id)?.marksList ?? [];
     const warn: { key: string; text: string; title: string; bad?: boolean }[] = [];
     if (!cancelled) {
       const b = blocked.get(s.id);

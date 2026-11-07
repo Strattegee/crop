@@ -1014,6 +1014,26 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .lst-group.folded > .lst-row, .lst-group.folded > .lst-more { display: none; }
 .lst-more { padding: 6px 12px 6px 46px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--divider); }
 .lst-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 12px; font-size: 12px; border-top: 1px solid var(--border); }
+/* A filter in every heading (David, 7 Nov, as on the recruitment list). */
+.lst-table { --lst-hh: 54px; }
+.lst-head { height: var(--lst-hh); align-items: start; padding-top: 5px; padding-bottom: 5px; box-sizing: border-box; text-transform: none; letter-spacing: 0; }
+.lst-ghead { top: var(--lst-hh); }
+.lst-h { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lst-h.num { align-items: stretch; text-align: left; }
+.lst-head .rl-sort { overflow: hidden; text-overflow: ellipsis; }
+.lst-head .rl-fsum { font-weight: 400; }
+.lst-head .lst-pop-body { font-weight: 400; color: var(--text); max-height: 320px; overflow-y: auto; }
+.lst-head > :nth-last-child(-n+5) .lst-pop-body { left: auto; right: 0; }
+.lst-scroll:has(.lst-head details[open]) { min-height: 400px; }
+.lst-barf { display: inline-flex; align-items: center; gap: 6px; }
+.lst-barf .rl-f { min-width: 120px; }
+.lst-fbar { display: none; }
+@media (max-width: 760px) {
+  .lst-fbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .lst:has(.lst-ftoggle:not(:checked)) .lst-hf { display: none; }
+  .lst:has(.lst-ftoggle:not(:checked)) .lst-table { --lst-hh: 30px; }
+  .lst:has(.lst-ftoggle:not(:checked)) .lst-barf { display: none; }
+}
 @media (max-width: 760px) {
   .lst-scroll { max-height: 70vh; }
   .lst-search { width: 100%; }
