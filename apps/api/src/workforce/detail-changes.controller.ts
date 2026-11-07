@@ -11,6 +11,8 @@ import { queueNotification, queuePush } from '../notifications/notify.js';
 import { actorOf } from '../roster/publishing.js';
 import { requireLinked } from '../worker-app/worker-app.controller.js';
 import { tellOffice } from '../worker-app/tell-office.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { detailChangePush } from '../notifications/manager-alerts.js';
 import { addAddress, correctAddress, correctionBody, listFor, liveAddress, lockWorker, makeAddressCurrent, removeAddress } from './addresses.controller.js';
 import { parseAddress } from './addresses.js';
 import {
@@ -217,6 +219,12 @@ export class DetailChangesController {
       await tellOffice(db, t.tenantId, {
         subject: m.subject, body: m.body, template: 'detail_change_to_approve',
         dedupeKey: `detail-change-asked:${requestId}`, createdBy: auth.userId, exceptEmail: auth.email,
+      });
+      // Owners' and admins' phones too (never the values).
+      await alertOffice(db, t.tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.detailChange, holdThroughQuiet: true,
+        ...detailChangePush({ name: me.name, what: changeWhat(field, action) }),
+        dedupeKey: `detail-change-asked:${requestId}`, exceptUserId: auth.userId, createdBy: auth.userId,
       });
       return { outcome: 'requested' as const, details: await myDetails(db, t.tenantId, me.id) };
     });

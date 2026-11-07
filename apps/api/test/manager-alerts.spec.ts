@@ -10,7 +10,7 @@ import { configureApp } from '../src/configure.js';
 import { NotificationDispatcher } from '../src/notifications/dispatcher.js';
 import { ManagerAlerts } from '../src/notifications/manager-alerts-data.js';
 import {
-  ALERT_DEFAULTS, atRiskKind, atRiskPush, changeRequestPush, inQuiet, leavePush, planAlert, pulledOutPush, quietEndsAt, quietLine, quietProblem, seesSite, soonWords,
+  ALERT_DEFAULTS, atRiskKind, atRiskPush, changeRequestPush, detailChangePush, inQuiet, swapPush, leavePush, planAlert, pulledOutPush, quietEndsAt, quietLine, quietProblem, seesSite, soonWords,
 } from '../src/notifications/manager-alerts.js';
 import { pushScreen } from '../src/notifications/push.js';
 import { MemoryPush, PUSH_SENDER } from '../src/notifications/senders.js';
@@ -89,6 +89,13 @@ describe('office phone alerts: pure rules and wording', () => {
     expect(leavePush({ name: 'Ana Example', startsOn: '2026-11-09', endsOn: '2026-11-09', shiftsDuring: 0 }).body).toBe('Mon 9 Nov. Open CROP to approve or decline.');
     expect(changeRequestPush({ who: 'Sam Allocator', summary: 'Cancel: client rang', facilityName: 'Harbour Kitchen', shiftLine: 'Mon 9 Nov, 07:00–15:00, Chef' }, jobs).title)
       .toBe('Schedule change to approve at Harbour Kitchen');
+    const sh = { localDate: '2026-11-09', localStart: '07:00', localEnd: '15:00', site: 'Harbour Kitchen' };
+    expect(swapPush({ fromName: 'Ana Example', toName: 'Bo Example', shift: sh, other: null }, jobs))
+      .toEqual({ title: 'Job swap to approve: Ana Example and Bo Example', body: 'Ana Example gives Bo Example Mon 9 Nov 07:00–15:00 at Harbour Kitchen. Open CROP to approve or not.' });
+    expect(swapPush({ fromName: 'Ana Example', toName: 'Bo Example', shift: sh, other: { ...sh, localDate: '2026-11-10', localStart: '15:00', localEnd: '23:00' } }).body)
+      .toBe("Ana Example's Mon 9 Nov 07:00–15:00 for Bo Example's Tue 10 Nov 15:00–23:00 at Harbour Kitchen. Open CROP to approve or not.");
+    expect(detailChangePush({ name: 'Ana Example', what: 'Change mobile' }))
+      .toEqual({ title: 'Details to approve: Ana Example', body: 'Ana Example asked in the app: change mobile. Open CROP to approve or decline.' });
   });
 
   it('opens the manager side of the app when tapped', () => {
@@ -96,6 +103,8 @@ describe('office phone alerts: pure rules and wording', () => {
     expect(pushScreen('office_pulled_out')).toBe('attention');
     expect(pushScreen('office_leave_to_approve')).toBe('requests');
     expect(pushScreen('office_change_to_approve')).toBe('requests');
+    expect(pushScreen('office_swap_to_approve')).toBe('requests');
+    expect(pushScreen('office_detail_to_approve')).toBe('requests');
   });
 });
 

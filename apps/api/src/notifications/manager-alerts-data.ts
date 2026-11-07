@@ -97,6 +97,8 @@ export const OFFICE_ALERT_TEMPLATES = {
   pulledOut: 'office_pulled_out',
   leave: 'office_leave_to_approve',
   changeRequest: 'office_change_to_approve',
+  swap: 'office_swap_to_approve',
+  detailChange: 'office_detail_to_approve',
 } as const;
 
 /**

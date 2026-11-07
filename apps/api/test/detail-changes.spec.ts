@@ -134,6 +134,8 @@ describe('detail changes: API', () => {
 
   it('keeps changes for approval when set, tells owners and admins without the values, and lets them withdraw', async () => {
     await http().put('/field-access').set(as('admin')).send({ fields: { mobile: 'approve', name: 'approve' } }).expect(200);
+    await http().post('/push-devices').set(as('admin')).send({ token: 'ExponentPushToken[admin-details]', platform: 'ios' }).expect(204);
+    await http().post('/push-devices').set(as('alloc')).send({ token: 'ExponentPushToken[alloc-details]', platform: 'ios' }).expect(204);
     const r = await http().post('/my/details').set(as('ana')).send({ field: 'mobile', value: '0411 111 111' }).expect(200);
     expect(r.body.outcome).toBe('requested');
     expect((await worker()).phone).toBe('+61498765432');
@@ -143,6 +145,10 @@ describe('detail changes: API', () => {
     const mail = (await owner.query(`select to_address, body from notifications where template = 'detail_change_to_approve'`)).rows;
     expect(mail.map(m => m.to_address)).toEqual(['admin@x.com']);
     expect(mail[0].body).not.toMatch(/0411|61411/);
+    // Their phones too: owners and admins only, never the values (held to the morning in quiet hours).
+    const alerts = (await owner.query(`select to_address, subject, body from notifications where template = 'office_detail_to_approve'`)).rows;
+    expect(alerts).toEqual([{ to_address: 'ExponentPushToken[admin-details]', subject: 'Details to approve: Annie Example',
+      body: 'Annie Example asked in the app: change mobile. Open CROP to approve or decline.' }]);
     await http().post(`/my/detail-changes/${r.body.details.changes[0].id}/withdraw`).set(as('ana')).expect(200);
     await http().post(`/my/detail-changes/${r.body.details.changes[0].id}/withdraw`).set(as('ana')).expect(409);
     await http().post('/my/details').set(as('ana')).send({ field: 'mobile', value: '0422 222 222' }).expect(200);

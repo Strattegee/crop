@@ -205,10 +205,17 @@ describe('shift swaps: asking, answering and approving', () => {
   });
 
   it('swaps two shifts once both agree and an owner or admin approves', async () => {
+    await http().post('/push-devices').set(as('admin')).send({ token: 'ExponentPushToken[admin-swaps]', platform: 'android' }).expect(204);
+    await http().post('/push-devices').set(as('alloc')).send({ token: 'ExponentPushToken[alloc-swaps]', platform: 'android' }).expect(204);
     const r = (await http().post('/my/swaps').set(as('ana')).send({ shiftId: s1, workerId: people.ben, otherShiftId: s2 }).expect(201)).body;
     expect((await http().post(`/my/swaps/${r.id}/accept`).set(as('ben')).expect(200)).body).toMatchObject({ status: 'agreed', stateLine: 'Agreed. Waiting for the office to approve' });
     expect(await onShift(s1)).toEqual([{ name: 'Ana', status: 'assigned' }]);
     expect((await sent('shift_swap_to_approve')).map(m => m.to)).toEqual(['admin@x.com']);
+    // And the deciders' phones (not the allocator's), naming only the people and shifts.
+    const alerts = await sent('office_swap_to_approve');
+    expect(alerts.map(m => m.to)).toEqual(['ExponentPushToken[admin-swaps]']);
+    expect(alerts[0].subject).toBe('Shift swap to approve: Ana Example and Ben Example');
+    expect(alerts[0].body).toMatch(/^Ana Example's \w{3} \d+ \w{3} 07:00–15:00 for Ben Example's \w{3} \d+ \w{3} 15:00–23:00 at Harbour Kitchen\. Open CROP to approve or not\.$/);
     const list = (await http().get('/shift-swaps').set(as('alloc')).expect(200)).body;
     expect(list.mode).toBe('approve');
     expect(list.swaps).toEqual([expect.objectContaining({ id: r.id, status: 'agreed', canDecide: false, fromName: 'Ana Example', toName: 'Ben Example' })]);
