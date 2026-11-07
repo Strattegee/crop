@@ -208,6 +208,10 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
             </Link>
           ))}
         </nav>
+        <Link className="small lst-striplink" href={url({ strip: p.strip ? undefined : '1' })} scroll={false}
+          title={p.strip ? undefined : `Drag ${tw.lower(T.worker, true)} onto unfilled rows, and ${tw.lower(T.equipment)} or ${tw.lower(T.item, true)} onto any row`}>
+          {p.strip ? `Hide ${tw.lower(T.worker, true)} to drag` : `Show ${tw.lower(T.worker, true)} to drag`}
+        </Link>
       </div>
       <nav className="q-tabs" aria-label="Stage">
         {chip('', 'All', tally[''])}
@@ -292,7 +296,11 @@ export function ListView({ shifts, p, role, tw, letters, dayRequests, url, here,
     const canAct = !refused.has(s.facilityId);
     const label = `${shortDay(s.localDate)} ${s.localStart}–${s.localEnd} ${s.role}`;
     return (
-      <div key={s.id} className={`lst-row st-${st}${sel ? ' sel' : ''}`} role="row" data-lrowbox>
+      <div key={s.id} className={`lst-row st-${st}${sel ? ' sel' : ''}`} role="row" data-lrowbox
+        // A drop target like the cards (7 Nov): a person from the strip onto an open row, equipment or an item onto any live one.
+        data-shift={s.id} data-date={s.localDate} data-start={s.localStart} data-href={url({ shift: s.id })}
+        data-needs-person={!cancelled && !s.equipmentOnly && !s.workerId ? '1' : '0'} data-takes-equipment={!cancelled ? '1' : '0'}
+        data-worker={s.workerId ?? ''} data-worker-name={s.workerName ?? ''} data-equipment-only={s.equipmentOnly ? '1' : '0'}>
         <span className="lst-tick" role="cell">
           {!cancelled && (
             <input type="checkbox" form={BULK_FORM} name="pick" value={pickValue(s)} data-pick data-g={groupKey}

@@ -385,6 +385,13 @@ export default async function RosterPage({ searchParams }: {
     low: i.tracksStock && i.reorderLevel != null && i.onHand <= i.reorderLevel,
   }));
 
+  // The people / equipment / items strip, beside the cards and (when asked, 7 Nov) beside the List.
+  const strip = (
+    <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter} hasTeam={team.size > 0} crews={crewChoices(crewTeams)}
+      labels={{ team: tw.one(T.team), teams: tw.many(T.team), people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), site: tw.one(T.site), sites: tw.many(T.site) }} />
+  );
+  const zoneLabels = { shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true), person: tw.lower(T.worker), people: tw.lower(T.worker, true) };
+
   // Shift cards, shared by the week grid and the day timeline (bars).
   const win = dayWindow(span === 'day' ? [...shifts, ...cancelled, ...dayGaps] : []);
   const cardAttrs = (s: Shift) => ({
@@ -1017,19 +1024,20 @@ export default async function RosterPage({ searchParams }: {
       })()}
 
       {span !== 'month' && (
-      <div className={`roster-layout${listMode ? ' list' : ''}`}>
-        {listMode ? (
-          <ListView shifts={allShifts.filter(inView)} p={listP} role={stripFilter.role} tw={tw} letters={letters} dayRequests={roster.dayRequests ?? []}
+      <div className={`roster-layout${listMode ? ' list' : ''}${listMode && listP.strip ? ' with-strip' : ''}`}>
+        {listMode ? (() => {
+          const list = <ListView shifts={allShifts.filter(inView)} p={listP} role={stripFilter.role} tw={tw} letters={letters} dayRequests={roster.dayRequests ?? []}
             url={url} here={here} selectedId={selected?.id ?? null} allSites={!site} weekDays={span === 'week' ? days : null} closeHref={selected ? url({ shift: undefined }) : null}
             people={roster.people.map(x => ({ id: x.id, name: x.name }))} duties={duties.filter(d => d.active).map(d => ({ id: d.id, name: d.name }))}
             blocked={new Map((attention?.items ?? []).filter(i => i.kind === 'person_blocked' || i.kind === 'equipment_blocked').map(i => [i.shiftId, `${i.title}: ${i.detail}`]))}
             gaps={new Map(coverGaps.map(g => [g.shiftId, g.title]))}
             refused={new Set(weekStates.filter(w => w.changeRefusal).map(w => w.facilityId))}
-            stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)} />
-        ) : (<>
-        <RibbonStrip people={stripPeople} equipment={stripEquip} items={stripItems} selectedShift={selected?.id ?? null} canDrag filter={stripFilter} hasTeam={team.size > 0} crews={crewChoices(crewTeams)}
-          labels={{ team: tw.one(T.team), teams: tw.many(T.team), people: tw.many(T.worker), person: tw.one(T.worker), equipment: tw.many(T.equipment), items: tw.many(T.item), role: tw.one(T.role), roles: tw.many(T.role), shift: tw.one(T.shift), shifts: tw.many(T.shift), site: tw.one(T.site), sites: tw.many(T.site) }} />
-        <DropZone back={here} labels={{ shift: tw.lower(T.shift), shifts: tw.lower(T.shift, true), person: tw.lower(T.worker), people: tw.lower(T.worker, true) }}>
+            stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)} />;
+          // With the strip beside it (7 Nov), rows take a dragged person, equipment or item like the cards do.
+          return listP.strip ? <>{strip}<DropZone back={here} labels={zoneLabels} picking={false} className="lst-drop">{list}</DropZone></> : list;
+        })() : (<>
+        {strip}
+        <DropZone back={here} labels={zoneLabels}>
           <table className={`ribbon ${span === 'day' ? 'day' : ''} look-${cardLook}`}>
             <thead>
               <tr>
