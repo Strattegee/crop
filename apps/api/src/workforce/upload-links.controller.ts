@@ -16,6 +16,8 @@ import { checkAndStore } from '../documents/file-checks.js';
 import { queueNotification } from '../notifications/notify.js';
 import { T, wordsFor } from '../terms/words.js';
 import { tellOffice } from '../worker-app/tell-office.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { checkWhat, toCheckPush } from './to-check.js';
 import { myCredentialDatesRefusal } from '../worker-app/worker-app.js';
 import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from './compliance-data.js';
 import { askMessage } from './onboarding.js';
@@ -255,6 +257,11 @@ export class UploadLinksController {
       const what = again.category === 'vaccination' ? 'a vaccination record' : again.typeName;
       const m = linkUploadEmail({ name: again.name, workerId: plan.workerId, what }, process.env.APP_URL ?? '', await wordsFor(db));
       await tellOffice(db, tenantId, { ...m, template: 'link_credential_added', dedupeKey: `link-credential:${credentialId}`, createdBy: null });
+      await alertOffice(db, tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.toCheck, holdThroughQuiet: true,
+        ...toCheckPush({ name: again.name, what: checkWhat({ kind: 'credential', typeName: again.typeName, category: again.category }), via: 'link' }),
+        dedupeKey: `to-check:credential:${credentialId}`,
+      });
       return this.view(db, tenantId, linkId);
     });
   }
@@ -309,6 +316,11 @@ export class UploadLinksController {
       await db.query('update upload_links set last_used_at = now() where id = $1', [linkId]);
       const m = linkUploadEmail({ name: p.name, workerId: p.workerId, what: 'proof of their right to work' }, process.env.APP_URL ?? '', await wordsFor(db));
       await tellOffice(db, tenantId, { ...m, template: 'link_credential_added', dedupeKey: `link-rtw:${doc.id}`, createdBy: null });
+      await alertOffice(db, tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.toCheck, holdThroughQuiet: true,
+        ...toCheckPush({ name: p.name, what: checkWhat({ kind: 'right_to_work' }), via: 'link' }),
+        dedupeKey: `to-check:rtw:${p.recordId}`,
+      });
       return this.view(db, tenantId, linkId);
     });
   }
