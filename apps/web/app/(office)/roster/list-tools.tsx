@@ -10,6 +10,8 @@ import { bulkAssign, bulkCancel, bulkConfirm, bulkDuty, bulkOffer } from './list
 import type { BestPerson } from './view';
 
 export const BULK_FORM = 'list-bulk';
+/** The list's filter form: the search box, every heading's filter and the bar's (controls join it with `form=`). */
+export const LIST_FILTERS = 'list-filters';
 const COLLAPSED_KEY = 'crop_list_collapsed';
 
 export type ListLabels = { shift: string; shifts: string; person: string; people: string; bank: string; client: string };
@@ -107,7 +109,7 @@ export function ListTools({ back, closeHref, labels, people, duties, children }:
         const cb = row?.querySelector<HTMLInputElement>('input[data-pick]');
         if (cb) { e.preventDefault(); cb.checked = !cb.checked; last.current = cb; recount(); }
       } else if (key === 'escape') {
-        const open = box.current?.querySelector<HTMLDetailsElement>('details.lst-pop[open]');
+        const open = document.querySelector<HTMLDetailsElement>('.lst details.lst-pop[open]');
         if (open) { e.preventDefault(); open.open = false; return; }
         if (closeHref) { e.preventDefault(); router.push(closeHref, { scroll: false }); }
       }
@@ -115,6 +117,16 @@ export function ListTools({ back, closeHref, labels, people, duties, children }:
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [router, closeHref, recount]);
+
+  // One drop-down open at a time; a click elsewhere closes it.
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Element;
+      document.querySelectorAll<HTMLDetailsElement>('.lst details.lst-pop[open]').forEach(d => { if (!d.contains(t)) d.open = false; });
+    };
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
 
   const onClick = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement;

@@ -20,7 +20,7 @@ import { SiteSelect } from './site-select';
 import { AgencyFillSection, type AgencyFillState } from './agency-fill-section';
 import { DropZone, RibbonStrip, type StripEquip, type StripItem, type StripPerson } from './strip';
 import { lettersOf } from '../../../lib/marker-letters';
-import { listQuery, parseListParams, stageClass } from '../../../lib/roster-list';
+import { LIST_KEYS, listQuery, offAll, parseListParams, stageClass } from '../../../lib/roster-list';
 import { ListView } from './list-view';
 import { NEW_PROJECT, siteChoices } from '../../../lib/projects';
 import { NewProjectForm } from '../projects/new-project-form';
@@ -141,8 +141,10 @@ const GAP_PX = 30;
 const fmtHours = (n: number) => (Math.round(n * 10) / 10).toString();
 
 export default async function RosterPage({ searchParams }: {
-  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; role?: string; hours?: string; error?: string; done?: string;
-    layout?: string; group?: string; q?: string; stage?: string; area?: string; person?: string; limit?: string }>;
+  searchParams: Promise<{ week?: string; date?: string; span?: string; site?: string; view?: string; look?: string; shift?: string; log?: string; role?: string | string[]; hours?: string; error?: string; done?: string;
+    layout?: string; group?: string; q?: string; stage?: string | string[]; area?: string | string[]; person?: string; limit?: string; who?: string; sort?: string;
+    day?: string | string[]; band?: string | string[]; ap?: string | string[]; fac?: string | string[]; len?: string | string[]; mk?: string | string[];
+    tl?: string | string[]; warn?: string | string[]; pst?: string | string[] }>;
 }) {
   const money = moneyFor((await businessSettings()).country);
   const tw = await words();
@@ -161,7 +163,8 @@ export default async function RosterPage({ searchParams }: {
   const cardLook = span === 'week' ? look : 'cards';
   const site = sp.site && /^[0-9a-f-]{36}$/i.test(sp.site) ? sp.site : '';
   // The strip's role and "Has hours left" filters (David, 2 Nov) ride along in every roster URL, so drops keep them.
-  const stripFilter = parseStripFilter(sp);
+  // The List's Role column ticks several roles: they come back as repeated `role`s and ride along as a comma list.
+  const stripFilter = parseStripFilter({ ...sp, role: Array.isArray(sp.role) ? sp.role.join(',') : sp.role });
   // Cards or List (David and Steve, 4 Nov): the list's grouping and filters live in the URL too (week and day only).
   const listP = parseListParams(sp);
   const listMode = listP.layout === 'list' && span !== 'month';
@@ -238,6 +241,8 @@ export default async function RosterPage({ searchParams }: {
   const activeFacilities = facilities.filter(f => f.active);
   const details = await Promise.all(activeFacilities.slice(0, 30).map(f => api<FacilityDetail>(`/facilities/${f.id}`)));
   const allShifts = roster.shifts;
+  // Role names on screen: a role whose name holds a comma isn't mistaken for several ticked roles.
+  const roleNames = new Set(allShifts.map(s => s.role));
   // Day view fetches the whole week (hours against weekly contracts); month view fetches whole weeks around the month.
   const inMonth = (d: string) => d.slice(0, 7) === range.anchor.slice(0, 7);
   const inView = (s: Shift) => span === 'month' ? inMonth(s.localDate) : days.includes(s.localDate);
@@ -890,7 +895,7 @@ export default async function RosterPage({ searchParams }: {
               ))}
               {span !== 'month' && <>
                 <div className="tool-menu-title">Layout</div>
-                <Link href={url({ layout: undefined, group: undefined, q: undefined, stage: undefined, area: undefined, person: undefined, limit: undefined })} aria-current={!listMode ? 'true' : undefined}>Cards</Link>
+                <Link href={url({ ...offAll(LIST_KEYS), role: stripFilter.role.includes(',') && !roleNames.has(stripFilter.role) ? undefined : stripFilter.role || undefined })} aria-current={!listMode ? 'true' : undefined}>Cards</Link>
                 <Link href={url({ layout: 'list' })} aria-current={listMode ? 'true' : undefined} title={`Every ${tw.lower(T.shift)} as a row: group, filter and act on several at once`}>List</Link>
               </>}
               {span !== 'month' && !listMode && <>
@@ -1015,7 +1020,7 @@ export default async function RosterPage({ searchParams }: {
       <div className={`roster-layout${listMode ? ' list' : ''}`}>
         {listMode ? (
           <ListView shifts={allShifts.filter(inView)} p={listP} role={stripFilter.role} tw={tw} letters={letters} dayRequests={roster.dayRequests ?? []}
-            url={url} here={here} selectedId={selected?.id ?? null} allSites={!site} closeHref={selected ? url({ shift: undefined }) : null}
+            url={url} here={here} selectedId={selected?.id ?? null} allSites={!site} weekDays={span === 'week' ? days : null} closeHref={selected ? url({ shift: undefined }) : null}
             people={roster.people.map(x => ({ id: x.id, name: x.name }))} duties={duties.filter(d => d.active).map(d => ({ id: d.id, name: d.name }))}
             blocked={new Map((attention?.items ?? []).filter(i => i.kind === 'person_blocked' || i.kind === 'equipment_blocked').map(i => [i.shiftId, `${i.title}: ${i.detail}`]))}
             gaps={new Map(coverGaps.map(g => [g.shiftId, g.title]))}
