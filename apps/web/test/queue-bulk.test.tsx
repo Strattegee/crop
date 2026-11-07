@@ -34,4 +34,22 @@ describe('releasing several from the queue', () => {
     expect(html).toContain('Release 2 shifts to the bank');
     expect(html).toContain('data-hold');
   });
+
+  it('sorted by a heading: one list, releasing the new rows shown; filters in the headings keep the page’s state', () => {
+    const shifts = [row('a1', 'new', 'tomorrow'), row('b1', 'new', 'later'), row('a2', 'released', 'soon')];
+    const q = { counts: {} as never, regions: [], bands: {} as never, total: shifts.length, shifts: shifts as never,
+      options: { stages: ['new', 'released'], clients: [{ id: 'c', name: 'Bayside Health' }], sites: [], roles: ['Nurse'], dates: ['2026-11-04'] } };
+    const p = parseQueueParams({ sort: '-rank', roles: 'Nurse', office: 'all' });
+    const html = renderToStaticMarkup(<QueueScreen tw={makeWords([])} p={p} q={q} clients={[]} panel={null} now={NOW} when={s => s} />);
+    expect(html).toContain('Sorted by rank, turned round');
+    expect(html.match(/Release 2 new/g)).toHaveLength(1);
+    expect(html).toContain('name="shiftId" value="b1"');
+    expect(html).toContain('Rank ↓');
+    // The filter form sends the rest of the state as hidden fields, and the chosen role is ticked.
+    expect(html).toContain('type="hidden" name="office" value="all"');
+    expect(html).toContain('type="hidden" name="sort" value="-rank"');
+    expect(html).toContain(`name="roles" checked="" value="Nurse"`);
+    expect(html).toContain('Clear filters');
+    expect(html).toContain('Filters (1)');
+  });
 });

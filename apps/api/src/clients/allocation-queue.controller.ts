@@ -14,8 +14,8 @@ import { loadSettings } from '../workforce/settings.js';
 import { todayIn } from '../workforce/compliance.js';
 import { CANCEL_KIND_WORDS, type CancelKind } from '../roster/cancel.js';
 import {
-  MAX_ROWS, PAGE_ROWS, QUEUE_BANDS, QUEUE_TABS, defaultTab, doneDays, doneOrder, initialsOf, isOutcome, onTab, parsePeriod, parseTab, progressLine,
-  queueBand, queueOrder, queuePeriodDates, queueStage, type QueueBand, type QueueStage, type QueueTab,
+  MAX_ROWS, PAGE_ROWS, QUEUE_BANDS, QUEUE_TABS, columnOptions, defaultTab, doneDays, doneOrder, initialsOf, isOutcome, matchesColumns, onTab, parseColumnFilters,
+  parsePeriod, parseSort, parseTab, progressLine, queueBand, queueOrder, queuePeriodDates, queueStage, sortRows, type QueueBand, type QueueStage, type QueueTab,
 } from './allocation-queue.js';
 
 /** How long someone counts as "on" a shift after opening it. */
@@ -61,12 +61,16 @@ export class AllocationQueueController {
    * and cancelled ones with their outcome as the stage; rows come `limit` at a time (default PAGE_ROWS) with `more`.
    * Tab counts take the office, region and client filters; office and region chip counts take the client filter only.
    * `offices` (chips, the caller's first) is empty when the business has no offices: the web then shows state chips.
+   * Column filters (David, 7 Nov; `parseColumnFilters`): `band`, `waiting`, `stages`, `rank` (1–7, none), `clients`, `sites`,
+   * `area`, `roles`, `dates`, `part` (am/pm/night), `hrs`, `progress`, `on` (others/nobody); lists are comma separated or
+   * repeated. They narrow the rows and every count; tab counts leave out `stages`. `sort` = a column key (`-key` turns it
+   * round), else the queue's own order. `options` lists what the filters can offer on the tab.
    */
   @Roles(...OFFICE_ROLES)
   @Get('allocations/queue')
   queue(@Tenant() t: Membership, @Auth() auth: AuthContext, @Query('stage') stageQ?: string, @Query('region') regionQ?: string,
     @Query('clientId') clientQ?: string, @Query('days') daysQ?: string, @Query('office') officeQ?: string,
-    @Query('period') periodQ?: string, @Query('limit') limitQ?: string) {
+    @Query('period') periodQ?: string, @Query('limit') limitQ?: string, @Query() all: Record<string, string | string[] | undefined> = {}) {
     const period = parsePeriod(periodQ);
     if (periodQ && !period) throw new BadRequestException('Choose the current week, the current month or the previous month');
     const days = period ? null : whole(daysQ, 3, 1, 14);
@@ -74,6 +78,8 @@ export class AllocationQueueController {
     const tab = parseTab(stageQ, period);
     const region = regionQ?.trim() ? regionQ.trim().slice(0, 60) : null;
     const clientId = clientQ && UUID.test(clientQ) ? clientQ : null;
+    const cols = parseColumnFilters(all);
+    const sort = parseSort(typeof all.sort === 'string' ? all.sort : undefined);
     return withTenant(this.pool, t.tenantId, async db => {
       const mine = await myOffices(db, auth.userId);
       const office = parseOfficeFilter(officeQ, mine.size > 0);
@@ -174,13 +180,17 @@ export class AllocationQueueController {
       const counted = (r: (typeof rows)[number], k: QueueTab) => onTab(k, r.stage, r.bookedToday);
       // Chips count what the period is mostly about: still needing someone, or (previous month) what happened.
       const chipTab = defaultTab(period);
-      const inClient = rows;
+      // The column filters narrow everything; every count but the Stage column's own leaves `stages` out (as the tabs are its presets).
+      const inClient = rows.filter(r => matchesColumns(r, cols, now, false));
       const inOffices = inClient.filter(r => inOffice(office, r.officeId, mine));
       const inRegion = region ? inOffices.filter(r => r.region === region) : inOffices;
       const counts = Object.fromEntries(QUEUE_TABS.map(k => [k, inRegion.filter(r => counted(r, k)).length])) as Record<QueueTab, number>;
       const regionNames = [...new Set(inClient.map(r => r.region).filter((x): x is string => Boolean(x)))].sort((a, b) => a.localeCompare(b));
       const regions = regionNames.map(name => ({ name, count: inClient.filter(r => r.region === name && counted(r, chipTab)).length }));
-      const shown = inRegion.filter(r => counted(r, tab));
+      // The filters' choices: what's on the tab in this office and region, before the column filters.
+      const scoped = rows.filter(r => inOffice(office, r.officeId, mine) && (!region || r.region === region) && counted(r, tab));
+      const options = columnOptions(scoped, cols);
+      const shown = sortRows(inRegion.filter(r => counted(r, tab) && (!cols.stages.length || cols.stages.includes(r.stage))), sort);
       const bands = Object.fromEntries(QUEUE_BANDS.map(b => [b, shown.filter(r => r.band === b).length])) as Record<QueueBand, number>;
       const needing = inClient.filter(r => counted(r, chipTab));
       const chips = officeList.length ? officeChips(officeList, needing, mine) : { offices: [], noOffice: 0 };
@@ -189,6 +199,7 @@ export class AllocationQueueController {
         tab, region, clientId, days, period, from: range?.from ?? null, to: range?.to ?? null, today,
         office: officeParam(office), myOffices: [...mine], offices: chips.offices, noOffice: chips.noOffice,
         counts, regions, bands, doneDays: doneDays(shown), total: shown.length, more: shown.length - page.length, shifts: page,
+        filters: cols, sort, options,
       };
     });
   }

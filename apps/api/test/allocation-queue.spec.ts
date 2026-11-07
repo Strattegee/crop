@@ -11,6 +11,9 @@ import {
   defaultTab, doneDays, doneOrder, initialsOf, onTab, outcomeStage, parsePeriod, parseTab, progressLine, queueBand, queueOrder, queuePeriodDates, queueStage,
   type ProgressFacts,
 } from '../src/clients/allocation-queue.js';
+import {
+  NO_FILTERS, anyColumnFilter, columnOptions, dayPart, matchesColumns, parseColumnFilters, parseSort, progressKinds, sortRows, type FilterRow,
+} from '../src/clients/allocation-queue.js';
 import { makeWords } from '../src/terms/words.js';
 import { startFakeIdp } from './fake-idp.js';
 
@@ -164,6 +167,86 @@ describe('allocation queue: calendar periods and outcomes (David, 4 Nov)', () =>
   });
 });
 
+describe('allocation queue: column filters and sorting (David, 7 Nov)', () => {
+  const now = new Date('2026-11-07T00:00:00Z');
+  const row = (o: Partial<FilterRow> = {}): FilterRow => ({
+    band: 'today', stage: 'new', waitingSince: '2026-11-06T23:00:00Z', clientRank: 2, clientId: 'C1', clientName: 'Bayside', facilityId: 'F1',
+    facilityName: 'Campus', areaName: 'Ward 3 East', role: 'Nurse', localDate: '2026-11-07', localStart: '07:00', hours: 8,
+    offersTotal: 0, offersPending: 0, offersDeclined: 0, pulledOutName: null, presence: [], startsAt: '2026-11-07T08:00:00Z', ...o,
+  });
+  const uuid = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
+
+  it('reads the filters from the query, leaving out anything odd', () => {
+    expect(parseColumnFilters({})).toEqual(NO_FILTERS);
+    expect(anyColumnFilter(NO_FILTERS)).toBe(false);
+    const f = parseColumnFilters({ band: 'soon,started,nope', waiting: '4h', stages: ['new', 'pulled_out', 'x'], rank: '1,none,9', clients: `${uuid.toUpperCase()},bad`,
+      sites: uuid, area: ' east ', roles: ['Nurse', 'Carer'], dates: '2026-11-07,7 Nov', part: 'am,dusk', hrs: 'gt8', progress: 'some_declined', on: 'others' });
+    expect(f).toEqual({ bands: ['soon', 'started'], waiting: '4h', stages: ['new', 'pulled_out'], ranks: [1, 0], clients: [uuid], sites: [uuid], area: 'east',
+      roles: ['Nurse', 'Carer'], dates: ['2026-11-07'], parts: ['am'], hours: 'gt8', progress: ['some_declined'], on: 'others' });
+    expect(anyColumnFilter(f)).toBe(true);
+    expect(parseColumnFilters({ waiting: '2h', hrs: '9', on: 'me' })).toEqual(NO_FILTERS);
+    expect(parseSort('-rank')).toEqual({ key: 'rank', desc: true });
+    expect(parseSort('when')).toEqual({ key: 'when', desc: false });
+    expect(parseSort('-nope')).toEqual({ key: 'default', desc: false });
+  });
+
+  it('matches each column, any value within one, every column across', () => {
+    const m = (o: Partial<FilterRow>, q: Record<string, string>) => matchesColumns(row(o), parseColumnFilters(q), now);
+    expect(m({}, { band: 'today,soon' })).toBe(true);
+    expect(m({ band: 'later' }, { band: 'today,soon' })).toBe(false);
+    // Waiting since 23:00 = an hour by midnight.
+    expect(m({}, { waiting: '1h' })).toBe(true);
+    expect(m({}, { waiting: '4h' })).toBe(false);
+    expect(m({ waitingSince: null }, { waiting: '30m' })).toBe(false);
+    expect(m({ clientRank: null }, { rank: 'none' })).toBe(true);
+    expect(m({ clientRank: 2 }, { rank: '1,3' })).toBe(false);
+    expect(m({}, { area: 'EAST' })).toBe(true);
+    expect(m({ areaName: null }, { area: 'east' })).toBe(false);
+    expect(m({}, { roles: 'Carer' })).toBe(false);
+    expect(m({}, { dates: '2026-11-07,2026-11-08' })).toBe(true);
+    expect(m({ localStart: '12:00' }, { part: 'am' })).toBe(false);
+    expect(m({ hours: 4 }, { hrs: '4to8' })).toBe(true);
+    expect(m({ hours: 3.5 }, { hrs: 'lt4' })).toBe(true);
+    expect(m({ hours: 8.5 }, { hrs: '4to8' })).toBe(false);
+    expect(m({}, { progress: 'not_offered' })).toBe(true);
+    expect(m({ offersTotal: 3, offersPending: 2, offersDeclined: 1 }, { progress: 'no_replies' })).toBe(false);
+    expect(m({ offersTotal: 3, offersPending: 3 }, { progress: 'no_replies' })).toBe(true);
+    expect(m({ presence: [{}] }, { on: 'nobody' })).toBe(false);
+    expect(m({ presence: [{}] }, { on: 'others' })).toBe(true);
+    // Two columns at once: both must pass.
+    expect(m({}, { roles: 'Nurse', hrs: 'lt4' })).toBe(false);
+    // The tab counts leave out the Stage column.
+    expect(matchesColumns(row(), parseColumnFilters({ stages: 'released' }), now, false)).toBe(true);
+    expect(matchesColumns(row(), parseColumnFilters({ stages: 'released' }), now)).toBe(false);
+  });
+
+  it('sorts parts of the day and progress the way the roster and the progress line do', () => {
+    expect(['04:59', '05:00', '11:59', '12:00', '18:59', '19:00'].map(dayPart)).toEqual(['night', 'am', 'am', 'pm', 'pm', 'night']);
+    expect(progressKinds({ offersTotal: 0, offersPending: 0, offersDeclined: 0, pulledOutName: 'Ana' })).toEqual(['not_offered', 'pulled_out']);
+    expect(progressKinds({ offersTotal: 4, offersPending: 1, offersDeclined: 2, pulledOutName: null })).toEqual(['some_declined']);
+  });
+
+  it('sorts by a heading, keeping the queue order on ties, with blanks last either way', () => {
+    const a = row({ clientRank: 3, role: 'Nurse', hours: 8 }), b = row({ clientRank: null, role: 'Carer', hours: 4 }), c = row({ clientRank: 1, role: 'Nurse', hours: 6 });
+    expect(sortRows([a, b, c], parseSort(''))).toEqual([a, b, c]);
+    expect(sortRows([a, b, c], parseSort('rank'))).toEqual([c, a, b]);
+    expect(sortRows([a, b, c], parseSort('-rank'))).toEqual([a, c, b]);
+    expect(sortRows([a, b, c], parseSort('role'))).toEqual([b, a, c]);
+    expect(sortRows([a, b, c], parseSort('-hours'))).toEqual([a, c, b]);
+    const old = row({ waitingSince: '2026-11-01T00:00:00Z' }), none = row({ waitingSince: null }), recent = row({ waitingSince: '2026-11-06T00:00:00Z' });
+    expect(sortRows([none, recent, old], parseSort('waiting'))).toEqual([old, recent, none]);
+  });
+
+  it('offers the values on the tab, sites only for the chosen clients', () => {
+    const rows = [row(), row({ clientId: 'C2', clientName: 'Hillview', facilityId: 'F2', facilityName: 'House', role: 'Carer', localDate: '2026-11-08', stage: 'released' })];
+    expect(columnOptions(rows, NO_FILTERS)).toEqual({
+      stages: ['new', 'released'], clients: [{ id: 'C1', name: 'Bayside' }, { id: 'C2', name: 'Hillview' }],
+      sites: [{ id: 'F1', name: 'Campus', clientId: 'C1' }, { id: 'F2', name: 'House', clientId: 'C2' }], roles: ['Carer', 'Nurse'], dates: ['2026-11-07', '2026-11-08'],
+    });
+    expect(columnOptions(rows, { ...NO_FILTERS, clients: ['c2'] }).sites).toEqual([{ id: 'F2', name: 'House', clientId: 'C2' }]);
+  });
+});
+
 describe('allocation queue: API', () => {
   let app: INestApplication;
   let db: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -308,6 +391,39 @@ describe('allocation queue: API', () => {
     await http().get('/allocations/queue?days=15').set(as('alloc')).expect(400);
     // Outcome tabs need a calendar period: without one, Done is the ordinary queue.
     expect((await queue('?stage=done')).counts.all).toBe(7);
+  });
+
+  it('filters by column, counts after the filters and sorts by a heading (David, 7 Nov)', async () => {
+    const q = async (qs: string) => (await http().get(`/allocations/queue${qs}`).set(as('alloc')).expect(200)).body as {
+      counts: Record<string, number>; total: number; shifts: Row[]; regions: { name: string; count: number }[];
+      options: { stages: string[]; clients: { id: string }[]; sites: { id: string }[]; roles: string[]; dates: string[] }; sort: { key: string; desc: boolean } };
+    const soon = await q('?band=soon');
+    expect(soon.shifts.map(s => s.id)).toEqual([ids.soonHill, ids.soonBay]);
+    expect(soon.counts).toMatchObject({ all: 2, new: 2, released: 0 });
+    // The Stage column narrows the rows but not the tab counts (the tabs are its presets).
+    const st = await q('?stages=released,pulled_out');
+    expect(st.shifts.map(s => s.id).sort()).toEqual([ids.released, ids.pulled].sort());
+    expect(st.counts.all).toBe(7);
+    expect(st.options.stages).toEqual(['pulled_out', 'new', 'released', 'accepted', 'worker_to_confirm', 'client_to_confirm']);
+    // Client and site, rank, progress, hours.
+    const hill = await q(`?clients=${ids.hill}`);
+    expect(hill.shifts.map(s => s.id).sort()).toEqual([ids.soonHill, ids.accepted].sort());
+    expect(hill.regions).toEqual([{ name: 'NSW', count: 2 }]);
+    expect(hill.options.sites.map(s => s.id)).toEqual([ids.hillSite]);
+    expect(hill.options.clients).toHaveLength(2);
+    expect((await q('?rank=1')).total).toBe(2);
+    expect((await q('?progress=some_declined')).shifts.map(s => s.id)).toEqual([ids.released]);
+    expect((await q('?progress=pulled_out')).shifts.map(s => s.id)).toEqual([ids.pulled]);
+    expect((await q('?hrs=lt4')).shifts.map(s => s.id)).toEqual([ids.pulled]);
+    expect((await q('?area=nowhere')).total).toBe(0);
+    expect((await q('?on=others')).total).toBe(0);
+    // Sorting by rank: Hillview (1) first; turned round, Bayside (2) first.
+    const byRank = await q('?sort=rank');
+    expect(byRank.sort).toEqual({ key: 'rank', desc: false });
+    expect(byRank.shifts.slice(0, 2).every(s => s.clientName === 'Hillview Care')).toBe(true);
+    expect((await q('?sort=-rank')).shifts[0].clientName).toBe('Bayside Health');
+    // Odd values are left out, never refused.
+    expect((await q('?band=nope&hrs=9&sort=sideways')).total).toBe(7);
   });
 
   it('shows who else has a shift open (never a lock), for two minutes', async () => {

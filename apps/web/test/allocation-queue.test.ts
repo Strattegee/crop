@@ -1,3 +1,4 @@
+import { NO_QUEUE_FILTERS } from '../lib/queue-filters';
 import { describe, expect, it } from 'vitest';
 import {
   BULK_MAX, LIVE_TABS, OUTCOME_TABS, bandTitle, cancelPillLabel, dayGroups, dayHeading, defaultTab, periodChoices, queueQuery, showMore, tabsFor, bestPeople, bulkReleaseMessage, releasableRows, releasePick, hereLine, nearHereLine, nearestFirst, initials, officeChipList, parseQueueParams, inTeam, teamChoicesOn, teamOn, personLine, queueHref, shortSpan, stagePill, startsIn, tabLabel, updatedWords, waitingFor,
@@ -45,8 +46,8 @@ describe('allocation queue (David chose layout A, 2 Nov)', () => {
   it('keeps the screen’s state in the URL, short', () => {
     const id = '6f1c1f8e-0b6a-4a51-9a51-1b2c3d4e5f60';
     const p = parseQueueParams({ stage: 'released', region: 'VIC', days: '7', shift: id, clientId: 'nope', view: 'odd' });
-    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null, near: false, crew: null });
-    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null, near: false, crew: null });
+    expect(p).toEqual({ stage: 'released', office: null, region: 'VIC', clientId: null, days: 7, shift: id, view: 'queue', period: null, limit: null, near: false, crew: null, f: NO_QUEUE_FILTERS, sort: null });
+    expect(parseQueueParams({})).toEqual({ stage: 'all', office: null, region: null, clientId: null, days: 3, shift: null, view: 'queue', period: null, limit: null, near: false, crew: null, f: NO_QUEUE_FILTERS, sort: null });
     expect(parseQueueParams({ office: 'ALL' }).office).toBe('all');
     expect(parseQueueParams({ office: id }).office).toBe(id);
     expect(parseQueueParams({ office: 'Melbourne' }).office).toBeNull();
