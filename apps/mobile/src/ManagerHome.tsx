@@ -16,6 +16,7 @@ import { ShiftScreen } from './ShiftScreen';
 import { AlertsScreen } from './AlertsScreen';
 import { AddShiftsScreen } from './AddShiftsScreen';
 import { styles } from './styles';
+import { detailDecidedMessage, detailLines, detailTitle, swapDecidedMessage, swapsToDecide, swapTitle, type DetailChange, type OfficeSwap } from './requests';
 
 type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
 
@@ -37,6 +38,8 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [leave, setLeave] = useState<LeaveRequest[]>([]);
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
+  const [swaps, setSwaps] = useState<OfficeSwap[]>([]);
+  const [details, setDetails] = useState<DetailChange[]>([]);
   const [terms, setTerms] = useState<Term[] | null>(null);
   const [today, setToday] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
     setBusy(true);
     setError(null);
     try {
-      const [a, l, c, t, s, d, p, w] = await Promise.all([
+      const [a, l, c, t, s, d, p, w, sw, dc] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
         can.leave ? api<LeaveRequest[]>('/leave?status=requested', { tenant }) : Promise.resolve([] as LeaveRequest[]),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
@@ -65,7 +68,11 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
         api<Dashboard>('/dashboard', { tenant }).catch(() => null),
         api<ProjectRow[]>('/projects', { tenant }).catch(() => [] as ProjectRow[]),
         api<PersonRow[]>('/workers?status=active', { tenant }).catch(() => [] as PersonRow[]),
+        can.swapsAndDetails ? api<{ swaps: OfficeSwap[] }>('/shift-swaps?status=agreed', { tenant }).then(r => r.swaps).catch(() => [] as OfficeSwap[]) : Promise.resolve([] as OfficeSwap[]),
+        can.swapsAndDetails ? api<{ changes: DetailChange[] }>('/detail-changes', { tenant }).then(r => r.changes).catch(() => [] as DetailChange[]) : Promise.resolve([] as DetailChange[]),
       ]);
+      setSwaps(swapsToDecide(sw));
+      setDetails(dc.filter(x => x.status === 'pending'));
       setStaff(w);
       setProjects(p);
       setDash(d);
@@ -86,7 +93,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
     } finally {
       setBusy(false);
     }
-  }, [tenant, onSignedOut, can.leave]);
+  }, [tenant, onSignedOut, can.leave, can.swapsAndDetails]);
 
   useEffect(() => {
     load();
@@ -112,7 +119,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
   const tabs: Tab[] = projects.length > 0 ? ['today', 'roster', 'people', 'projects', 'requests'] : ['today', 'roster', 'people', 'requests'];
   // Five tabs don't fit "Needs attention" on a phone.
   const tabLabel = (t: Tab) => t === 'today' ? (tabs.length > 4 ? 'Attention' : 'Needs attention') : t === 'roster' ? rosterWord.one
-    : t === 'people' ? people.many : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length);
+    : t === 'people' ? people.many : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length, swaps.length, details.length);
   const rosterAt = (facilityId: string, day: string) => {
     const weekStart = currentWeek(day, day);
     setRosterView({ weekStart, day: firstDay(weekStart, day), facilityId });
@@ -138,6 +145,12 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
 
   const decideChange = (r: ChangeRequest, answer: 'approve' | 'decline') =>
     act(`/change-requests/${r.id}/${answer}`, () => (answer === 'approve' ? `Approved and changed on the ${rosterWord.lower}.` : 'Declined. They have been told by email.'));
+
+  const decideSwap = (sw: OfficeSwap, answer: 'approve' | 'refuse') =>
+    act(`/shift-swaps/${sw.id}/${answer}`, () => swapDecidedMessage(answer));
+
+  const decideDetail = (c: DetailChange, answer: 'approve' | 'decline') =>
+    act(`/detail-changes/${c.id}/${answer}`, r => detailDecidedMessage(answer, (r as { told?: 'app' | 'email' | null }).told));
 
   const confirm = (title: string, run: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', onPress: run }]);
@@ -270,6 +283,50 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
                 )}
               </View>
             ))}
+
+            {can.swapsAndDetails && swaps.length > 0 && (
+              <>
+                <Text style={styles.section}>{word.one} swaps to approve</Text>
+                {swaps.map(sw => (
+                  <View key={sw.id} style={styles.card}>
+                    <Text style={styles.cardTitle}>{swapTitle(sw)}</Text>
+                    <Text style={[styles.muted, styles.small]}>{sw.summary}</Text>
+                    {sw.canDecide ? (
+                      <View style={styles.row}>
+                        <Pressable style={[styles.button, styles.grow]} disabled={busy} onPress={() => confirm('Approve this swap?', () => decideSwap(sw, 'approve'))}>
+                          <Text style={styles.buttonText}>Approve</Text>
+                        </Pressable>
+                        <Pressable style={[styles.button, styles.secondary, styles.grow]} disabled={busy} onPress={() => confirm('Not approve this swap?', () => decideSwap(sw, 'refuse'))}>
+                          <Text style={[styles.buttonText, styles.secondaryText]}>Not approve</Text>
+                        </Pressable>
+                      </View>
+                    ) : <Text style={[styles.muted, styles.small]}>An owner or admin decides.</Text>}
+                  </View>
+                ))}
+              </>
+            )}
+
+            {can.swapsAndDetails && details.length > 0 && (
+              <>
+                <Text style={styles.section}>Details to approve</Text>
+                {details.map(c => (
+                  <View key={c.id} style={styles.card}>
+                    <Text style={styles.cardTitle}>{detailTitle(c)}</Text>
+                    {detailLines(c).map(l => <Text key={l} style={[styles.muted, styles.small]}>{l}</Text>)}
+                    {c.canDecide ? (
+                      <View style={styles.row}>
+                        <Pressable style={[styles.button, styles.grow]} disabled={busy} onPress={() => confirm(`Approve this change for ${c.workerName}?`, () => decideDetail(c, 'approve'))}>
+                          <Text style={styles.buttonText}>Approve</Text>
+                        </Pressable>
+                        <Pressable style={[styles.button, styles.secondary, styles.grow]} disabled={busy} onPress={() => confirm(`Decline this change for ${c.workerName}?`, () => decideDetail(c, 'decline'))}>
+                          <Text style={[styles.buttonText, styles.secondaryText]}>Decline</Text>
+                        </Pressable>
+                      </View>
+                    ) : <Text style={[styles.muted, styles.small]}>An owner or admin decides.</Text>}
+                  </View>
+                ))}
+              </>
+            )}
           </>
         )}
 

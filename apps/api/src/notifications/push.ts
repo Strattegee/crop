@@ -54,6 +54,8 @@ const SCREEN_FOR: Record<string, PushScreen> = {
   office_pulled_out: 'attention',
   office_leave_to_approve: 'requests',
   office_change_to_approve: 'requests',
+  office_swap_to_approve: 'requests',
+  office_detail_to_approve: 'requests',
 };
 
 export function pushScreen(template: string): PushScreen | null {

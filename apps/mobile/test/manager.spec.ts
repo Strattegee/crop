@@ -40,6 +40,7 @@ describe('manager mode', () => {
     expect(approvedLeaveMessage(2, { lower: 'job', lowerMany: 'jobs' })).toBe('Approved. 2 jobs need someone else: they show in Needs attention.');
     expect(requestsTab(0, 0)).toBe('Requests');
     expect(requestsTab(2, 1)).toBe('Requests (3)');
+    expect(requestsTab(0, 1, 2, 1)).toBe('Requests (4)');
   });
 
   it("uses the business's word for shifts", () => {
@@ -85,8 +86,8 @@ describe('kindLabel', () => {
 
 describe('supervisors in manager mode (6 Nov)', () => {
   it('leaves out what the API keeps for the office', () => {
-    expect(managerCan('supervisor')).toEqual({ leave: false, publish: false, cancel: false, covering: false, add: false });
-    for (const r of ['owner', 'admin', 'allocator']) expect(managerCan(r)).toEqual({ leave: true, publish: true, cancel: true, covering: true, add: true });
+    expect(managerCan('supervisor')).toEqual({ leave: false, publish: false, cancel: false, covering: false, add: false, swapsAndDetails: false });
+    for (const r of ['owner', 'admin', 'allocator']) expect(managerCan(r)).toEqual({ leave: true, publish: true, cancel: true, covering: true, add: true, swapsAndDetails: true });
   });
   it('says a supervisor runs their own sites', () => {
     expect(managerLine('supervisor', { lower: 'roster' })).toBe('Running the roster at your sites');

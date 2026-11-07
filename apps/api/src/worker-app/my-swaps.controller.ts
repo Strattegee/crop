@@ -15,6 +15,8 @@ import {
 import { fillWords, T, wordsFor } from '../terms/words.js';
 import { requireLinked } from './worker-app.controller.js';
 import { tellOffice } from './tell-office.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { swapPush } from '../notifications/manager-alerts.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** How far ahead the app looks for colleagues' shifts to swap for. */
@@ -199,6 +201,12 @@ export class MySwapsController {
       const agreed = await loadSwap(db, id);
       const m = swapToApproveEmail(viewOf(agreed), process.env.APP_URL ?? '', words);
       await tellOffice(db, t.tenantId, { ...m, template: 'shift_swap_to_approve', dedupeKey: `swap:${id}:agreed`, createdBy: auth.userId, exceptEmail: auth.email });
+      // And their phones (held through quiet hours: it waits for a decision, not for the clock).
+      await alertOffice(db, t.tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.swap, holdThroughQuiet: true,
+        ...swapPush(viewOf(agreed), words),
+        dedupeKey: `swap:${id}:agreed`, exceptUserId: auth.userId, createdBy: auth.userId,
+      });
       return mineView(agreed, w.id);
     });
   }

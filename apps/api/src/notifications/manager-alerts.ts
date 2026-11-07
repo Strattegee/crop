@@ -142,6 +142,22 @@ export function changeRequestPush(p: { who: string | null; summary: string; faci
     body: `${p.who ?? 'Someone in the office'} asked: ${p.summary} (${p.shiftLine}). Open CROP to approve or decline.` };
 }
 
+/** A shift swap both people agreed, waiting for an owner's or admin's approval (the business's setting is approve). */
+export interface SwapAlertShift { localDate: string; localStart: string; localEnd: string; site: string }
+export function swapPush(p: { fromName: string; toName: string; shift: SwapAlertShift; other: SwapAlertShift | null }, w: Words = DEFAULT_WORDS) {
+  const line = (s: SwapAlertShift) => `${day(s.localDate)} ${s.localStart}–${s.localEnd}`;
+  const what = p.other
+    ? `${p.fromName}'s ${line(p.shift)} for ${p.toName}'s ${line(p.other)}${p.other.site === p.shift.site ? ` at ${p.shift.site}` : ''}`
+    : `${p.fromName} gives ${p.toName} ${line(p.shift)} at ${p.shift.site}`;
+  return { title: `${w.one(T.shift)} swap to approve: ${p.fromName} and ${p.toName}`, body: `${what}. Open CROP to approve or not.` };
+}
+
+/** A change to someone's details asked for in the app. Never the values (old or new). */
+export function detailChangePush(p: { name: string; what: string }) {
+  return { title: `Details to approve: ${p.name}`,
+    body: `${p.name} asked in the app: ${p.what.toLowerCase()}. Open CROP to approve or decline.` };
+}
+
 /** The settings screen's line for the quiet hours. */
 export function quietLine(s: Pick<AlertSettings, 'quietFrom' | 'quietUntil'>): string {
   return s.quietFrom && s.quietUntil ? `Quiet from ${s.quietFrom} to ${s.quietUntil}` : 'No quiet hours';
