@@ -17,6 +17,8 @@ import { complianceContext, credentialFactsByWorker, rightToWorkByWorker } from 
 import { T, wordsFor } from '../terms/words.js';
 import { documentAccess, loadMyRightToWork, myOnboarding, requireLinked } from './worker-app.controller.js';
 import { tellOffice } from './tell-office.js';
+import { alertOffice, OFFICE_ALERT_TEMPLATES } from '../notifications/manager-alerts-data.js';
+import { checkWhat, toCheckPush } from '../workforce/to-check.js';
 import {
   appCredentialEmail, appRightToWorkEmail,
   myAddRefusal, myRightToWorkFileRefusal, myCheckState, myCredentialDatesRefusal, myEvidenceRefusal, myNeedFor, myNeedLine, officeKeepsDocument,
@@ -143,6 +145,11 @@ export class MyCredentialsController {
       // Owners and admins check it, so they hear about it (never the number; a vaccination is only "a vaccination record").
       const m = appCredentialEmail({ name: w.name, workerId: w.id, typeName: type.name, category: type.category }, process.env.APP_URL ?? '', await wordsFor(db));
       await tellOffice(db, t.tenantId, { ...m, template: 'app_credential_added', dedupeKey: `app-credential:${row.id}`, createdBy: auth.userId, exceptEmail: auth.email });
+      await alertOffice(db, t.tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.toCheck, holdThroughQuiet: true,
+        ...toCheckPush({ name: w.name, what: checkWhat({ kind: 'credential', typeName: type.name, category: type.category }), via: 'app' }),
+        dedupeKey: `to-check:credential:${row.id}`, exceptUserId: auth.userId, createdBy: auth.userId,
+      });
       return { id: row.id, typeName: type.name, check: 'to_check' };
     });
   }
@@ -223,6 +230,12 @@ export class MyRightToWorkController {
         [t.tenantId, p.recordId, auth.userId, JSON.stringify({ documentId: doc.id, filename: doc.filename, via: 'app' })]);
       const m = appRightToWorkEmail({ name: p.name, workerId: p.workerId }, process.env.APP_URL ?? '');
       await tellOffice(db, t.tenantId, { ...m, template: 'app_right_to_work_added', dedupeKey: `app-rtw:${doc.id}`, createdBy: auth.userId, exceptEmail: auth.email });
+      // One alert per record, however many photos they send.
+      await alertOffice(db, t.tenantId, {
+        kind: 'decisions', deciders: true, facilityId: null, template: OFFICE_ALERT_TEMPLATES.toCheck, holdThroughQuiet: true,
+        ...toCheckPush({ name: p.name, what: checkWhat({ kind: 'right_to_work' }), via: 'app' }),
+        dedupeKey: `to-check:rtw:${p.recordId}`, exceptUserId: auth.userId, createdBy: auth.userId,
+      });
       return { id: doc.id, filename: doc.filename, rightToWork: await loadMyRightToWork(db, t.tenantId, p.workerId) };
     });
   }
