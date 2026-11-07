@@ -3,6 +3,7 @@
  * chips, bands, "starts in" and "waiting" times, and the URL that keeps the screen's state.
  */
 import { distanceWords } from './distance';
+import { NO_QUEUE_FILTERS, filterEntries, parseQueueFilters, parseQueueSort, type QueueFilters } from './queue-filters';
 
 export type LiveTab = 'all' | 'new' | 'released' | 'accepted' | 'worker_to_confirm' | 'client_to_confirm' | 'pulled_out' | 'booked_today';
 /** Outcome tabs (David, 4 Nov), only for calendar periods; keep in step with the API's `OUTCOME_TABS`. */
@@ -169,6 +170,10 @@ export type QueueParams = {
   near?: boolean;
   /** The fill panel's best people from one standing team only (`crew=<team id>`, 6 Nov). */
   crew?: string | null;
+  /** The column filters in the headings (7 Nov; `lib/queue-filters.ts`). */
+  f?: QueueFilters;
+  /** Sorted by a heading (`rank`, `-rank`, …); null = the queue's own order. */
+  sort?: string | null;
 };
 
 /** `?office=`: all, mine, none or an office id; anything else is left to the default. */
@@ -222,30 +227,51 @@ export function parseQueueParams(sp: Record<string, string | string[] | undefine
     limit: period && Number.isInteger(limit) && limit > PAGE_ROWS ? Math.min(limit, 5000) : null,
     near: one('near') === '1',
     crew: id(one('crew'))?.toLowerCase() ?? null,
+    f: parseQueueFilters(sp),
+    sort: parseQueueSort(sp.sort),
   };
+}
+
+/** The URL's parameters for this state (defaults left out, so URLs stay short). */
+export function queueEntries(n: QueueParams): [string, string][] {
+  const q: [string, string][] = [];
+  const period = n.period ?? null;
+  if (n.view !== 'queue') q.push(['view', n.view]);
+  if (n.stage !== defaultTab(period)) q.push(['stage', n.stage]);
+  if (n.office) q.push(['office', n.office]);
+  if (n.region) q.push(['region', n.region]);
+  if (n.clientId) q.push(['clientId', n.clientId]);
+  if (period) q.push(['period', period]);
+  else if (n.days !== 3) q.push(['days', String(n.days)]);
+  q.push(...filterEntries(n.f));
+  if (n.sort) q.push(['sort', n.sort]);
+  if (period && n.limit) q.push(['limit', String(n.limit)]);
+  if (n.shift) q.push(['shift', n.shift]);
+  if (n.near) q.push(['near', '1']);
+  if (n.crew) q.push(['crew', n.crew]);
+  return q;
 }
 
 /** The Allocations URL for this state with some of it changed (defaults left out, so URLs stay short). */
 export function queueHref(p: QueueParams, change: Partial<QueueParams> = {}): string {
-  const n = { ...p, ...change };
-  const q = new URLSearchParams();
-  const period = n.period ?? null;
-  if (n.view !== 'queue') q.set('view', n.view);
-  if (n.stage !== defaultTab(period)) q.set('stage', n.stage);
-  if (n.office) q.set('office', n.office);
-  if (n.region) q.set('region', n.region);
-  if (n.clientId) q.set('clientId', n.clientId);
-  if (period) q.set('period', period);
-  else if (n.days !== 3) q.set('days', String(n.days));
-  if (period && n.limit) q.set('limit', String(n.limit));
-  if (n.shift) q.set('shift', n.shift);
-  if (n.near) q.set('near', '1');
-  if (n.crew) q.set('crew', n.crew);
-  const s = q.toString();
+  const s = new URLSearchParams(queueEntries({ ...p, ...change })).toString();
   return s ? `/allocations?${s}` : '/allocations';
 }
 
-/** The API query for the queue: the period (or days), tab, filters and how many rows. */
+/**
+ * Hidden fields for a GET form that changes some of the state: everything else on the page goes with it (`leave` =
+ * the names the form itself sends). Paging starts again.
+ */
+export function queueHidden(p: QueueParams, leave: string[]): [string, string][] {
+  return queueEntries({ ...p, limit: null }).filter(([k]) => !leave.includes(k));
+}
+
+/** Every column filter off, keeping the tab, chips, period, order and the open shift. */
+export function clearFiltersHref(p: QueueParams): string {
+  return queueHref(p, { f: NO_QUEUE_FILTERS, limit: null });
+}
+
+/** The API query for the queue: the period (or days), tab, filters, order and how many rows. */
 export function queueQuery(p: QueueParams): string {
   const q = new URLSearchParams();
   if (p.period) q.set('period', p.period); else q.set('days', String(p.days));
@@ -253,6 +279,8 @@ export function queueQuery(p: QueueParams): string {
   if (p.office) q.set('office', p.office);
   if (p.region) q.set('region', p.region);
   if (p.clientId) q.set('clientId', p.clientId);
+  for (const [k, v] of filterEntries(p.f)) q.set(k, v);
+  if (p.sort) q.set('sort', p.sort);
   if (p.period && p.limit) q.set('limit', String(p.limit));
   return q.toString();
 }

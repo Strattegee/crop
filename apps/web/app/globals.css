@@ -779,8 +779,8 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-main { display: flex; gap: 14px; align-items: flex-start; }
 .q-list { flex: 1 1 auto; min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .q-scroll { overflow-x: auto; max-height: calc(100vh - 230px); overflow-y: auto; }
-.q-table { min-width: 960px; }
-.q-row { display: grid; grid-template-columns: 92px 62px 132px 40px minmax(0, 1.6fr) minmax(0, 1fr) 118px 38px minmax(0, 1.3fr) 54px; gap: 8px; align-items: center; padding: 0 12px; height: 32px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); text-decoration: none; background: var(--surface); }
+.q-table { min-width: 1180px; }
+.q-row { display: grid; grid-template-columns: 92px 70px 132px 56px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr) 118px 62px minmax(0, 1.3fr) 66px; gap: 8px; align-items: center; padding: 0 12px; height: 32px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); text-decoration: none; background: var(--surface); }
 .q-row:hover { background: var(--hover); }
 .q-row:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .q-row.sel { background: var(--hover); box-shadow: inset 3px 0 0 var(--orange); }
@@ -860,6 +860,31 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-wide .muted { font-weight: 400; font-size: 12px; }
 .q-wide:disabled { opacity: 0.55; cursor: not-allowed; }
 .q-panel-foot { border-top: 1px solid var(--divider); padding-top: 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+/* Column filters on the allocation queue (David, 7 Nov: as on Recruitment): sortable headings, then one filter per column. */
+.q-sortlink { color: inherit; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-sortlink:hover, .q-sortlink:focus-visible { color: var(--accent); }
+.q-fhead { position: sticky; top: 28px; z-index: 3; height: auto; padding-top: 4px; padding-bottom: 4px; background: var(--surface-2); margin: 0; }
+.q-fhead:hover { background: var(--surface-2); }
+.q-fcell { min-width: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.q-fhead .rl-fbody { max-height: 340px; overflow-y: auto; font-size: 13px; }
+.q-fhead > .q-fcell:nth-last-of-type(-n+4) .rl-fbody { left: auto; right: 0; }
+.q-fhead label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.q-fhead .rl-check { flex-direction: row; color: var(--text); font-size: 13px; }
+/* Room for an open drop-down when the list is short. */
+.q-scroll:has(.q-fhead details[open]) { min-height: 420px; }
+.q-fbar { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin: -2px 0 6px; }
+.q-fbar:not(:has(span, a)) { display: none; }
+.q-fbtn { display: none; }
+@media (max-width: 600px) {
+  .q-fbar { display: flex; }
+  .q-fbtn { display: inline-flex; }
+  .q-ftoggle:not(:checked) ~ .q-main .q-fhead { display: none; }
+  /* On a phone the filters stack in two columns, kept in view while the wide list scrolls sideways. */
+  .q-fhead { position: sticky; left: 0; top: 0; width: calc(100vw - 34px); box-sizing: border-box; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; padding: 8px; }
+  .q-fcell::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+  .q-fhead > .q-fcell:nth-of-type(2n) .rl-fbody { left: auto; right: 0; }
+  .q-fhead > .q-fcell:nth-of-type(2n+1) .rl-fbody { left: 0; right: auto; }
+}
 @media (max-width: 1000px) {
   .q-main { flex-direction: column; align-items: stretch; }
   .q-panel { flex: 1 1 auto; max-width: none; position: static; max-height: none; }

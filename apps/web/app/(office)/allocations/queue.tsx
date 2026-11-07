@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { T, type Words } from '../../../lib/terms';
 import {
-  OUTCOME_TABS, QUEUE_BANDS, officeChipList, bandTitle, bestPeople, inTeam, teamChoicesOn, teamOn, dayGroups, dayHeading, isOutcomeStage, periodChoices, releasableRows, hereLine, nearHereLine, initials, personLine, queueHref,
+  OUTCOME_TABS, QUEUE_BANDS, clearFiltersHref, queueHidden, officeChipList, bandTitle, bestPeople, inTeam, teamChoicesOn, teamOn, dayGroups, dayHeading, isOutcomeStage, periodChoices, releasableRows, hereLine, nearHereLine, initials, personLine, queueHref,
   showMore, stagePill, startsIn, tabLabel, tabsFor, waitingFor,
   type DayTotals, type QueueBand, type QueueParams, type QueueStage, type QueueTab, type QueueTeam, type QueueWords,
 } from '../../../lib/allocation-queue';
@@ -15,6 +16,12 @@ import { LogCall } from './log-call';
 import { DISTANCE_TITLE } from '../../../lib/distance';
 import { callLine, callWith, type CallRow } from '../../../lib/calls';
 import { CancelKindField } from '../../../lib/cancel-kinds';
+import {
+  BAND_LABEL, HRS_LABEL, NO_QUEUE_FILTERS, ON_LABEL, PART_LABEL, PROGRESS_LABEL, RANK_CHOICES, WAITING_LABEL, dateChoiceLabel, filtersOn, nextSort,
+  areaSummary, chosenSummary, rankLabel, sortMark, sortedLine, whenSummary, withChosen, type FilterOptions, type SortKey,
+} from '../../../lib/queue-filters';
+import { ColumnFilterForm } from '../column-filter-form';
+import { ChoiceList, ColumnMulti, ColumnPop, ColumnSelect } from '../column-filters';
 
 export type QueueRow = {
   id: string; facilityId: string; facilityName: string; region: string | null; officeName?: string | null; areaName: string | null; role: string; status: string;
@@ -30,6 +37,8 @@ export type Queue = {
   counts: Record<QueueTab, number>; regions: { name: string; count: number }[];
   period?: string | null; from?: string | null; to?: string | null; doneDays?: DayTotals[]; more?: number;
   office?: string | null; myOffices?: string[]; offices?: { id: string; name: string; count: number; mine: boolean }[]; noOffice?: number; bands: Record<QueueBand, number>; total: number; shifts: QueueRow[];
+  /** What the column filters can offer on this tab (7 Nov). */
+  options?: FilterOptions;
 };
 type Reason = { code: string; message: string };
 export type PanelCandidate = { workerId: string; name: string; weekHours: number; eligible: boolean; available: boolean; blocks: Reason[]; warnings: Reason[]; offer?: { id: string; status: string } | null;
@@ -68,13 +77,23 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
   const href = (c: Partial<QueueParams>) => queueHref(p, c);
   const here = href({});
   const officeChips = q ? officeChipList({ office: q.office ?? null, myOffices: q.myOffices ?? [], offices: q.offices ?? [], noOffice: q.noOffice ?? 0 }) : [];
-  const bands = QUEUE_BANDS.map(b => ({ band: b, rows: (q?.shifts ?? []).filter(r => r.band === b) })).filter(b => b.rows.length);
+  const grouped = p.sort ? [] : (q?.shifts ?? []);
+  const bands = QUEUE_BANDS.map(b => ({ band: b, rows: grouped.filter(r => r.band === b) })).filter(b => b.rows.length);
   // Ended and cancelled shifts (calendar periods): by day, latest first, each day headed with its totals on this tab.
-  const days = dayGroups((q?.shifts ?? []).filter(r => r.band === 'done'));
+  const days = dayGroups(grouped.filter(r => r.band === 'done'));
   const dayTotals = new Map((q?.doneDays ?? []).map(d => [d.date, d]));
   const more = q ? showMore(p, q.shifts.length, q.more ?? 0) : null;
   const tabs = tabsFor(p.period ?? null);
   const doneTab = (OUTCOME_TABS as readonly string[]).includes(p.stage);
+  const f = p.f ?? NO_QUEUE_FILTERS;
+  const nFilters = filtersOn(f);
+  const sorted = Boolean(p.sort);
+  // Sorted by a heading: one list in that order instead of the bands and days.
+  const flat = sorted ? (q?.shifts ?? []) : [];
+  const sortLink = (key: SortKey, label: string, title?: string) => (
+    <Link href={href({ sort: nextSort(p.sort, key), limit: null })} scroll={false} className="q-sortlink" title={title}
+      aria-label={`Sort by ${(title ?? label).toLowerCase()}`}>{label}{sortMark(p.sort, key)}</Link>
+  );
   const row = (r: QueueRow) => {
     const done = isOutcomeStage(r.stage);
     const st = startsIn(r.startsAt, now, r);
@@ -88,7 +107,9 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         <span className="muted">{done ? '–' : waitingFor(r.waitingSince, now)}</span>
         <span><span className={`q-pill ${pill.cls}`}>{pill.label}</span></span>
         <span>{rank ? <span className={`q-rank${(r.clientRank ?? 9) <= 2 ? ' top' : ''}`} title={`${tw.one(T.client)} rank`}>{r.clientRank}</span> : <span className="muted">–</span>}</span>
-        <span className="cut">{r.clientName} · {r.facilityName}{r.areaName ? ` · ${r.areaName}` : ''}</span>
+        <span className="cut" title={r.clientName}>{r.clientName}</span>
+        <span className="cut" title={r.facilityName}>{r.facilityName}</span>
+        <span className="cut" title={r.areaName ?? undefined}>{r.areaName || <span className="muted">–</span>}</span>
         <span className="cut">{r.role}{r.genderRequested ? <span className="muted"> ({r.genderRequested})</span> : null}</span>
         <span className="cut muted">{r.dayLabel} {r.localStart}–{r.localEnd}</span>
         <span className="muted">{r.hours}</span>
@@ -101,9 +122,7 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
     <div className="q-screen">
       <div className="q-filters">
         <form action="/allocations" className="q-selects">
-          {p.stage !== 'all' && <input type="hidden" name="stage" value={p.stage} />}
-          {p.office && <input type="hidden" name="office" value={p.office} />}
-          {p.region && <input type="hidden" name="region" value={p.region} />}
+          {queueHidden(p, ['clientId', 'period', 'days', 'shift', 'dates']).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="sr-only" htmlFor="q-client">{tw.one(T.client)}</label>
           <select id="q-client" name="clientId" defaultValue={p.clientId ?? ''} className="q-select">
             <option value="">Every {tw.lower(T.client)}</option>
@@ -139,23 +158,35 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         {tabs.map(t => (
           <span key={t} style={{ display: 'contents' }}>
             {t === 'done' && <span className="q-tabs-sep" aria-hidden="true">Ended or cancelled</span>}
-            <Link className={`q-tab${p.stage === t ? ' on' : ''}`} href={href({ stage: t, shift: null, limit: null })} scroll={false} aria-current={p.stage === t ? 'page' : undefined}>
+            <Link className={`q-tab${p.stage === t ? ' on' : ''}`} href={href({ stage: t, shift: null, limit: null, f: { ...f, stages: [] } })} scroll={false} aria-current={p.stage === t ? 'page' : undefined}>
               <span className={`q-dot qd-${t}`} aria-hidden="true" />{tabLabel(t, qw)} <b>{q?.counts[t] ?? 0}</b>
             </Link>
           </span>
         ))}
       </nav>
 
+      <input type="checkbox" id="q-ftoggle" className="q-ftoggle sr-only" defaultChecked={nFilters > 0} aria-label="Show the filters" />
+      <div className="q-fbar">
+        <label htmlFor="q-ftoggle" className="btn small secondary q-fbtn">Filters{nFilters ? ` (${nFilters})` : ''}</label>
+        {nFilters > 0 && <span className="muted small">{q ? `${q.total} ${q.total === 1 ? tw.lower(T.shift) : qw.shifts} match the filters` : ''}</span>}
+        {nFilters > 0 && <Link href={clearFiltersHref(p)} className="small" scroll={false}>Clear filters</Link>}
+      </div>
       <div className={`q-main${panel ? ' with-panel' : ''}`}>
         <section className="q-list" aria-label={tw.many(T.shift)}>
           <div className="q-scroll">
             <div className="q-table" role="table">
               <div className="q-row q-head" role="row">
-                <span>Starts in</span><span>Waiting</span><span>Stage</span><span title={`${tw.one(T.client)} rank, 1 = most loyal`}>Rank</span>
-                <span>{tw.one(T.client)} · {tw.lower(T.site)} · {tw.lower(T.area)}</span><span>{tw.one(T.role)}</span><span>When</span><span>Hrs</span><span>Progress</span><span title="Who else has it open">On</span>
+                {sortLink('starts', 'Starts in')}{sortLink('waiting', 'Waiting')}{sortLink('stage', 'Stage')}
+                {sortLink('rank', 'Rank', `${tw.one(T.client)} rank, 1 = most loyal`)}
+                {sortLink('client', tw.one(T.client))}{sortLink('site', tw.one(T.site))}{sortLink('area', tw.one(T.area))}{sortLink('role', tw.one(T.role))}
+                {sortLink('when', 'When')}{sortLink('hours', 'Hrs', 'Hours')}{sortLink('progress', 'Progress')}{sortLink('on', 'On', 'Who else has it open')}
               </div>
+              <QueueFilterRow tw={tw} qw={qw} p={p} f={f} o={q?.options} />
               {!q && <p className="q-empty">Couldn&apos;t load the {qw.shifts}. It tries again in a moment.</p>}
-              {q && q.shifts.length === 0 && (
+              {q && q.shifts.length === 0 && nFilters > 0 && (
+                <p className="q-empty">Nothing here matches the filters. <Link href={clearFiltersHref(p)} scroll={false}>Clear filters</Link></p>
+              )}
+              {q && q.shifts.length === 0 && nFilters === 0 && (
                 <p className="q-empty">{p.stage === 'booked_today' ? `Nothing booked today yet${p.region ? ` in ${p.region}` : ''}.`
                   : doneTab ? `No ${qw.shifts} here have ended or been cancelled in this period.`
                     : `Nothing needs anyone here. New orders show up as soon as they're saved.`}</p>
@@ -170,6 +201,16 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
                   {b.rows.map(row)}
                 </div>
               ))}
+              {flat.length > 0 && (
+                <div role="rowgroup">
+                  <div className="q-band" role="row">
+                    <span>{sortedLine(p.sort!, { client: tw.one(T.client), role: tw.one(T.role), site: tw.one(T.site), area: tw.one(T.area) })} <b>{q?.total ?? flat.length}</b></span>
+                    <Link href={href({ sort: null })} scroll={false} className="q-band-hint">Back to the queue order</Link>
+                    <BulkRelease tw={tw} qw={qw} rows={releasableRows(flat)} here={here} title="this list" />
+                  </div>
+                  {flat.map(row)}
+                </div>
+              )}
               {days.map(d => (
                 <div key={d.date} role="rowgroup">
                   <div className="q-band qb-done" role="row">
@@ -194,6 +235,60 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
             crew={p.crew ?? null} crewHref={(crew: string | null) => href({ crew })} />)}
       </div>
     </div>
+  );
+}
+
+/**
+ * The filter row under the queue's headings (David, 7 Nov: "as per what you have done on Recruitment"): one compact
+ * drop-down per column in one GET form, with the rest of the page's state as hidden fields so links, Back, the refresh
+ * and the open panel keep it. Choices come from the API (`options`: what's on this tab before the column filters).
+ */
+function QueueFilterRow({ tw, qw, p, f, o }: { tw: Words; qw: QueueWords; p: QueueParams; f: NonNullable<QueueParams['f']>; o: FilterOptions | undefined }) {
+  const opts: FilterOptions = o ?? { stages: [], clients: [], sites: [], roles: [], dates: [] };
+  const stageLabel = (s: string) => stagePill(s as QueueStage, qw).label;
+  const bandChoices = [...QUEUE_BANDS, ...(p.period ? ['done' as const] : [])].map(b => ({ value: b, label: BAND_LABEL[b]! }));
+  const pairs = (rec: Record<string, string>) => Object.entries(rec).map(([value, label]) => ({ value, label }));
+  const clientName = new Map(opts.clients.map(c => [c.id, c.name]));
+  const siteChoices = withChosen(opts.sites.map(s => ({ value: s.id.toLowerCase(), label: s.name, group: clientName.get(s.clientId) })), f.sites, () => `Chosen ${tw.lower(T.site)}`);
+  const cell = (label: string, child: ReactNode) => <span role="columnheader" className="q-fcell" data-label={label}>{child}</span>;
+  return (
+    <ColumnFilterForm id="q-filters" action="/allocations" className="q-row q-fhead" label={`Filter the ${qw.shifts}`}>
+      {queueHidden(p, ['band', 'waiting', 'stages', 'rank', 'clients', 'sites', 'area', 'roles', 'dates', 'part', 'hrs', 'progress', 'on'])
+        .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+      {cell('Starts in', <ColumnMulti name="band" label="Starts in" chosen={f.band} options={bandChoices} />)}
+      {cell('Waiting', <ColumnSelect name="waiting" label="Waiting" value={f.waiting} options={pairs(WAITING_LABEL)} />)}
+      {cell('Stage', <ColumnMulti name="stages" label="Stage" chosen={f.stages} options={withChosen(opts.stages.map(s => ({ value: s, label: stageLabel(s) })), f.stages, stageLabel)} />)}
+      {cell('Rank', <ColumnMulti name="rank" label={`${tw.one(T.client)} rank`} chosen={f.rank} options={RANK_CHOICES.map(r => ({ value: r, label: rankLabel(r) }))} />)}
+      {cell(tw.one(T.client), (
+        <ColumnPop summary={chosenSummary(f.clients, id => opts.clients.find(c => c.id.toLowerCase() === id)?.name ?? 'Chosen')} on={f.clients.length > 0} label={tw.one(T.client)}>
+          <ChoiceList name="clients" chosen={f.clients} options={withChosen(opts.clients.map(c => ({ value: c.id.toLowerCase(), label: c.name })), f.clients, () => `Chosen ${tw.lower(T.client)}`)} />
+        </ColumnPop>
+      ))}
+      {cell(tw.one(T.site), (
+        <ColumnPop summary={chosenSummary(f.sites, id => opts.sites.find(x => x.id.toLowerCase() === id)?.name ?? 'Chosen')} on={f.sites.length > 0} label={tw.one(T.site)}>
+          {f.clients.length > 0 && <b className="rl-group">Of the chosen {tw.lower(T.client, true)}</b>}
+          <ChoiceList name="sites" chosen={f.sites} options={siteChoices} />
+        </ColumnPop>
+      ))}
+      {cell(tw.one(T.area), (
+        <ColumnPop summary={areaSummary(f)} on={Boolean(f.area)} label={tw.one(T.area)}>
+          <label>{tw.one(T.area)} name has<input name="area" defaultValue={f.area} maxLength={60} className="rl-text" placeholder={`Part of ${tw.lower(T.area)}'s name`} /></label>
+        </ColumnPop>
+      ))}
+      {cell(tw.one(T.role), <ColumnMulti name="roles" label={tw.one(T.role)} chosen={f.roles} options={withChosen(opts.roles.map(r => ({ value: r, label: r })), f.roles)} />)}
+      {cell('When', (
+        <ColumnPop summary={whenSummary(f)} on={f.dates.length + f.part.length > 0} label="When">
+          <b className="rl-group">Part of the day</b>
+          <ChoiceList name="part" chosen={f.part} options={pairs(PART_LABEL)} />
+          <b className="rl-group">Day</b>
+          <ChoiceList name="dates" chosen={f.dates} options={withChosen(opts.dates.map(d => ({ value: d, label: dateChoiceLabel(d) })), f.dates, dateChoiceLabel)} />
+        </ColumnPop>
+      ))}
+      {cell('Hours', <ColumnSelect name="hrs" label="Hours" value={f.hrs} options={pairs(HRS_LABEL)} />)}
+      {cell('Progress', <ColumnMulti name="progress" label="Progress" chosen={f.progress} options={pairs(PROGRESS_LABEL)} />)}
+      {cell('On', <ColumnSelect name="on" label="Who else has it open" value={f.on} options={pairs(ON_LABEL)} />)}
+      <button className="sr-only">Apply filters</button>
+    </ColumnFilterForm>
   );
 }
 

@@ -971,3 +971,12 @@ Newest first. One entry per working session or scheduled run.
 - Checked: helper tests (search ignoring case and accents, order of chosen items, wording, file names) and render tests of the form; in a browser (Chromium, desktop light and phone dark) opening, searching, ticking, Esc, clicking outside, adding and removing a file and a qualification, and what the form would send; every test passes; build and typecheck clean.
 - Next: unchanged.
 - Waiting on David: unchanged.
+
+## 2026-11-07 Melbourne (session with David): filters in the allocation queue's headings
+- Shipped: David asked for filters in the headings of Allocations "as per what you have done on Recruitment". Under each heading of the queue there is now a small filter: Starts in (started or overdue, within 2 hours, later today, tomorrow, later), Waiting (over 30 min, 1 hour, 4 hours, a day), Stage, Rank (1 to 7, not ranked), Client · site · area (clients, their sites, words in the area's name), Role, When (days in the period, AM/PM/night), Hours (under 4, 4 to 8, over 8), Progress (not offered yet, offered with no replies, some declined, pulled out) and On (someone else has it open, nobody). They work with the tabs, office or state chips, client choice and period, are kept in the address (so links, Back, the 20-second refresh and the open shift keep them) and every count follows them. Clicking a heading sorts by it (again to turn it round, a third time for the usual queue order). "Clear filters" turns them all off; on a phone they fold behind a Filters button. The filtering happens in the API, so it stays quick with a month of shifts.
+- Checked: rule tests in the API (reading the filters, each column, sorting, the choices offered) and API tests on the test database (rows and counts after filters, the Stage column leaving tab counts alone, sorting by rank); web helper and rendering tests; every test passes; build and typecheck clean. Not checked in a browser (no local sign-in).
+- Next: the same shared heading parts could replace the Recruitment list's own copy.
+
+## 2026-11-07 evening (session with David): client, site and area in their own columns
+- Shipped: on Allocations, "Client · Facility · Ward" is now three columns, each headed with the business's own word (C4U: Facility, Ward), sortable and with its own filter; sorting adds site and area.
+- Checked: API sort tests, web helper tests, typecheck.

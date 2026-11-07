@@ -207,3 +207,203 @@ export function initialsOf(name: string): string {
   const s = words.length >= 2 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 2);
   return s.toUpperCase();
 }
+
+/*
+ * Column filters and sorting (David, 7 Nov: "add filters [to the headings] as per what you have done on Recruitment").
+ * Every column heading of the queue has a filter; they narrow the rows together with the tabs and chips, and the counts
+ * are worked out after them (tab counts leave out the Stage column, the way Recruitment's stage chips do).
+ */
+export const BAND_FILTERS: readonly QueueBand[] = ['started', 'soon', 'today', 'tomorrow', 'later', 'done'];
+/** Waiting longer than: minutes for each choice. */
+export const WAITING_MINUTES = { '30m': 30, '1h': 60, '4h': 240, '1d': 1440 } as const;
+export type WaitingFilter = keyof typeof WAITING_MINUTES;
+export const HOURS_FILTERS = ['lt4', '4to8', 'gt8'] as const;
+export type HoursFilter = typeof HOURS_FILTERS[number];
+export const PROGRESS_FILTERS = ['not_offered', 'no_replies', 'some_declined', 'pulled_out'] as const;
+export type ProgressFilter = typeof PROGRESS_FILTERS[number];
+/** Parts of the day, as for availability: AM 05:00–11:59, PM 12:00–18:59, night otherwise. */
+export const PART_FILTERS = ['am', 'pm', 'night'] as const;
+export type DayPart = typeof PART_FILTERS[number];
+export const ON_FILTERS = ['others', 'nobody'] as const;
+export type OnFilter = typeof ON_FILTERS[number];
+export const SORT_KEYS = ['default', 'starts', 'waiting', 'stage', 'rank', 'client', 'site', 'area', 'role', 'when', 'hours', 'progress', 'on'] as const;
+export type SortKey = typeof SORT_KEYS[number];
+/** Stage order for sorting and for the Stage filter's choices: what needs doing first. */
+export const STAGE_ORDER: readonly QueueStage[] = ['pulled_out', 'new', 'released', 'accepted', 'worker_to_confirm', 'client_to_confirm', 'booked',
+  'worked', 'unconfirmed', 'not_refilled', 'unfilled', 'cancelled'];
+
+export interface ColumnFilters {
+  bands: QueueBand[];
+  waiting: WaitingFilter | null;
+  stages: QueueStage[];
+  /** Client ranks 1–7, plus 0 for "not ranked". */
+  ranks: number[];
+  clients: string[];
+  sites: string[];
+  /** Words in the area's name (case doesn't matter). */
+  area: string;
+  roles: string[];
+  /** Site-local start dates (YYYY-MM-DD). */
+  dates: string[];
+  parts: DayPart[];
+  hours: HoursFilter | null;
+  progress: ProgressFilter[];
+  on: OnFilter | null;
+}
+export interface QueueSort { key: SortKey; desc: boolean }
+
+export const NO_FILTERS: ColumnFilters = {
+  bands: [], waiting: null, stages: [], ranks: [], clients: [], sites: [], area: '', roles: [], dates: [], parts: [], hours: null, progress: [], on: null,
+};
+
+type Q = Record<string, string | string[] | undefined>;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Comma lists or repeated parameters (a GET form's tick boxes repeat the name); at most 100 values. */
+function list(v: string | string[] | undefined): string[] {
+  const raw = (Array.isArray(v) ? v : [v ?? '']).flatMap(x => String(x).split(',')).map(s => s.trim()).filter(Boolean);
+  return [...new Set(raw)].slice(0, 100);
+}
+const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] ?? '' : v ?? '').trim();
+const among = <T extends string>(v: string[], allowed: readonly T[]) => v.filter((x): x is T => (allowed as readonly string[]).includes(x));
+const oneAmong = <T extends string>(v: string, allowed: readonly T[]): T | null => ((allowed as readonly string[]).includes(v) ? v as T : null);
+
+/** Reads the column filters from the query; anything odd is left out rather than refused. */
+export function parseColumnFilters(q: Q): ColumnFilters {
+  return {
+    bands: among(list(q.band), BAND_FILTERS),
+    waiting: oneAmong(first(q.waiting), Object.keys(WAITING_MINUTES) as WaitingFilter[]),
+    stages: among(list(q.stages), STAGE_ORDER),
+    ranks: [...new Set(list(q.rank).map(r => (r === 'none' ? 0 : Number(r))).filter(n => Number.isInteger(n) && n >= 0 && n <= 7))],
+    clients: list(q.clients).filter(x => UUID_RE.test(x)).map(x => x.toLowerCase()),
+    sites: list(q.sites).filter(x => UUID_RE.test(x)).map(x => x.toLowerCase()),
+    area: first(q.area).slice(0, 60),
+    roles: list(q.roles).map(r => r.slice(0, 100)),
+    dates: list(q.dates).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+    parts: among(list(q.part), PART_FILTERS),
+    hours: oneAmong(first(q.hrs), HOURS_FILTERS),
+    progress: among(list(q.progress), PROGRESS_FILTERS),
+    on: oneAmong(first(q.on), ON_FILTERS),
+  };
+}
+
+/** `?sort=` = a column key, `-key` turns it round; anything else is the queue's own order. */
+export function parseSort(v: string | undefined): QueueSort {
+  const s = (v ?? '').trim();
+  const desc = s.startsWith('-');
+  const key = oneAmong(desc ? s.slice(1) : s, SORT_KEYS) ?? 'default';
+  return { key, desc: key !== 'default' && desc };
+}
+
+/** The part of the day a local start time (HH:MM) falls in. */
+export function dayPart(localStart: string): DayPart {
+  const h = Number(localStart.slice(0, 2));
+  return h >= 5 && h < 12 ? 'am' : h >= 12 && h < 19 ? 'pm' : 'night';
+}
+
+/** How filling is going, as the Progress filter sees it. */
+export function progressKinds(r: { offersTotal: number; offersPending: number; offersDeclined: number; pulledOutName: string | null }): ProgressFilter[] {
+  const out: ProgressFilter[] = [];
+  if (r.offersTotal === 0) out.push('not_offered');
+  else if (r.offersDeclined === 0 && r.offersPending === r.offersTotal) out.push('no_replies');
+  if (r.offersDeclined > 0) out.push('some_declined');
+  if (r.pulledOutName) out.push('pulled_out');
+  return out;
+}
+
+export interface FilterRow {
+  band: QueueBand; stage: QueueStage; waitingSince: string | Date | null; clientRank: number | null; clientId: string; clientName: string;
+  facilityId: string; facilityName: string; areaName: string | null; role: string; localDate: string; localStart: string; hours: number;
+  offersTotal: number; offersPending: number; offersDeclined: number; pulledOutName: string | null; presence: unknown[]; startsAt: string | Date;
+}
+
+/**
+ * Whether a row passes the column filters (`withStages: false` leaves out the Stage column, for the tab counts). Within
+ * a column any chosen value passes; across columns every one must.
+ */
+export function matchesColumns(r: FilterRow, f: ColumnFilters, now: Date, withStages = true): boolean {
+  if (f.bands.length && !f.bands.includes(r.band)) return false;
+  if (f.waiting) {
+    if (!r.waitingSince) return false;
+    if (now.getTime() - new Date(r.waitingSince).getTime() < WAITING_MINUTES[f.waiting] * 60_000) return false;
+  }
+  if (withStages && f.stages.length && !f.stages.includes(r.stage)) return false;
+  if (f.ranks.length && !f.ranks.includes(r.clientRank ?? 0)) return false;
+  if (f.clients.length && !f.clients.includes(r.clientId.toLowerCase())) return false;
+  if (f.sites.length && !f.sites.includes(r.facilityId.toLowerCase())) return false;
+  if (f.area && !(r.areaName ?? '').toLowerCase().includes(f.area.toLowerCase())) return false;
+  if (f.roles.length && !f.roles.includes(r.role)) return false;
+  if (f.dates.length && !f.dates.includes(r.localDate)) return false;
+  if (f.parts.length && !f.parts.includes(dayPart(r.localStart))) return false;
+  if (f.hours === 'lt4' && !(r.hours < 4)) return false;
+  if (f.hours === '4to8' && !(r.hours >= 4 && r.hours <= 8)) return false;
+  if (f.hours === 'gt8' && !(r.hours > 8)) return false;
+  if (f.progress.length && !progressKinds(r).some(k => f.progress.includes(k))) return false;
+  if (f.on === 'others' && r.presence.length === 0) return false;
+  if (f.on === 'nobody' && r.presence.length > 0) return false;
+  return true;
+}
+
+/** Whether any column filter is on. */
+export const anyColumnFilter = (f: ColumnFilters) => Object.values(f).some(v => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
+
+/**
+ * Sorting by a heading: rows keep their place in the queue's own order (`rows` arrive in it) when the key ties. Rows
+ * without a value (no waiting time, no rank) go last either way.
+ */
+export function sortRows<R extends FilterRow>(rows: R[], s: QueueSort): R[] {
+  if (s.key === 'default') return rows;
+  const dir = s.desc ? -1 : 1;
+  const t = (v: string | Date) => new Date(v).getTime();
+  const nullsLast = (a: number | null, b: number | null) => (a === null ? (b === null ? 0 : 1) : b === null ? -1 : dir * (a - b));
+  const cmp: (a: R, b: R) => number = (() => {
+    switch (s.key) {
+      case 'starts': return (a, b) => dir * (t(a.startsAt) - t(b.startsAt));
+      // Waiting reads best longest first, so ascending = the oldest "since".
+      case 'waiting': return (a, b) => nullsLast(a.waitingSince ? t(a.waitingSince) : null, b.waitingSince ? t(b.waitingSince) : null);
+      case 'stage': return (a, b) => dir * (STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage));
+      case 'rank': return (a, b) => nullsLast(a.clientRank, b.clientRank);
+      case 'client': return (a, b) => dir * (a.clientName.localeCompare(b.clientName) || a.facilityName.localeCompare(b.facilityName)
+        || (a.areaName ?? '').localeCompare(b.areaName ?? ''));
+      case 'site': return (a, b) => dir * (a.facilityName.localeCompare(b.facilityName) || (a.areaName ?? '').localeCompare(b.areaName ?? ''));
+      // Shifts without an area go last either way.
+      case 'area': return (a, b) => (!a.areaName ? (!b.areaName ? 0 : 1) : !b.areaName ? -1 : dir * a.areaName.localeCompare(b.areaName));
+      case 'role': return (a, b) => dir * a.role.localeCompare(b.role);
+      case 'when': return (a, b) => dir * (a.localDate.localeCompare(b.localDate) || a.localStart.localeCompare(b.localStart));
+      case 'hours': return (a, b) => dir * (a.hours - b.hours);
+      case 'progress': return (a, b) => dir * (a.offersTotal - b.offersTotal || a.offersDeclined - b.offersDeclined);
+      case 'on': return (a, b) => dir * (a.presence.length - b.presence.length);
+      default: return () => 0;
+    }
+  })();
+  return rows.map((r, i) => ({ r, i })).sort((a, b) => cmp(a.r, b.r) || a.i - b.i).map(x => x.r);
+}
+
+export interface ColumnOptions {
+  stages: QueueStage[];
+  clients: { id: string; name: string }[];
+  /** Sites with work, only the chosen clients' when clients are chosen. */
+  sites: { id: string; name: string; clientId: string }[];
+  roles: string[];
+  dates: string[];
+}
+
+/** What the column filters can offer: the values present in the rows on the tab (before the column filters). */
+export function columnOptions(rows: FilterRow[], f: ColumnFilters): ColumnOptions {
+  const clients = new Map<string, string>(), sites = new Map<string, { id: string; name: string; clientId: string }>();
+  const roles = new Set<string>(), dates = new Set<string>(), stages = new Set<QueueStage>();
+  for (const r of rows) {
+    stages.add(r.stage);
+    clients.set(r.clientId, r.clientName);
+    if (!f.clients.length || f.clients.includes(r.clientId.toLowerCase())) sites.set(r.facilityId, { id: r.facilityId, name: r.facilityName, clientId: r.clientId });
+    roles.add(r.role);
+    dates.add(r.localDate);
+  }
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  return {
+    stages: STAGE_ORDER.filter(s => stages.has(s)),
+    clients: [...clients].map(([id, name]) => ({ id, name })).sort(byName),
+    sites: [...sites.values()].sort(byName),
+    roles: [...roles].sort((a, b) => a.localeCompare(b)),
+    dates: [...dates].sort(),
+  };
+}
