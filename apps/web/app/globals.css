@@ -779,8 +779,8 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 .q-main { display: flex; gap: 14px; align-items: flex-start; }
 .q-list { flex: 1 1 auto; min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .q-scroll { overflow-x: auto; max-height: calc(100vh - 230px); overflow-y: auto; }
-.q-table { min-width: 1000px; }
-.q-row { display: grid; grid-template-columns: 92px 70px 132px 56px minmax(0, 1.6fr) minmax(0, 1fr) 118px 62px minmax(0, 1.3fr) 66px; gap: 8px; align-items: center; padding: 0 12px; height: 32px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); text-decoration: none; background: var(--surface); }
+.q-table { min-width: 1180px; }
+.q-row { display: grid; grid-template-columns: 92px 70px 132px 56px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr) 118px 62px minmax(0, 1.3fr) 66px; gap: 8px; align-items: center; padding: 0 12px; height: 32px; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--text); text-decoration: none; background: var(--surface); }
 .q-row:hover { background: var(--hover); }
 .q-row:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .q-row.sel { background: var(--hover); box-shadow: inset 3px 0 0 var(--orange); }

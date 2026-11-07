@@ -226,7 +226,7 @@ export const PART_FILTERS = ['am', 'pm', 'night'] as const;
 export type DayPart = typeof PART_FILTERS[number];
 export const ON_FILTERS = ['others', 'nobody'] as const;
 export type OnFilter = typeof ON_FILTERS[number];
-export const SORT_KEYS = ['default', 'starts', 'waiting', 'stage', 'rank', 'client', 'role', 'when', 'hours', 'progress', 'on'] as const;
+export const SORT_KEYS = ['default', 'starts', 'waiting', 'stage', 'rank', 'client', 'site', 'area', 'role', 'when', 'hours', 'progress', 'on'] as const;
 export type SortKey = typeof SORT_KEYS[number];
 /** Stage order for sorting and for the Stage filter's choices: what needs doing first. */
 export const STAGE_ORDER: readonly QueueStage[] = ['pulled_out', 'new', 'released', 'accepted', 'worker_to_confirm', 'client_to_confirm', 'booked',
@@ -364,6 +364,9 @@ export function sortRows<R extends FilterRow>(rows: R[], s: QueueSort): R[] {
       case 'rank': return (a, b) => nullsLast(a.clientRank, b.clientRank);
       case 'client': return (a, b) => dir * (a.clientName.localeCompare(b.clientName) || a.facilityName.localeCompare(b.facilityName)
         || (a.areaName ?? '').localeCompare(b.areaName ?? ''));
+      case 'site': return (a, b) => dir * (a.facilityName.localeCompare(b.facilityName) || (a.areaName ?? '').localeCompare(b.areaName ?? ''));
+      // Shifts without an area go last either way.
+      case 'area': return (a, b) => (!a.areaName ? (!b.areaName ? 0 : 1) : !b.areaName ? -1 : dir * a.areaName.localeCompare(b.areaName));
       case 'role': return (a, b) => dir * a.role.localeCompare(b.role);
       case 'when': return (a, b) => dir * (a.localDate.localeCompare(b.localDate) || a.localStart.localeCompare(b.localStart));
       case 'hours': return (a, b) => dir * (a.hours - b.hours);

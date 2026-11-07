@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clearFiltersHref, parseQueueParams, queueHidden, queueHref, queueQuery } from '../lib/allocation-queue';
 import {
-  NO_QUEUE_FILTERS, chosenSummary, dateChoiceLabel, filterEntries, filtersOn, nextSort, parseQueueFilters, parseQueueSort, placeSummary, sortMark, sortedLine,
+  NO_QUEUE_FILTERS, areaSummary, chosenSummary, dateChoiceLabel, filterEntries, filtersOn, nextSort, parseQueueFilters, parseQueueSort, placeSummary, sortMark, sortedLine,
   whenSummary, withChosen,
 } from '../lib/queue-filters';
 
@@ -44,6 +44,8 @@ describe('allocation queue column filters (David, 7 Nov)', () => {
     expect([sortMark('rank', 'rank'), sortMark('-rank', 'rank'), sortMark('role', 'rank')]).toEqual([' ↑', ' ↓', '']);
     expect(sortedLine('-client', { client: 'Customer', role: 'Position' })).toBe('Sorted by customer, turned round');
     expect(sortedLine('waiting', { client: 'Client', role: 'Role' })).toBe('Sorted by waiting');
+    expect(sortedLine('site', { client: 'Client', role: 'Role', site: 'Facility', area: 'Ward' })).toBe('Sorted by facility');
+    expect(sortedLine('-area', { client: 'Client', role: 'Role', site: 'Facility', area: 'Ward' })).toBe('Sorted by ward, turned round');
   });
 
   it('words the headings’ summaries and keeps chosen values that dropped out of the rows', () => {
@@ -54,6 +56,8 @@ describe('allocation queue column filters (David, 7 Nov)', () => {
     expect(whenSummary({ ...NO_QUEUE_FILTERS, dates: ['2026-11-07'], part: ['night'] })).toBe('Sat 7 Nov, Night');
     const o = { stages: [], clients: [{ id: C, name: 'Bayside' }], sites: [{ id: S, name: 'Campus', clientId: C }], roles: [], dates: [] };
     expect(placeSummary(NO_QUEUE_FILTERS, o)).toBe('Any');
+    expect(areaSummary(NO_QUEUE_FILTERS)).toBe('Any');
+    expect(areaSummary({ ...NO_QUEUE_FILTERS, area: 'east' })).toBe('“east”');
     expect(placeSummary({ ...NO_QUEUE_FILTERS, clients: [C], area: 'east' }, o)).toBe('Bayside, “east”');
     expect(placeSummary({ ...NO_QUEUE_FILTERS, clients: [C, S] }, o)).toBe('2 chosen');
     expect(withChosen([{ value: 'a', label: 'A' }], ['a', 'b'], v => `(${v})`)).toEqual([{ value: 'a', label: 'A' }, { value: 'b', label: '(b)' }]);

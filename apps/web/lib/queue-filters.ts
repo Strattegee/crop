@@ -36,10 +36,10 @@ const SINGLE_ALLOWED: Partial<Record<typeof SINGLE[number], readonly string[]>> 
   waiting: Object.keys(WAITING_LABEL), hrs: Object.keys(HRS_LABEL), on: Object.keys(ON_LABEL),
 };
 
-export const SORT_KEYS = ['starts', 'waiting', 'stage', 'rank', 'client', 'role', 'when', 'hours', 'progress', 'on'] as const;
+export const SORT_KEYS = ['starts', 'waiting', 'stage', 'rank', 'client', 'site', 'area', 'role', 'when', 'hours', 'progress', 'on'] as const;
 export type SortKey = typeof SORT_KEYS[number];
 export const SORT_LABEL: Record<SortKey, string> = {
-  starts: 'starts in', waiting: 'waiting', stage: 'stage', rank: 'rank', client: 'client', role: 'role', when: 'when', hours: 'hours', progress: 'progress', on: 'who has it open',
+  starts: 'starts in', waiting: 'waiting', stage: 'stage', rank: 'rank', client: 'client', site: 'site', area: 'area', role: 'role', when: 'when', hours: 'hours', progress: 'progress', on: 'who has it open',
 };
 
 type Search = Record<string, string | string[] | undefined>;
@@ -104,10 +104,11 @@ export function sortMark(current: string | null | undefined, key: SortKey): stri
   return current === key ? ' ↑' : current === `-${key}` ? ' ↓' : '';
 }
 /** "Sorted by rank, highest first" style heading for a sorted list. */
-export function sortedLine(current: string, words: { client: string; role: string }): string {
+export function sortedLine(current: string, words: { client: string; role: string; site?: string; area?: string }): string {
   const desc = current.startsWith('-');
   const key = (desc ? current.slice(1) : current) as SortKey;
-  const name = key === 'client' ? words.client.toLowerCase() : key === 'role' ? words.role.toLowerCase() : SORT_LABEL[key];
+  const word = key === 'client' ? words.client : key === 'role' ? words.role : key === 'site' ? words.site : key === 'area' ? words.area : undefined;
+  const name = word ? word.toLowerCase() : SORT_LABEL[key];
   return `Sorted by ${name}${desc ? ', turned round' : ''}`;
 }
 
@@ -139,6 +140,10 @@ export function withChosen(options: { value: string; label: string }[], chosen: 
   return out;
 }
 
+/** The area heading's summary. */
+export function areaSummary(f: QueueFilters): string {
+  return f.area ? `“${f.area}”` : 'Any';
+}
 /** The "Client · site · area" heading's summary: the chosen names, or "Any". */
 export function placeSummary(f: QueueFilters, o: FilterOptions): string {
   const names = [

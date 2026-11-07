@@ -235,6 +235,10 @@ describe('allocation queue: column filters and sorting (David, 7 Nov)', () => {
     expect(sortRows([a, b, c], parseSort('-hours'))).toEqual([a, c, b]);
     const old = row({ waitingSince: '2026-11-01T00:00:00Z' }), none = row({ waitingSince: null }), recent = row({ waitingSince: '2026-11-06T00:00:00Z' });
     expect(sortRows([none, recent, old], parseSort('waiting'))).toEqual([old, recent, none]);
+    const x = row({ facilityName: 'Bayview', areaName: 'Ward 2' }), y = row({ facilityName: 'Abbey', areaName: null }), z = row({ facilityName: 'Bayview', areaName: 'Ward 1' });
+    expect(sortRows([x, y, z], parseSort('site'))).toEqual([y, z, x]);
+    expect(sortRows([x, y, z], parseSort('area'))).toEqual([z, x, y]);
+    expect(sortRows([x, y, z], parseSort('-area'))).toEqual([x, z, y]);
   });
 
   it('offers the values on the tab, sites only for the chosen clients', () => {

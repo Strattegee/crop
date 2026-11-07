@@ -18,7 +18,7 @@ import { callLine, callWith, type CallRow } from '../../../lib/calls';
 import { CancelKindField } from '../../../lib/cancel-kinds';
 import {
   BAND_LABEL, HRS_LABEL, NO_QUEUE_FILTERS, ON_LABEL, PART_LABEL, PROGRESS_LABEL, RANK_CHOICES, WAITING_LABEL, dateChoiceLabel, filtersOn, nextSort,
-  placeSummary, rankLabel, sortMark, sortedLine, whenSummary, withChosen, type FilterOptions, type SortKey,
+  areaSummary, chosenSummary, rankLabel, sortMark, sortedLine, whenSummary, withChosen, type FilterOptions, type SortKey,
 } from '../../../lib/queue-filters';
 import { ColumnFilterForm } from '../column-filter-form';
 import { ChoiceList, ColumnMulti, ColumnPop, ColumnSelect } from '../column-filters';
@@ -107,7 +107,9 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
         <span className="muted">{done ? '–' : waitingFor(r.waitingSince, now)}</span>
         <span><span className={`q-pill ${pill.cls}`}>{pill.label}</span></span>
         <span>{rank ? <span className={`q-rank${(r.clientRank ?? 9) <= 2 ? ' top' : ''}`} title={`${tw.one(T.client)} rank`}>{r.clientRank}</span> : <span className="muted">–</span>}</span>
-        <span className="cut">{r.clientName} · {r.facilityName}{r.areaName ? ` · ${r.areaName}` : ''}</span>
+        <span className="cut" title={r.clientName}>{r.clientName}</span>
+        <span className="cut" title={r.facilityName}>{r.facilityName}</span>
+        <span className="cut" title={r.areaName ?? undefined}>{r.areaName || <span className="muted">–</span>}</span>
         <span className="cut">{r.role}{r.genderRequested ? <span className="muted"> ({r.genderRequested})</span> : null}</span>
         <span className="cut muted">{r.dayLabel} {r.localStart}–{r.localEnd}</span>
         <span className="muted">{r.hours}</span>
@@ -176,7 +178,7 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
               <div className="q-row q-head" role="row">
                 {sortLink('starts', 'Starts in')}{sortLink('waiting', 'Waiting')}{sortLink('stage', 'Stage')}
                 {sortLink('rank', 'Rank', `${tw.one(T.client)} rank, 1 = most loyal`)}
-                {sortLink('client', `${tw.one(T.client)} · ${tw.lower(T.site)} · ${tw.lower(T.area)}`)}{sortLink('role', tw.one(T.role))}
+                {sortLink('client', tw.one(T.client))}{sortLink('site', tw.one(T.site))}{sortLink('area', tw.one(T.area))}{sortLink('role', tw.one(T.role))}
                 {sortLink('when', 'When')}{sortLink('hours', 'Hrs', 'Hours')}{sortLink('progress', 'Progress')}{sortLink('on', 'On', 'Who else has it open')}
               </div>
               <QueueFilterRow tw={tw} qw={qw} p={p} f={f} o={q?.options} />
@@ -202,7 +204,7 @@ export function QueueScreen({ tw, p, q, clients, panel, now, when }: {
               {flat.length > 0 && (
                 <div role="rowgroup">
                   <div className="q-band" role="row">
-                    <span>{sortedLine(p.sort!, { client: tw.one(T.client), role: tw.one(T.role) })} <b>{q?.total ?? flat.length}</b></span>
+                    <span>{sortedLine(p.sort!, { client: tw.one(T.client), role: tw.one(T.role), site: tw.one(T.site), area: tw.one(T.area) })} <b>{q?.total ?? flat.length}</b></span>
                     <Link href={href({ sort: null })} scroll={false} className="q-band-hint">Back to the queue order</Link>
                     <BulkRelease tw={tw} qw={qw} rows={releasableRows(flat)} here={here} title="this list" />
                   </div>
@@ -248,7 +250,6 @@ function QueueFilterRow({ tw, qw, p, f, o }: { tw: Words; qw: QueueWords; p: Que
   const pairs = (rec: Record<string, string>) => Object.entries(rec).map(([value, label]) => ({ value, label }));
   const clientName = new Map(opts.clients.map(c => [c.id, c.name]));
   const siteChoices = withChosen(opts.sites.map(s => ({ value: s.id.toLowerCase(), label: s.name, group: clientName.get(s.clientId) })), f.sites, () => `Chosen ${tw.lower(T.site)}`);
-  const placeOn = f.clients.length + f.sites.length > 0 || Boolean(f.area);
   const cell = (label: string, child: ReactNode) => <span role="columnheader" className="q-fcell" data-label={label}>{child}</span>;
   return (
     <ColumnFilterForm id="q-filters" action="/allocations" className="q-row q-fhead" label={`Filter the ${qw.shifts}`}>
@@ -258,12 +259,19 @@ function QueueFilterRow({ tw, qw, p, f, o }: { tw: Words; qw: QueueWords; p: Que
       {cell('Waiting', <ColumnSelect name="waiting" label="Waiting" value={f.waiting} options={pairs(WAITING_LABEL)} />)}
       {cell('Stage', <ColumnMulti name="stages" label="Stage" chosen={f.stages} options={withChosen(opts.stages.map(s => ({ value: s, label: stageLabel(s) })), f.stages, stageLabel)} />)}
       {cell('Rank', <ColumnMulti name="rank" label={`${tw.one(T.client)} rank`} chosen={f.rank} options={RANK_CHOICES.map(r => ({ value: r, label: rankLabel(r) }))} />)}
-      {cell(`${tw.one(T.client)} · ${tw.lower(T.site)} · ${tw.lower(T.area)}`, (
-        <ColumnPop summary={placeSummary(f, opts)} on={placeOn} label={`${tw.one(T.client)}, ${tw.lower(T.site)} or ${tw.lower(T.area)}`}>
-          <b className="rl-group">{tw.many(T.client)}</b>
+      {cell(tw.one(T.client), (
+        <ColumnPop summary={chosenSummary(f.clients, id => opts.clients.find(c => c.id.toLowerCase() === id)?.name ?? 'Chosen')} on={f.clients.length > 0} label={tw.one(T.client)}>
           <ChoiceList name="clients" chosen={f.clients} options={withChosen(opts.clients.map(c => ({ value: c.id.toLowerCase(), label: c.name })), f.clients, () => `Chosen ${tw.lower(T.client)}`)} />
-          <b className="rl-group">{tw.many(T.site)}{f.clients.length ? ` of the chosen ${tw.lower(T.client, true)}` : ''}</b>
+        </ColumnPop>
+      ))}
+      {cell(tw.one(T.site), (
+        <ColumnPop summary={chosenSummary(f.sites, id => opts.sites.find(x => x.id.toLowerCase() === id)?.name ?? 'Chosen')} on={f.sites.length > 0} label={tw.one(T.site)}>
+          {f.clients.length > 0 && <b className="rl-group">Of the chosen {tw.lower(T.client, true)}</b>}
           <ChoiceList name="sites" chosen={f.sites} options={siteChoices} />
+        </ColumnPop>
+      ))}
+      {cell(tw.one(T.area), (
+        <ColumnPop summary={areaSummary(f)} on={Boolean(f.area)} label={tw.one(T.area)}>
           <label>{tw.one(T.area)} name has<input name="area" defaultValue={f.area} maxLength={60} className="rl-text" placeholder={`Part of ${tw.lower(T.area)}'s name`} /></label>
         </ColumnPop>
       ))}
