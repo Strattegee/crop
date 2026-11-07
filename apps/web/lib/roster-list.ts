@@ -78,6 +78,20 @@ export type ListParams = {
 
 export const parseLayout = (v: string | undefined): Layout => v === 'list' ? 'list' : 'cards';
 
+/** Remembers the roster's layout per browser (a year): Cards or List, chosen in View › Layout (7 Nov). */
+export const ROSTER_LAYOUT_COOKIE = 'crop_roster_layout';
+/**
+ * The layout to show: `layout=list|cards` in the URL wins (a shared link opens as sent), else the one this browser last
+ * chose in View › Layout, else Cards.
+ */
+export function layoutOf(param: string | string[] | undefined, remembered: string | undefined): Layout {
+  const v = Array.isArray(param) ? param[0] : param;
+  if (v === 'list' || v === 'cards') return v;
+  return remembered === 'list' ? 'list' : 'cards';
+}
+/** What the cookie holds after choosing a layout: only List is remembered (Cards is the default). */
+export const rememberedLayout = (v: string | undefined): 'list' | null => v === 'list' ? 'list' : null;
+
 type Raw = string | string[] | undefined;
 /** Comma lists or repeated parameters (a GET form's tick boxes repeat the name); trimmed, no repeats. */
 export function splitList(v: Raw, max = 100): string[] {

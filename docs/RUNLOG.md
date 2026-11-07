@@ -986,3 +986,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: URL rule tests, render tests of the rows' drop details and the toggle; every test passes; build and typecheck clean. Not dragged in a browser (no local sign-in).
 - Next: inline time and role edits on List rows, or remembering the layout per person, if wanted; otherwise the next backlog item not waiting on David.
 - Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-07 night Melbourne (scheduled run): the roster remembers Cards or List
+- Shipped: a "next if wanted" of the roster's List view. Choosing Cards or List in View › Layout is now remembered in that browser for a year, so someone who works in the List opens the roster in the List next time (week and day; the month stays a calendar). A link someone sends with the layout in it still opens as sent.
+- Checked: rule tests (the link wins, then the remembered choice, then Cards); every test passes; build and typecheck clean. Not clicked through in a browser (no local sign-in).
+- Next: inline time and role edits on List rows, or the next backlog item not waiting on David.
+- Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
