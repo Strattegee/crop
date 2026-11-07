@@ -4,6 +4,8 @@ import Script from 'next/script';
 import { useActionState, useEffect } from 'react';
 import { PERIODS, regionsFor, WEEKDAYS, type ApplyView } from '../../../lib/apply';
 import { industryGroups, needsHeadings } from '../../../lib/industry-groups';
+import { pickGroups, removeLabel, shortFileName, upperFirst } from '../../../lib/multi-pick';
+import { FileButton, MultiPick } from './multi-pick';
 import { sendApply, type ApplyState } from './actions';
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/heic,image/heif';
@@ -74,20 +76,16 @@ export function ApplyForm({ view, preview = false }: { view: ApplyView; preview?
       {(asked.has('roles') || asked.has('work_type') || asked.has('availability')) && (
         <fieldset>
           <legend>The work you’re after</legend>
-          {asked.has('roles') && (
-            <div>
-              <p style={{ margin: '0 0 6px' }}>{view.word.roles[0].toUpperCase() + view.word.roles.slice(1)} you’re applying for{opt('roles')}</p>
-              {roleGroups.map(g => (
-                <div key={g.key} className="apply-ticks">
-                  {needsHeadings(roleGroups) && <p className="muted small" style={{ margin: '4px 0' }}>{g.label}</p>}
-                  {g.items.map(r => <label key={r.name} className="inline"><input type="checkbox" name="roles" value={r.name} defaultChecked={has('roles', r.name)} /> {r.name}</label>)}
-                </div>
-              ))}
-            </div>
+          {asked.has('roles') && view.roles.length > 0 && (
+            <MultiPick
+              name="roles" label={`${upperFirst(view.word.roles)} you’re applying for${opt('roles')}`}
+              noun={{ one: view.word.role, many: view.word.roles }} initial={v.roles ?? []}
+              groups={pickGroups(roleGroups, r => ({ value: r.name, label: r.name }))} showHeadings={needsHeadings(roleGroups)}
+            />
           )}
           {asked.has('work_type') && (
-            <div className="apply-ticks">
-              <p style={{ margin: '0 0 6px', flex: '1 1 100%' }}>Kind of work{opt('work_type')}</p>
+            <div className="apply-ticks apply-line" role="group" aria-label="Kind of work">
+              <span className="apply-line-label">Kind of work{opt('work_type')}</span>
               {view.choices.workTypes.map(w => <label key={w.value} className="inline"><input type="checkbox" name="workTypes" value={w.value} defaultChecked={has('workTypes', w.value)} /> {w.label}</label>)}
             </div>
           )}
@@ -100,7 +98,7 @@ export function ApplyForm({ view, preview = false }: { view: ApplyView; preview?
                   <tbody>
                     {WEEKDAYS.map(d => (
                       <tr key={d.n}>
-                        <th scope="row">{d.label}</th>
+                        <th scope="row"><span aria-hidden="true">{d.label.slice(0, 3)}</span><span className="sr-only">{d.label}</span></th>
                         {PERIODS.map(p => (
                           <td key={p.value}><input type="checkbox" name={`avail_${d.n}`} value={p.value} aria-label={`${d.label} ${p.label.toLowerCase()}`} defaultChecked={has(`avail_${d.n}`, p.value)} /></td>
                         ))}
@@ -137,18 +135,24 @@ export function ApplyForm({ view, preview = false }: { view: ApplyView; preview?
       {asked.has('credentials') && view.credentials.length > 0 && (
         <fieldset>
           <legend>Qualifications and tickets (optional)</legend>
-          <p className="muted small" style={{ margin: 0 }}>Tick what you hold. A photo or file of each helps (PDF, JPEG, PNG or HEIC, up to 10 MB).</p>
-          {credGroups.map(g => (
-            <div key={g.key}>
-              {needsHeadings(credGroups) && <p className="muted small" style={{ margin: '4px 0' }}>{g.label}</p>}
-              {g.items.map(c => (
-                <div key={c.id} className="apply-cred">
-                  <label className="inline"><input type="checkbox" name="credentials" value={c.id} defaultChecked={has('credentials', c.id)} /> {c.name}</label>
-                  <label className="small">Photo or file<input type="file" name={`cred_${c.id}`} accept={ACCEPT} /></label>
-                </div>
-              ))}
-            </div>
-          ))}
+          <p className="muted small" style={{ margin: 0 }}>Choose what you hold. A photo or file of each helps (PDF, JPEG, PNG or HEIC, up to 10 MB).</p>
+          <MultiPick
+            name="credentials" label="What you hold"
+            noun={{ one: 'qualification or ticket', many: 'qualifications and tickets' }} initial={v.credentials ?? []}
+            groups={pickGroups(credGroups, c => ({ value: c.id, label: c.name }))} showHeadings={needsHeadings(credGroups)} chips={false}
+          >
+            {(chosen, remove) => chosen.length > 0 && (
+              <ul className="apply-creds">
+                {chosen.map(c => (
+                  <li key={c.value} className="apply-cred">
+                    <span className="apply-cred-name">{c.label}</span>
+                    <FileButton name={`cred_${c.value}`} accept={ACCEPT} itemName={c.label} shortName={shortFileName} />
+                    <button type="button" className="apply-cred-remove" aria-label={removeLabel(c.label)} onClick={() => remove(c.value)}>×</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </MultiPick>
         </fieldset>
       )}
 
