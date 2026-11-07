@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {}, refresh: () => {}, replace: () => {} }) }));
-vi.mock('../app/(office)/roster/actions', () => ({ confirm: async () => {}, peopleForShifts: async () => ({ people: [] }) }));
+vi.mock('../app/(office)/roster/actions', () => ({ confirm: async () => {}, setRole: async () => {}, setTimes: async () => {}, peopleForShifts: async () => ({ people: [] }) }));
 vi.mock('../app/(office)/roster/list-actions', () => ({
   bulkAssign: async () => {}, bulkCancel: async () => {}, bulkConfirm: async () => {}, bulkDuty: async () => {}, bulkOffer: async () => {},
 }));
@@ -17,7 +17,8 @@ const shift = (n: number, over: object = {}) => ({
   localDate: '2026-11-04', localStart: '07:00', localEnd: '15:00', hours: 7.5, workerId: null, workerName: null, ...over,
 });
 
-function render(sp: Record<string, string>, role = '') {
+type Edit = { canEdit: boolean; now: number; areas: Map<string, { id: string; name: string; active?: boolean }[]> };
+function render(sp: Record<string, string>, role = '', edit?: Edit, refused = new Set<string>()) {
   const url = (over: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries({ week: '2026-11-02', layout: 'list', ...sp, ...over })) if (v) q.set(k, v);
@@ -25,12 +26,12 @@ function render(sp: Record<string, string>, role = '') {
   };
   return renderToStaticMarkup(
     <ListView shifts={[
-      shift(1),
+      shift(1, { startsAt: '2026-11-03T20:00:00Z', areaId: ID(700), breakMinutes: 30 }),
       shift(2, { status: 'booked', workerId: ID(50), workerName: 'Sam Example', role: 'Barista', areaName: 'Front', equipment: [{ name: 'Van 1', vehicle: true }] }),
       shift(3, { localStart: '22:00', localDate: '2026-11-05', hours: 9, facilityId: ID(901), facilityName: 'South Site' }),
     ]} p={parseListParams({ layout: 'list', ...sp })} role={role} tw={makeWords([])} letters={DEFAULT_MARKER_LETTERS} dayRequests={[]}
       url={url} here={url({})} selectedId={null} allSites weekDays={['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']}
-      people={[]} duties={[]} blocked={new Map([[ID(1), 'Blocked: no licence']])} gaps={new Map()} refused={new Set()}
+      people={[]} duties={[]} blocked={new Map([[ID(1), 'Blocked: no licence']])} gaps={new Map()} refused={refused} edit={edit}
       stageLabel={() => 'Stage'} letterCol={() => null} closeHref={null} />,
   );
 }
@@ -84,5 +85,32 @@ describe('roster list view: dragging from the strip (7 Nov)', () => {
     const on = render({ strip: '1' });
     expect(on).toContain('Hide workers to drag');
     expect(on).toContain('<input type="hidden" name="strip" value="1"/>');
+  });
+});
+
+describe('roster list view: inline changes (7 Nov)', () => {
+  const edit = { canEdit: true, now: Date.parse('2026-11-01T00:00:00Z'), areas: new Map([[ID(900), [{ id: ID(700), name: 'Kitchen', active: true }, { id: ID(701), name: 'Front', active: true }]]]) };
+  const pencils = (html: string) => (html.match(/class="lst-edbtn"/g) ?? []).length;
+  it('puts day and times, and role and area, changes on a row that has not started', () => {
+    const html = render({}, '', edit);
+    expect(pencils(html)).toBe(2);
+    expect(html).toContain(`popoverTarget="lst-t-${ID(1)}"`);
+    expect(html).toContain(`id="lst-t-${ID(1)}"`);
+    expect(html).toContain('aria-label="Change day and times of Wed 4 Nov 07:00–15:00 Cook"');
+    expect(html).toContain('name="startTime" value="07:00"');
+    expect(html).toContain('name="breakMinutes" value="30"');
+    expect(html).toMatch(/<option value="00000000-0000-4000-8000-000000000700" selected="">Kitchen<\/option>/);
+    expect(html).toContain('list="known-roles"');
+  });
+  it('none for people who may not change details, a week that asks for changes, or without the setting', () => {
+    expect(pencils(render({}, '', { ...edit, canEdit: false }))).toBe(0);
+    expect(pencils(render({}, '', edit, new Set([ID(900)])))).toBe(0);
+    expect(pencils(render({}, '', { ...edit, now: Date.parse('2026-11-04T00:00:00Z') }))).toBe(0);
+    expect(pencils(render({}))).toBe(0);
+  });
+  it('moves the role change to the Area column when grouped by role', () => {
+    const html = render({ group: 'role' }, '', edit);
+    expect(pencils(html)).toBe(2);
+    expect(html).toContain('aria-label="Change role or area of Wed 4 Nov 07:00–15:00 Cook"');
   });
 });

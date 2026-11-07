@@ -1040,7 +1040,8 @@ export default async function RosterPage({ searchParams }: {
             blocked={new Map((attention?.items ?? []).filter(i => i.kind === 'person_blocked' || i.kind === 'equipment_blocked').map(i => [i.shiftId, `${i.title}: ${i.detail}`]))}
             gaps={new Map(coverGaps.map(g => [g.shiftId, g.title]))}
             refused={new Set(weekStates.filter(w => w.changeRefusal).map(w => w.facilityId))}
-            stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)} />;
+            stageLabel={x => stage(x as Shift, tw).label} letterCol={x => letterCol(x as Shift)}
+            edit={{ canEdit: panelCan.editDetails, now: Date.now(), areas: new Map(details.map(d => [d.id, d.areas])) }} />;
           // With the strip beside it (7 Nov), rows take a dragged person, equipment or item like the cards do.
           return listP.strip ? <>{strip}<DropZone back={here} labels={zoneLabels} picking={false} className="lst-drop">{list}</DropZone></> : list;
         })() : (<>

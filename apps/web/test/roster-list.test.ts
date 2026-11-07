@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FILTER_KEYS, LIST_KEYS, ROSTER_LAYOUT_COOKIE, layoutOf, rememberedLayout, LIST_MAX, LIST_PAGE, bandOf, bulkMessage, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, lengthOf, listQuery,
+  FILTER_KEYS, LIST_KEYS, areaChoices, roleEditColumn, rowEditable, ROSTER_LAYOUT_COOKIE, layoutOf, rememberedLayout, LIST_MAX, LIST_PAGE, bandOf, bulkMessage, chipOn, filterCount, filterShifts, groupLine, groupShifts, joinKnown, lengthOf, listQuery,
   matchesSearch, offAll, pageGroups, parseListParams, parsePicks, periodOf, pickValue, sortMark, sortOver, splitList, stageClass, stageParam, stageTally, tlineOf,
   type ListParams, type ListShift, type RowFacts,
 } from '../lib/roster-list';
@@ -283,5 +283,35 @@ describe('remembered layout (7 Nov)', () => {
     expect(rememberedLayout('cards')).toBeNull();
     expect(rememberedLayout('x')).toBeNull();
     expect(ROSTER_LAYOUT_COOKIE).toMatch(/^crop_/);
+  });
+});
+
+describe('inline changes on rows (7 Nov)', () => {
+  const now = Date.parse('2026-11-07T10:00:00Z');
+  const row = { status: 'open', startsAt: '2026-11-08T20:00:00Z', facilityId: 'f1' };
+  const ok = { canEdit: true, refused: new Set<string>() };
+  it('offers them on a live shift that has not started, to people who may change details', () => {
+    expect(rowEditable(row, now, ok)).toBe(true);
+    expect(rowEditable({ ...row, status: 'booked' }, now, ok)).toBe(true);
+  });
+  it('not to supervisors, on cancelled or started shifts, or where the week asks for changes instead', () => {
+    expect(rowEditable(row, now, { ...ok, canEdit: false })).toBe(false);
+    expect(rowEditable({ ...row, status: 'cancelled' }, now, ok)).toBe(false);
+    expect(rowEditable({ ...row, startsAt: '2026-11-07T10:00:00Z' }, now, ok)).toBe(false);
+    expect(rowEditable({ ...row, startsAt: '2026-11-07T09:00:00Z' }, now, ok)).toBe(false);
+    expect(rowEditable({ ...row, startsAt: undefined }, now, ok)).toBe(false);
+    expect(rowEditable({ ...row, startsAt: 'nonsense' }, now, ok)).toBe(false);
+    expect(rowEditable(row, now, { ...ok, refused: new Set(['f1']) })).toBe(false);
+  });
+  it('puts the role change in the Area column when grouping by role', () => {
+    expect(roleEditColumn('role')).toBe('area');
+    for (const g of ['date', 'site', 'area', 'person', 'stage'] as const) expect(roleEditColumn(g)).toBe('role');
+  });
+  it('lists live areas and keeps the row’s own one', () => {
+    const areas = [{ id: 'a1', name: 'Kitchen', active: true }, { id: 'a2', name: 'Old wing', active: false }, { id: 'a3', name: 'Bar' }];
+    expect(areaChoices(areas, { areaId: null })).toEqual([{ id: 'a1', name: 'Kitchen' }, { id: 'a3', name: 'Bar' }]);
+    expect(areaChoices(areas, { areaId: 'a2' }).map(a => a.id)).toEqual(['a1', 'a2', 'a3']);
+    expect(areaChoices(undefined, { areaId: 'a9', areaName: 'Ward 9' })).toEqual([{ id: 'a9', name: 'Ward 9' }]);
+    expect(areaChoices([], { areaId: 'a9' })).toEqual([{ id: 'a9', name: 'Current' }]);
   });
 });

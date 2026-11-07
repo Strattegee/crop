@@ -109,6 +109,8 @@ export function ListTools({ back, closeHref, labels, people, duties, children }:
         const cb = row?.querySelector<HTMLInputElement>('input[data-pick]');
         if (cb) { e.preventDefault(); cb.checked = !cb.checked; last.current = cb; recount(); }
       } else if (key === 'escape') {
+        // An inline change (a browser popover) closes itself on Esc; leave the shift panel open.
+        if (document.querySelector('.lst-edpop:popover-open')) return;
         const open = document.querySelector<HTMLDetailsElement>('.lst details.lst-pop[open]');
         if (open) { e.preventDefault(); open.open = false; return; }
         if (closeHref) { e.preventDefault(); router.push(closeHref, { scroll: false }); }
