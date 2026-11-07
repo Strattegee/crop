@@ -4,8 +4,8 @@ import Form from 'next/form';
 import type { ReactNode } from 'react';
 
 /**
- * A list's column-filter form (client), shared by lists with a filter in each heading (first the allocation queue, 7 Nov;
- * the recruitment list has its own copy, `recruitment/list-tools.tsx`' `FilterForm`). A GET form that navigates
+ * A list's column-filter form (client), shared by lists with a filter in each heading (the allocation queue and the
+ * recruitment list, 7 Nov). A GET form that navigates
  * without a full reload: a choice in a drop-down applies at once; tick boxes and text apply with their Apply button or
  * Enter; any open drop-down closes as it applies. Still works without scripts (each part has a button).
  */

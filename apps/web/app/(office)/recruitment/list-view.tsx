@@ -7,7 +7,9 @@ import {
   stageChips, waitLine, workLine, type Docs, type RecruitParams, type SortKey,
 } from '../../../lib/recruitment-list';
 import { T, type Words } from '../../../lib/terms';
-import { FilterForm, RecruitTools, RL_BULK } from './list-tools';
+import { ColumnFilterForm } from '../column-filter-form';
+import { ChoiceList, ColumnMulti, ColumnPop, ColumnSelect, type Choice } from '../column-filters';
+import { RecruitTools, RL_BULK, RL_FILTERS } from './list-tools';
 
 export type ListRow = {
   id: string; firstName: string; lastName: string; preferredName: string | null; email: string | null; phone: string | null;
@@ -39,34 +41,17 @@ export function RecruitList({ data, p, tw, zone, roleGroups, sites, canOnboard, 
   const sortLink = (key: SortKey, label: string) => (
     <Link href={sortHref(p, key)} className="rl-sort" scroll={false} aria-label={`Sort by ${label.toLowerCase()}`}>{label}{sortMark(p, key)}</Link>
   );
-  const multi = (name: string, label: string, chosen: string[], options: { value: string; label: string; group?: string }[]) => (
-    <details className="lst-pop rl-f">
-      <summary className={`rl-fsum${chosen.length ? ' on' : ''}`}>{chosenWords(chosen, options) ?? `Any ${label.toLowerCase()}`}</summary>
-      <div className="lst-pop-body rl-fbody">
-        <div className="rl-checks">
-          {options.map((o, i) => (
-            <span key={o.value} style={{ display: 'contents' }}>
-              {o.group && o.group !== options[i - 1]?.group && <b className="rl-group">{o.group}</b>}
-              <label className="rl-check"><input type="checkbox" name={name} value={o.value} defaultChecked={chosen.includes(o.value)} /> {o.label}</label>
-            </span>
-          ))}
-          {options.length === 0 && <span className="muted small">Nothing to choose from yet.</span>}
-        </div>
-        <button className="btn small">Apply</button>
-      </div>
-    </details>
+  const multi = (name: string, label: string, chosen: string[], options: Choice[]) => (
+    <ColumnMulti name={name} label={label} chosen={chosen} options={options} any={`Any ${label.toLowerCase()}`} />
   );
-  const select = (name: string, label: string, value: string, options: { value: string; label: string }[]) => (
-    <select name={name} defaultValue={value} aria-label={label} className={`rl-select${value ? ' on' : ''}`}>
-      <option value="">Any</option>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+  const select = (name: string, label: string, value: string, options: Choice[]) => (
+    <ColumnSelect name={name} label={label} value={value} options={options} />
   );
 
   const roleOptions = roleGroups.flatMap(g => g.items.map(r => ({ value: r.name, label: r.name, group: needsHeadings(roleGroups) ? g.label : undefined })));
   for (const r of p.roles) if (!roleOptions.some(o => o.value === r)) roleOptions.push({ value: r, label: r, group: undefined });
-  const stateOptions = data.states.map(s => ({ value: s.value, label: `${s.value} (${s.count})` }));
-  for (const s of p.states) if (!stateOptions.some(o => o.value === s)) stateOptions.push({ value: s, label: s });
+  const stateOptions: Choice[] = data.states.map(s => ({ value: s.value, label: `${s.value} (${s.count})`, group: 'State' }));
+  for (const s of p.states) if (!stateOptions.some(o => o.value === s)) stateOptions.push({ value: s, label: s, group: 'State' });
   const where = [...p.states, p.place, data.offices.find(o => o.id === p.office)?.name, p.near ? `near ${sites.find(s => s.id === p.near)?.name ?? tw.lower(T.site)}` : ''].filter(Boolean);
 
   return (
@@ -88,7 +73,7 @@ export function RecruitList({ data, p, tw, zone, roleGroups, sites, canOnboard, 
         </div>
         <section className="q-list rl-list" aria-label="People in recruitment">
           <div className="rl-table" role="table" style={{ ['--rl-cols' as string]: COLS }}>
-            <FilterForm className="rl-row rl-head">
+            <ColumnFilterForm id={RL_FILTERS} action="/recruitment" className="rl-row rl-head" label="Filter the people in recruitment">
               {p.sort !== 'default' && <input type="hidden" name="sort" value={`${p.desc ? '-' : ''}${p.sort}`} />}
               <span role="columnheader" className="rl-h rl-tick">
                 {data.rows.length > 0 && <input type="checkbox" data-pickall aria-label="Tick everyone on this page" form="rl-none" />}
@@ -111,44 +96,33 @@ export function RecruitList({ data, p, tw, zone, roleGroups, sites, canOnboard, 
               </span>
               <span role="columnheader" className="rl-h">
                 {sortLink('region', 'Region')}
-                <details className="lst-pop rl-f">
-                  <summary className={`rl-fsum${where.length ? ' on' : ''}`}>{where.length ? where.join(', ') : 'Anywhere'}</summary>
-                  <div className="lst-pop-body rl-fbody">
-                    {stateOptions.length > 0 && (
-                      <div className="rl-checks">
-                        <b className="rl-group">State</b>
-                        {stateOptions.map(o => (
-                          <label key={o.value} className="rl-check"><input type="checkbox" name="state" value={o.value} defaultChecked={p.states.includes(o.value)} /> {o.label}</label>
-                        ))}
-                      </div>
-                    )}
-                    <label>Suburb or postcode<input name="place" defaultValue={p.place} maxLength={60} /></label>
-                    {data.offices.length > 0 && (
-                      <label>Near an office&apos;s {tw.lower(T.site, true)}
-                        <select name="office" defaultValue={p.office}>
-                          <option value="">Any office</option>
-                          {data.offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                        </select>
-                      </label>
-                    )}
-                    {sites.length > 0 && (
-                      <label>Near {tw.lower(T.site)}
-                        <select name="near" defaultValue={p.near}>
-                          <option value="">Any {tw.lower(T.site)}</option>
-                          {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </label>
-                    )}
-                    {(sites.length > 0 || data.offices.length > 0) && (
-                      <label>Within
-                        <select name="km" defaultValue={p.km || String(data.km)}>
-                          {[...new Set([...KMS, data.km])].sort((a, b) => a - b).map(k => <option key={k} value={k}>{k} km of home</option>)}
-                        </select>
-                      </label>
-                    )}
-                    <button className="btn small">Apply</button>
-                  </div>
-                </details>
+                <ColumnPop summary={where.length ? where.join(', ') : 'Anywhere'} on={where.length > 0} label="Region">
+                  {stateOptions.length > 0 && <ChoiceList name="state" chosen={p.states} options={stateOptions} />}
+                  <label>Suburb or postcode<input name="place" defaultValue={p.place} maxLength={60} /></label>
+                  {data.offices.length > 0 && (
+                    <label>Near an office&apos;s {tw.lower(T.site, true)}
+                      <select name="office" defaultValue={p.office}>
+                        <option value="">Any office</option>
+                        {data.offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  {sites.length > 0 && (
+                    <label>Near {tw.lower(T.site)}
+                      <select name="near" defaultValue={p.near}>
+                        <option value="">Any {tw.lower(T.site)}</option>
+                        {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  {(sites.length > 0 || data.offices.length > 0) && (
+                    <label>Within
+                      <select name="km" defaultValue={p.km || String(data.km)}>
+                        {[...new Set([...KMS, data.km])].sort((a, b) => a - b).map(k => <option key={k} value={k}>{k} km of home</option>)}
+                      </select>
+                    </label>
+                  )}
+                </ColumnPop>
               </span>
               <span role="columnheader" className="rl-h">
                 {sortLink('docs', 'Documents')}
@@ -163,7 +137,7 @@ export function RecruitList({ data, p, tw, zone, roleGroups, sites, canOnboard, 
                 {select('source', 'Source', p.source, Object.entries(SOURCE_LABEL).map(([value, label]) => ({ value, label })))}
               </span>
               <button className="sr-only">Apply filters</button>
-            </FilterForm>
+            </ColumnFilterForm>
 
             {data.rows.length === 0 && (
               <p className="q-empty">Nobody matches. {anyFilter(p) && <Link href={clearedHref(p)} scroll={false}>Clear filters</Link>}</p>
@@ -214,11 +188,4 @@ export function RecruitList({ data, p, tw, zone, roleGroups, sites, canOnboard, 
       </div>
     );
   }
-}
-
-/** The heading's summary of what's chosen: one name, or "3 chosen". */
-function chosenWords(chosen: string[], options: { value: string; label: string }[]): string | null {
-  if (!chosen.length) return null;
-  if (chosen.length === 1) return options.find(o => o.value === chosen[0])?.label ?? chosen[0]!;
-  return `${chosen.length} chosen`;
 }

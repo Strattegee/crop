@@ -998,3 +998,9 @@ Newest first. One entry per working session or scheduled run.
 - Checked: rule tests (who gets the pencils, which column, area choices keeping the row's own area) and render tests of the rows; in a browser (Chromium, light and dark) opening a change window over the list and closing it with Esc; every test passes; build and typecheck clean. Not saved against a signed-in staging roster (no local sign-in).
 - Next: the next backlog item not waiting on David (for example the Recruitment list moving onto the shared heading filters).
 - Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).
+
+## 2026-11-08 early Melbourne (scheduled run): the recruitment list's filters on the shared parts
+- Shipped: the Recruitment list's heading filters now use the same parts as Allocations (`(office)/column-filters.tsx`, `column-filter-form.tsx`) instead of their own copy. Same filters, same words ("Any role", "Anywhere", "3 chosen"), and choosing one now changes the list without reloading the whole page; an open drop-down closes as it applies.
+- Checked: render test of the list's headings (form, summaries, the State group); every test passes; build and typecheck clean. Not clicked through in a browser (no local sign-in).
+- Next: the Roster List's headings on the same parts, or the next backlog item not waiting on David.
+- Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).

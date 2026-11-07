@@ -20,19 +20,6 @@ function Busy() {
 }
 
 /**
- * The filter row's form (client): a choice in a drop-down applies at once; tick boxes apply with their Apply button or
- * Enter; it still works without scripts (each part has a button).
- */
-export function FilterForm({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <form id={RL_FILTERS} method="get" action="/recruitment" className={className} role="search"
-      onChange={e => { if (e.target instanceof HTMLSelectElement) e.currentTarget.requestSubmit(); }}>
-      {children}
-    </form>
-  );
-}
-
-/**
  * The list's live parts (client): tick boxes (Shift-click ticks a run, the heading's box ticks the page), the bulk bar,
  * and J/K to move between rows, Enter to open, X to tick, Esc to close a menu or clear the ticks; never while typing.
  */

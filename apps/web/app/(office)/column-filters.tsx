@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * The parts of a filter in a column heading (the recruitment list's look, 5 Nov; shared from the allocation queue, 7 Nov):
+ * The parts of a filter in a column heading (the recruitment list's look, 5 Nov; shared by the allocation queue and the
+ * recruitment list, 7 Nov):
  * a compact drop-down of tick boxes, a plain select, or a drop-down holding several fields. They sit inside a
  * `ColumnFilterForm` (`column-filter-form.tsx`). `data-hold` keeps a live list (the queue's 20-second refresh) from
  * redrawing under an open drop-down. Styles: `.rl-f`, `.rl-fsum`, `.rl-fbody`, `.rl-check`, `.rl-select` in globals.css.
@@ -36,9 +37,16 @@ export function ChoiceList({ name, chosen, options, empty = 'Nothing to choose f
   );
 }
 
-/** A multi-select: "Any", one name, or "3 chosen". */
-export function ColumnMulti({ name, label, chosen, options }: { name: string; label: string; chosen: string[]; options: Choice[] }) {
-  const summary = !chosen.length ? 'Any' : chosen.length === 1 ? options.find(o => o.value === chosen[0])?.label ?? chosen[0]! : `${chosen.length} chosen`;
+/** What a multi-select's heading says: `any` when nothing is chosen, one name, or "3 chosen". */
+export function multiSummary(chosen: string[], options: Choice[], any = 'Any'): string {
+  if (!chosen.length) return any;
+  if (chosen.length === 1) return options.find(o => o.value === chosen[0])?.label ?? chosen[0]!;
+  return `${chosen.length} chosen`;
+}
+
+/** A multi-select: "Any" (or `any`), one name, or "3 chosen". */
+export function ColumnMulti({ name, label, chosen, options, any }: { name: string; label: string; chosen: string[]; options: Choice[]; any?: string }) {
+  const summary = multiSummary(chosen, options, any);
   return (
     <ColumnPop summary={summary} on={chosen.length > 0} label={label}>
       <ChoiceList name={name} chosen={chosen} options={options} />
