@@ -39,6 +39,7 @@ import { ChangeRequestsController } from './roster/change-requests.controller.js
 import { PublishingController } from './roster/publishing.controller.js';
 import { RosterTemplatesController } from './roster/templates.controller.js';
 import { ComplianceController } from './workforce/compliance.controller.js';
+import { ToCheckController } from './workforce/to-check.controller.js';
 import { CredentialRequirementsController, CredentialTypesController } from './workforce/credential-types.controller.js';
 import { AttentionController } from './roster/attention.controller.js';
 import { ShiftDutiesController } from './roster/duties.controller.js';
@@ -59,7 +60,7 @@ import { OnboardingChecklistsController, WorkerOnboardingController } from './wo
   imports: [DatabaseModule, AuthModule, DocumentsModule, NotificationsModule],
   controllers: [
     HealthController, IndustryController, TermsController, PlatformController, ClientsController, CustomerRequestsController, PublicRequestPageController, ClientOrdersController, AllocationQueueController, FacilitiesController, OfficesController, SiteAccessController, ProjectsController, SiteTeamController, EquipmentAllocationsController, TeamsController, ProjectStagesController, CallsController, WorkersController, AddressesController, FieldAccessController, DetailChangesController, RecruitmentController, DashboardController, AuditController,
-    CredentialTypesController, CredentialRequirementsController, ComplianceController,
+    CredentialTypesController, CredentialRequirementsController, ComplianceController, ToCheckController,
     ShiftCodesController, ShiftsController, EmploymentController, BankFillController, OfferLinksController, AvailabilityController, LeaveController,
     EquipmentTypesController, EquipmentController, ShiftEquipmentController, PublishingController, ChangeRequestsController, RosterTemplatesController,
     ItemsController, StockController, ShiftItemsController, WorkerItemsController, SiteItemsController, AttentionController, ShiftDutiesController, CoverRulesController,

@@ -5,6 +5,7 @@ import { createTestDatabase } from '@crop/db/dist/testing.js';
 import { Client } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dayWords } from '../src/workforce/to-check.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/configure.js';
 import { DOCUMENT_STORE, MemoryStore } from '../src/documents/document-store.js';
@@ -144,6 +145,7 @@ describe('my credentials in the worker app', () => {
   });
 
   it('adds a credential that starts unchecked, and refuses a second one waiting or bad dates', async () => {
+    await http().post('/push-devices').set(as('admin')).send({ token: 'ExponentPushToken[admin-check]', platform: 'ios' }).expect(204);
     await http().post('/my/credentials').set(as('ana')).send({ credentialTypeId: firstAid }).expect(400);
     const past = await http().post('/my/credentials').set(as('ana')).send({ credentialTypeId: firstAid, expiryDate: addDays(today, -1) }).expect(400);
     expect(past.body.message).toBe('This has already run out. Add it once you have the new one.');
@@ -154,6 +156,10 @@ describe('my credentials in the worker app', () => {
     anaFirstAid = r.body.id;
     const told = (await owner.query(`select to_address as to, subject from notifications where template = 'app_credential_added'`)).rows;
     expect(told).toEqual([{ to: 'admin@x.com', subject: 'Ana Example added a credential in the app' }]);
+    // The admin's phone too (held through quiet hours; never a number).
+    const alert = (await owner.query(`select to_address as to, subject, body from notifications where template = 'office_to_check'`)).rows;
+    expect(alert).toEqual([{ to: 'ExponentPushToken[admin-check]', subject: 'To check: Ana Example',
+      body: 'Ana Example sent First aid in the app. Open CROP to check it.' }]);
     const again = await http().post('/my/credentials').set(as('ana')).send({ credentialTypeId: firstAid, expiryDate: addDays(today, 200) }).expect(409);
     expect(again.body.message).toMatch(/^You've already added a First aid that the office hasn't checked yet/);
 
@@ -227,7 +233,38 @@ describe('my credentials in the worker app', () => {
     await http().get('/my/onboarding').set(as('other')).expect(404);
   });
 
-  it('is only for people linked to someone here', async () => {
+  it('lists what is waiting to check for the office, with files and how it came, and alerts once per right to work record', async () => {
+    // Ben's right to work: the office recorded it, and he sends two photos of his proof from the app.
+    await http().put(`/workers/${ben}/right-to-work`).set(as('admin'))
+      .send({ status: 'permanent_resident', vevoCheckedOn: today, vevoResult: 'confirmed', documentNumber: 'SECRET-123' }).expect(200);
+    await http().post('/my/right-to-work/documents').set(as('ben')).attach('file', PDF, 'proof-1.pdf').expect(201);
+    await http().post('/my/right-to-work/documents').set(as('ben')).attach('file', PNG, 'proof-2.png').expect(201);
+    const alerts = (await owner.query(`select subject, body from notifications where template = 'office_to_check' and body like '%right to work%'`)).rows;
+    expect(alerts).toEqual([{ subject: 'To check: Ben Example', body: 'Ben Example sent proof of their right to work in the app. Open CROP to check it.' }]);
+    expect(JSON.stringify(alerts)).not.toContain('SECRET');
+
+    const r = (await http().get('/to-check').set(as('admin')).expect(200)).body;
+    expect(r.canDecide).toBe(true);
+    // Ana's renewal and Ben's Barista course (from the earlier tests) and Ben's right to work, oldest first.
+    expect(r.items.map((i: { title: string; workerName: string }) => `${i.workerName}: ${i.title}`))
+      .toEqual(['Ana Example: First aid', 'Ben Example: Barista course', 'Ben Example: Right to work']);
+    const rtw = r.items[2];
+    expect(rtw).toMatchObject({ kind: 'right_to_work', workerId: ben, via: 'app', status: 'permanent_resident' });
+    expect(rtw.files.map((f: { filename: string }) => f.filename)).toEqual(['proof-1.pdf', 'proof-2.png']);
+    expect(rtw.lines).toEqual(['Ben Example (getting started) · Sent in the app', 'Permanent resident', `VEVO checked ${dayWords(today)}`, '2 files']);
+    expect(r.items[0]).toMatchObject({ kind: 'credential', via: 'app', files: [] });
+    // Each file opens through the existing link endpoint.
+    await http().get(`/workers/${ben}/right-to-work/documents/${rtw.files[0].id}/link`).set(as('admin')).expect(200);
+
+    // Checking it takes it off the list; another business and the people themselves never see it.
+    await http().post(`/workers/${ben}/right-to-work/verify`).set(as('admin')).send({}).expect(201);
+    const after = (await http().get('/to-check').set(as('admin')).expect(200)).body;
+    expect(after.items.map((i: { kind: string }) => i.kind)).toEqual(['credential', 'credential']);
+    expect((await http().get('/to-check').set(as('other')).expect(200)).body.items).toEqual([]);
+    await http().get('/to-check').set(as('ana')).expect(403);
+  });
+
+    it('is only for people linked to someone here', async () => {
     await http().get('/my/credentials').set(as('admin')).expect(404);
     await http().post('/my/credentials').set(as('admin')).send({ credentialTypeId: foodSafety }).expect(404);
     expect(ben).toBeTruthy();

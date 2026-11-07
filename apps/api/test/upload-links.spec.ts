@@ -122,6 +122,7 @@ describe('upload links end to end', () => {
   });
 
   it('takes a credential with its file; it waits for the office to check it', async () => {
+    await http().post('/push-devices').set(as('owner')).send({ token: 'ExponentPushToken[owner-link]', platform: 'android' }).expect(204);
     await http().post(`/upload-links/${token}/credentials`).field('credentialTypeId', firstAid).expect(400); // no file
     await http().post(`/upload-links/${token}/credentials`).field('credentialTypeId', firstAid).attach('file', PDF, 'fa.pdf').expect(400); // expiry needed
     await http().post(`/upload-links/${token}/credentials`).field('credentialTypeId', firstAid).field('expiryDate', addDays(today, -1)).attach('file', PDF, 'fa.pdf').expect(400);
@@ -136,6 +137,9 @@ describe('upload links end to end', () => {
     expect(fa.documents).toHaveLength(2);
     const office = (await owner.query(`select subject from notifications where template = 'link_credential_added'`)).rows;
     expect(office[0].subject).toBe('Ana Example sent First aid through their upload link');
+    // One phone alert for the credential, however many files.
+    const alerts = (await owner.query(`select body from notifications where template = 'office_to_check'`)).rows;
+    expect(alerts).toEqual([{ body: 'Ana Example sent First aid by upload link. Open CROP to check it.' }]);
   });
 
   it('refuses anything not asked for, and takes right to work proof', async () => {
@@ -144,6 +148,8 @@ describe('upload links end to end', () => {
     expect(r.body.message).toBe("That isn't one of the things asked for");
     const v = (await http().post(`/upload-links/${token}/right-to-work`).attach('file', PDF, 'passport.pdf').expect(200)).body;
     expect(v.rightToWork).toEqual({ canSend: true, files: 1 });
+    const rtw = (await owner.query(`select body from notifications where template = 'office_to_check' and body like '%right to work%'`)).rows;
+    expect(rtw).toEqual([{ body: 'Ana Example sent proof of their right to work by upload link. Open CROP to check it.' }]);
   });
 
   it('a newer link replaces the old one; the office can stop a link', async () => {

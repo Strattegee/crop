@@ -99,6 +99,7 @@ export const OFFICE_ALERT_TEMPLATES = {
   changeRequest: 'office_change_to_approve',
   swap: 'office_swap_to_approve',
   detailChange: 'office_detail_to_approve',
+  toCheck: 'office_to_check',
 } as const;
 
 /**
