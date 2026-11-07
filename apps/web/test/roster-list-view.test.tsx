@@ -49,6 +49,16 @@ describe('roster list view: column filters', () => {
     expect(rows(html)).toBe(3);
     expect(html).not.toContain('Clear filters');
   });
+  it('builds the headings from the shared filter parts, every control joined to the form', () => {
+    const html = render({}, 'Cook');
+    expect(html).toContain('<details class="lst-pop rl-f lst-hf" data-hold="true">');
+    expect(html).toContain('aria-label="Role: Cook"');
+    expect(html).toContain('aria-label="Time: Any"');
+    expect(html).toContain('<input type="checkbox" form="list-filters" name="role" checked="" value="Cook"/>');
+    expect(html).toContain('<button class="btn small" form="list-filters">Apply</button>');
+    expect(html).toContain('<b class="rl-group">Starts</b>');
+    expect(html).toContain('role="search" aria-label="Filter the shifts"');
+  });
   it('filters the rows, keeps the chips counting without the stage, and offers Clear filters', () => {
     const html = render({ mk: 'vehicle' });
     expect(rows(html)).toBe(1);
