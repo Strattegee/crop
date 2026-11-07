@@ -23,10 +23,11 @@ export function canDecide(role: string | null | undefined): boolean {
  * covering line are OFFICE_ROLES, so the app doesn't load or show them for supervisors. Adding shifts (7 Nov,
  * `POST /shifts`) is OFFICE_ROLES too.
  */
-export function managerCan(role: string | null | undefined): { leave: boolean; publish: boolean; cancel: boolean; covering: boolean; add: boolean; swapsAndDetails: boolean } {
+export function managerCan(role: string | null | undefined): { leave: boolean; publish: boolean; cancel: boolean; covering: boolean; add: boolean; swapsAndDetails: boolean; toCheck: boolean } {
   const office = role === 'owner' || role === 'admin' || role === 'allocator';
-  // Shift swaps and detail changes waiting (7 Nov) are OFFICE_ROLES lists too.
-  return { leave: office, publish: office, cancel: office, covering: office, add: office, swapsAndDetails: office };
+  // Shift swaps and detail changes waiting (7 Nov) are OFFICE_ROLES lists too, and so is what's waiting to check
+  // (credentials and right to work: never supervisors).
+  return { leave: office, publish: office, cancel: office, covering: office, add: office, swapsAndDetails: office, toCheck: office };
 }
 
 /** The header line under the business's name: supervisors only see their own sites. */
@@ -127,8 +128,8 @@ export function shiftWord(terms: Term[] | null | undefined): { one: string; many
 }
 
 /** The tab label for requests: "Requests (3)". */
-export function requestsTab(leave: number, changes: number, swaps = 0, details = 0): string {
-  const n = leave + changes + swaps + details;
+export function requestsTab(leave: number, changes: number, swaps = 0, details = 0, toCheck = 0): string {
+  const n = leave + changes + swaps + details + toCheck;
   return n ? `Requests (${n})` : 'Requests';
 }
 

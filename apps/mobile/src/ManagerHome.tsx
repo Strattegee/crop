@@ -16,6 +16,8 @@ import { ShiftScreen } from './ShiftScreen';
 import { AlertsScreen } from './AlertsScreen';
 import { AddShiftsScreen } from './AddShiftsScreen';
 import { styles } from './styles';
+import { ToCheckSection } from './ToCheckSection';
+import type { ToCheckItem } from './to-check';
 import { detailDecidedMessage, detailLines, detailTitle, swapDecidedMessage, swapsToDecide, swapTitle, type DetailChange, type OfficeSwap } from './requests';
 
 type Tab = 'today' | 'roster' | 'people' | 'projects' | 'requests';
@@ -40,6 +42,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [swaps, setSwaps] = useState<OfficeSwap[]>([]);
   const [details, setDetails] = useState<DetailChange[]>([]);
+  const [toCheck, setToCheck] = useState<{ items: ToCheckItem[]; canDecide: boolean }>({ items: [], canDecide: false });
   const [terms, setTerms] = useState<Term[] | null>(null);
   const [today, setToday] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
     setBusy(true);
     setError(null);
     try {
-      const [a, l, c, t, s, d, p, w, sw, dc] = await Promise.all([
+      const [a, l, c, t, s, d, p, w, sw, dc, tc] = await Promise.all([
         api<Attention>('/roster/attention', { tenant }),
         can.leave ? api<LeaveRequest[]>('/leave?status=requested', { tenant }) : Promise.resolve([] as LeaveRequest[]),
         api<ChangeRequest[]>('/roster/change-requests', { tenant }),
@@ -70,7 +73,9 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
         api<PersonRow[]>('/workers?status=active', { tenant }).catch(() => [] as PersonRow[]),
         can.swapsAndDetails ? api<{ swaps: OfficeSwap[] }>('/shift-swaps?status=agreed', { tenant }).then(r => r.swaps).catch(() => [] as OfficeSwap[]) : Promise.resolve([] as OfficeSwap[]),
         can.swapsAndDetails ? api<{ changes: DetailChange[] }>('/detail-changes', { tenant }).then(r => r.changes).catch(() => [] as DetailChange[]) : Promise.resolve([] as DetailChange[]),
+        can.toCheck ? api<{ items: ToCheckItem[]; canDecide: boolean }>('/to-check', { tenant }).catch(() => ({ items: [], canDecide: false })) : Promise.resolve({ items: [] as ToCheckItem[], canDecide: false }),
       ]);
+      setToCheck(tc);
       setSwaps(swapsToDecide(sw));
       setDetails(dc.filter(x => x.status === 'pending'));
       setStaff(w);
@@ -93,7 +98,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
     } finally {
       setBusy(false);
     }
-  }, [tenant, onSignedOut, can.leave, can.swapsAndDetails]);
+  }, [tenant, onSignedOut, can.leave, can.swapsAndDetails, can.toCheck]);
 
   useEffect(() => {
     load();
@@ -119,7 +124,7 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
   const tabs: Tab[] = projects.length > 0 ? ['today', 'roster', 'people', 'projects', 'requests'] : ['today', 'roster', 'people', 'requests'];
   // Five tabs don't fit "Needs attention" on a phone.
   const tabLabel = (t: Tab) => t === 'today' ? (tabs.length > 4 ? 'Attention' : 'Needs attention') : t === 'roster' ? rosterWord.one
-    : t === 'people' ? people.many : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length, swaps.length, details.length);
+    : t === 'people' ? people.many : t === 'projects' ? projectWord.many : requestsTab(leave.length, changes.length, swaps.length, details.length, toCheck.items.length);
   const rosterAt = (facilityId: string, day: string) => {
     const weekStart = currentWeek(day, day);
     setRosterView({ weekStart, day: firstDay(weekStart, day), facilityId });
@@ -326,6 +331,11 @@ export function ManagerHome({ tenant, business, role, openTab, onMyShifts, switc
                   </View>
                 ))}
               </>
+            )}
+
+            {can.toCheck && (
+              <ToCheckSection tenant={tenant} items={toCheck.items} canDecide={toCheck.canDecide} heading={`${credentialWord.many} and right to work to check`}
+                onChanged={load} onSignedOut={onSignedOut} />
             )}
           </>
         )}
