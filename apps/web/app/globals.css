@@ -977,7 +977,14 @@ tr.grp-row th { background: var(--surface-2); text-align: left; font-size: 12px;
 
 /* The roster's List view (David and Steve, 4 Nov): one compact row per shift, like the Allocations queue, grouped and
    filtered from the URL, tick boxes for bulk actions; Steve's stage colours as the row's left edge and the pill's dot. */
-.roster-layout.list > .lst { flex: 999 1 640px; min-width: 0; }
+.roster-layout.list > .lst, .roster-layout.list > .lst-drop { flex: 999 1 640px; min-width: 0; }
+/* The strip beside the List (7 Nov): rows take a dragged person, equipment or item like the cards. */
+.lst-drop.busy { opacity: 0.6; pointer-events: none; }
+body[data-dragging='person'] .lst-row[data-needs-person='1'], body[data-dragging='equipment'] .lst-row[data-takes-equipment='1'], body[data-dragging='item'] .lst-row[data-takes-equipment='1'] { outline: 2px dashed var(--brand); outline-offset: -2px; }
+.lst-row.drop { background: #e6f3ec; outline: 2px solid var(--ok) !important; }
+:root[data-mode='dark'] .lst-row.drop { background: #13301f; }
+.lst-striplink { white-space: nowrap; }
+@media (max-width: 700px) { .roster-layout.with-strip > .roster-strip, .lst-striplink { display: none; } }
 .lst-filters { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 6px; }
 .lst-search { font-size: 13px; padding: 4px 8px; width: 250px; max-width: 100%; min-width: 0; }
 .lst-groupby { gap: 4px; }

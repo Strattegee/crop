@@ -980,3 +980,9 @@ Newest first. One entry per working session or scheduled run.
 ## 2026-11-07 evening (session with David): client, site and area in their own columns
 - Shipped: on Allocations, "Client · Facility · Ward" is now three columns, each headed with the business's own word (C4U: Facility, Ward), sortable and with its own filter; sorting adds site and area.
 - Checked: API sort tests, web helper tests, typecheck.
+
+## 2026-11-07 evening Melbourne (scheduled run): drag from the strip onto the roster's List
+- Shipped: the roster's List layout has "Show staff to drag" (in the business's words) on its bar. It puts the usual People / Equipment / Items strip beside the list; drop a person on an unfilled row to assign them, or equipment or an item on any live row, exactly as on the cards (same checks and messages, and the strip still marks who is ready for the shift that's open). Right-click on an unfilled row gives the best people as on the cards. It stays on while you work (it's in the address) and "Hide staff to drag" takes it away; on phones it's hidden, since dragging doesn't work there. The list's own tick boxes and Shift-click runs are unchanged.
+- Checked: URL rule tests, render tests of the rows' drop details and the toggle; every test passes; build and typecheck clean. Not dragged in a browser (no local sign-in).
+- Next: inline time and role edits on List rows, or remembering the layout per person, if wanted; otherwise the next backlog item not waiting on David.
+- Waiting on David: unchanged (confirm the phone-alert defaults, supervisors issuing stock and a names-only people picker, the client sign-in role for the portal, the customer acknowledgement email, the questions already listed).

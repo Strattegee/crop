@@ -70,3 +70,19 @@ describe('roster list view: column filters', () => {
     expect(html).toContain('name="area"');
   });
 });
+
+describe('roster list view: dragging from the strip (7 Nov)', () => {
+  it('marks each row as a drop target like the cards: people only on unfilled rows', () => {
+    const html = render({});
+    expect(html).toContain(`data-shift="${ID(1)}"`);
+    expect(html).toMatch(new RegExp(`data-shift="${ID(1)}"[^>]*data-needs-person="1"[^>]*data-takes-equipment="1"`));
+    expect(html).toMatch(new RegExp(`data-shift="${ID(2)}"[^>]*data-needs-person="0"[^>]*data-takes-equipment="1"[^>]*data-worker="${ID(50)}"[^>]*data-worker-name="Sam Example"`));
+    expect(html).toMatch(new RegExp(`data-shift="${ID(1)}"[^>]*data-href="/roster\\?[^"]*shift=${ID(1)}`));
+  });
+  it('offers the strip beside the list, and hides it again', () => {
+    expect(render({})).toMatch(/lst-striplink[^>]*href="[^"]*strip=1"[^>]*>Show workers to drag/);
+    const on = render({ strip: '1' });
+    expect(on).toContain('Hide workers to drag');
+    expect(on).toContain('<input type="hidden" name="strip" value="1"/>');
+  });
+});

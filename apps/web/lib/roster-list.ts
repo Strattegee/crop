@@ -72,6 +72,8 @@ export type ListParams = {
   /** Project stage ids ('none' = not from a stage). */
   pstages: string[];
   sort: ListSort; desc: boolean; limit: number;
+  /** The people / equipment / items strip beside the list, to drag onto rows (`strip=1`; off by default so the list keeps the width). */
+  strip: boolean;
 };
 
 export const parseLayout = (v: string | undefined): Layout => v === 'list' ? 'list' : 'cards';
@@ -114,7 +116,7 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 
 /**
  * The list's state from the roster URL: `layout=list`, `group`, `q`, `stage`, `area`, `person`, `who`, `day`, `band`, `ap`,
- * `fac`, `len`, `mk`, `tl`, `warn`, `pst`, `sort`, `limit`. Lists are comma lists or repeated parameters. `role` is the
+ * `fac`, `len`, `mk`, `tl`, `warn`, `pst`, `sort`, `limit`, `strip`. Lists are comma lists or repeated parameters. `role` is the
  * strip's (read by the page, resolved with `joinKnown`).
  */
 export function parseListParams(sp: Record<string, Raw>): ListParams {
@@ -138,12 +140,12 @@ export function parseListParams(sp: Record<string, Raw>): ListParams {
     sites: splitList(sp.fac).filter(x => UUID.test(x)),
     lengths: only(sp.len, LENGTHS), marks: only(sp.mk, MARKS), tlines: only(sp.tl, TLINES), warns: only(sp.warn, WARNS),
     pstages: splitList(sp.pst).filter(x => x === 'none' || UUID.test(x)),
-    sort, desc,
+    sort, desc, strip: one(sp.strip) === '1',
   };
 }
 
 /** Every list key of the URL, all off: for the Cards link and anything that leaves the list. */
-export const LIST_KEYS = ['layout', 'group', 'q', 'stage', 'area', 'person', 'who', 'day', 'band', 'ap', 'fac', 'len', 'mk', 'tl', 'warn', 'pst', 'sort', 'limit'] as const;
+export const LIST_KEYS = ['layout', 'group', 'q', 'stage', 'area', 'person', 'who', 'day', 'band', 'ap', 'fac', 'len', 'mk', 'tl', 'warn', 'pst', 'sort', 'limit', 'strip'] as const;
 /** The filter keys "Clear filters" turns off (plus the strip's `role`); grouping and sorting stay. */
 export const FILTER_KEYS = ['q', 'stage', 'area', 'person', 'who', 'day', 'band', 'ap', 'fac', 'len', 'mk', 'tl', 'warn', 'pst', 'role', 'limit'] as const;
 export const offAll = (keys: readonly string[]): Record<string, undefined> => Object.fromEntries(keys.map(k => [k, undefined]));
@@ -163,7 +165,7 @@ export function listQuery(p: ListParams): Record<string, string | undefined> {
     area: csv(p.areas), person: p.person || undefined, who: p.who || undefined, day: csv(p.days), band: csv(p.bands), ap: csv(p.periods),
     fac: csv(p.sites), len: csv(p.lengths), mk: csv(p.marks), tl: csv(p.tlines), warn: csv(p.warns), pst: csv(p.pstages),
     sort: p.sort === 'time' && !p.desc ? undefined : `${p.desc ? '-' : ''}${p.sort}`,
-    limit: p.limit > LIST_PAGE ? String(p.limit) : undefined,
+    limit: p.limit > LIST_PAGE ? String(p.limit) : undefined, strip: p.strip ? '1' : undefined,
   };
 }
 

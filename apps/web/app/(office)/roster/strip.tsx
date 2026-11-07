@@ -169,7 +169,13 @@ const fmtH = (n: number) => `${(Math.round(n * 10) / 10).toString()} h`;
  * Also (David, 2 Nov): Shift-, Ctrl- or ⌘-click picks open cards so one person dropped on any picked card goes on all of
  * them; right-click (or the menu key) on an open card lists the best people for it, or for every picked card.
  */
-export function DropZone({ back, labels, children }: { back: string; labels: ZoneLabels; children: ReactNode }) {
+export function DropZone({ back, labels, children, picking = true, className = 'roster-scroll' }: {
+  back: string; labels: ZoneLabels; children: ReactNode;
+  /** Shift/Ctrl/⌘-click picking of cards. Off for the List layout (7 Nov), whose rows have their own tick boxes and Shift-click runs. */
+  picking?: boolean;
+  /** The wrapper's class: the cards' scrolling box, or the List's own column. */
+  className?: string;
+}) {
   const [pending, start] = useTransition();
   const router = useRouter();
   const box = useRef<HTMLDivElement>(null);
@@ -224,6 +230,7 @@ export function DropZone({ back, labels, children }: { back: string; labels: Zon
   const onClickCapture = (e: MouseEvent) => {
     if (menuRef.current?.contains(e.target as Node)) return;
     const el = cardOf(e.target);
+    if (!picking) return;
     if (isOpenCard(el) && (e.shiftKey || e.metaKey || e.ctrlKey)) {
       // Picking, not opening: stop the link (and the browser's new tab or window).
       e.preventDefault();
@@ -247,7 +254,7 @@ export function DropZone({ back, labels, children }: { back: string; labels: Zon
     const x = Math.min(fromKeys ? r.right : e.clientX, window.innerWidth - 300);
     const y = Math.min(fromKeys ? r.top : e.clientY, window.innerHeight - 340);
     opener.current = el;
-    setMenu({ x: Math.max(8, x), y: Math.max(8, y), ids, href: el.getAttribute('href'), people: null, error: null });
+    setMenu({ x: Math.max(8, x), y: Math.max(8, y), ids, href: el.getAttribute('href') ?? el.dataset.href ?? null, people: null, error: null });
     void peopleForShifts(ids).then(res => setMenu(m => m && m.ids === ids ? ('error' in res ? { ...m, error: res.error } : { ...m, people: res.people }) : m))
       .catch(() => setMenu(m => m && m.ids === ids ? { ...m, error: 'Could not load the list. Please try again.' } : m));
   };
@@ -273,9 +280,9 @@ export function DropZone({ back, labels, children }: { back: string; labels: Zon
   };
   const many = menu ? menu.ids.length > 1 : false;
   return (
-    <div ref={box} className={`roster-scroll ${pending ? 'busy' : ''}`}
+    <div ref={box} className={`${className} ${pending ? 'busy' : ''}`}
       onClickCapture={onClickCapture} onContextMenu={onContextMenu}
-      onMouseDown={e => { if (e.shiftKey && isOpenCard(cardOf(e.target))) e.preventDefault(); /* no text selection while picking */ }}
+      onMouseDown={e => { if (picking && e.shiftKey && isOpenCard(cardOf(e.target))) e.preventDefault(); /* no text selection while picking */ }}
       onDragOver={e => { const el = target(e); if (accepts(el)) { e.preventDefault(); el!.classList.add('drop'); } }}
       onDragLeave={e => target(e)?.classList.remove('drop')}
       onDrop={e => {

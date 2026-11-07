@@ -15,7 +15,7 @@ const words = { dateLabel: (d: string) => `Day ${d}`, noArea: 'No area', unfille
 
 const DEFAULTS = {
   layout: 'cards', group: 'date', q: '', stages: [], areas: [], person: '', who: '', days: [], bands: [], periods: [], sites: [], lengths: [],
-  marks: [], tlines: [], warns: [], pstages: [], sort: 'time', desc: false, limit: LIST_PAGE,
+  marks: [], tlines: [], warns: [], pstages: [], sort: 'time', desc: false, limit: LIST_PAGE, strip: false,
 };
 
 describe('roster list: the URL', () => {
@@ -75,6 +75,16 @@ describe('roster list: the URL', () => {
     expect(filterCount(parseListParams({ q: 'a', who: 'b', mk: 'duty', band: 'early', ap: 'am' }), ['Cook'])).toBe(4);
     expect(offAll(FILTER_KEYS)).toMatchObject({ role: undefined, mk: undefined, stage: undefined });
     expect(LIST_KEYS).toContain('sort');
+  });
+  it('keeps the strip beside the list only when asked (strip=1), and Clear filters leaves it', () => {
+    expect(parseListParams({ layout: 'list' }).strip).toBe(false);
+    expect(parseListParams({ layout: 'list', strip: '1' }).strip).toBe(true);
+    expect(parseListParams({ layout: 'list', strip: 'yes' }).strip).toBe(false);
+    expect(listQuery(parseListParams({ layout: 'list', strip: '1' })).strip).toBe('1');
+    expect(listQuery(parseListParams({ layout: 'list' })).strip).toBeUndefined();
+    expect(listQuery(parseListParams({ strip: '1' })).strip).toBeUndefined(); // cards: the strip is always there
+    expect(LIST_KEYS).toContain('strip');
+    expect(FILTER_KEYS).not.toContain('strip');
   });
   it('joins names that hold a comma when the pieces make a known name', () => {
     expect(joinKnown(splitList('Ward 3, East,Kitchen'), ['Ward 3, East', 'Kitchen'])).toEqual(['Ward 3, East', 'Kitchen']);
